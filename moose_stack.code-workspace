@@ -4,5 +4,10 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"[moose]": {
+			"outline.showProperties": false,
+			"outline.showStrings": false
+		}
+	}
 }

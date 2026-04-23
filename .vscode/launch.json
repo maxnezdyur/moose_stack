@@ -1,0 +1,45 @@
+{
+  "version": "0.2.0",
+  "inputs": [
+    {
+      "id": "extraArgs",
+      "type": "promptString",
+      "description": "Extra args (e.g. --n-threads=2, -pc_type lu). Empty = none.",
+      "default": ""
+    }
+  ],
+  "configurations": [
+    {
+      "name": "debug: moose_test",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/moose/test/moose_test-dbg",
+      "args": "-i ${file} ${input:extraArgs}",
+      "cwd": "${fileDirname}"
+    },
+    {
+      "name": "debug: moose combined",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/moose/modules/combined/combined-dbg",
+      "args": "-i ${file} ${input:extraArgs}",
+      "cwd": "${fileDirname}"
+    },
+    {
+      "name": "debug: blackbear",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/blackbear/blackbear-dbg",
+      "args": "-i ${file} ${input:extraArgs}",
+      "cwd": "${fileDirname}"
+    },
+    {
+      "name": "debug: isopod",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/isopod/isopod-dbg",
+      "args": "-i ${file} ${input:extraArgs}",
+      "cwd": "${fileDirname}"
+    }
+  ]
+}

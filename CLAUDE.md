@@ -34,6 +34,25 @@ conda activate moose-<feature>
 
 Do NOT run `git submodule update --init` inside the meta-repo worktree — the per-submodule worktrees above are the source of truth. All four branches are local-only at create time; push happens when you open a PR.
 
+## clangd / compile_commands.json
+
+The `.clangd` at the meta root pins `clang++` as the parse compiler (the conda env's `mpicxx` confuses clangd) and strips `-fopenmp*`, `-march=*`, `-mfma` from the flags.
+
+Use the `/compile-commands` skill — it prompts for which of `moose` (framework + test), `moose-combined` (framework + all modules), `blackbear`, `isopod` to regenerate, runs `make -j compile_commands.json` in each, then merges whatever per-submodule DBs exist into a single `compile_commands.json` at the meta root. Pass a space-separated list to skip the prompt (e.g. `/compile-commands moose-combined blackbear`). Pick `moose-combined` when working on a moose-only feature that touches modules; `moose` is the faster default for stack work.
+
+Manual fallback:
+
+```bash
+make -j compile_commands.json -C moose/test             # or moose/modules/combined
+make -j compile_commands.json -C blackbear
+make -j compile_commands.json -C isopod
+bash .claude/skills/compile-commands/merge.sh
+```
+
+Re-run after any rebuild that changes flags.
+
+`.clangd` and the `.claude/skills/compile-commands/` skill are tracked, so they propagate to every worktree. `compile_commands.json` and `.cache/` are gitignored and must be regenerated per worktree since paths differ.
+
 ## Opening a PR
 
 Target idaholab via `--head maxnezdyur:`:

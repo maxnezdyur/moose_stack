@@ -1,5 +1,8 @@
 .DS_Store
 *.swp
 *.swo
-.vscode/
+.vscode/*
+!.vscode/launch.json
 .idea/
+compile_commands.json
+.cache/

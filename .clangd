@@ -1,0 +1,6 @@
+CompileFlags:
+  Compiler: clang++
+  Remove:
+    - -fopenmp*
+    - -march=*
+    - -mfma
