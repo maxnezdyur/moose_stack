@@ -1,0 +1,9 @@
+[submodule "moose"]
+	path = moose
+	url = https://github.com/maxnezdyur/moose.git
+[submodule "blackbear"]
+	path = blackbear
+	url = https://github.com/maxnezdyur/blackbear.git
+[submodule "isopod"]
+	path = isopod
+	url = https://github.com/maxnezdyur/isopod.git
