@@ -27,7 +27,6 @@ Target idaholab via `--head maxnezdyur:`:
 cd ~/projects/<feature>/<app>
 git push -u origin <feature>
 gh pr create --repo idaholab/<app> --base devel --head maxnezdyur:<feature>
-# moose uses base `next`, not `devel`
 ```
 
 ## Bumping submodule pointers in this stack
@@ -50,6 +49,6 @@ rmdir ~/projects/<feature>
 
 ## Default branches
 
-- `moose` → `next`
+- `moose` → `devel`
 - `blackbear`, `isopod` → `devel`
 - This meta-repo → `main`
