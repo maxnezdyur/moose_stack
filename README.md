@@ -22,18 +22,37 @@ moose_stack/
 
 Each app's Makefile locates MOOSE via the relative path `../moose`, which resolves to the sibling submodule.
 
-## Feature worktrees
+## Starting a feature
 
-To work on a feature that touches multiple repos, create a sibling workspace that pairs worktrees from each baseline submodule:
+Create a sibling worktree of the meta-repo outside `moose_stack` so the baseline stays pristine. Put a feature branch on the meta-repo and on every submodule — branch names all match `<feature>` so later the meta-repo can bump its submodule pointers cleanly. Clone the base `moose` conda env into a per-feature env so any `update_and_rebuild_*` runs stay isolated (never mutate the base env — it's shared across all worktrees).
 
 ```bash
-mkdir -p ../creep-model
-git -C moose     worktree add ../../creep-model/moose     -b creep-model
-git -C blackbear worktree add ../../creep-model/blackbear -b creep-model
-# (only include repos the feature actually touches)
+# meta-repo worktree on a new feature branch (submodule paths are empty gitlinks)
+git -C ~/projects/moose_stack worktree add ~/projects/<feature> -b <feature>
+
+# for each submodule: remove the empty gitlink dir, then add a worktree on a matching branch
+for sub in moose blackbear isopod; do
+  rmdir ~/projects/<feature>/$sub
+  git -C ~/projects/moose_stack/$sub worktree add ~/projects/<feature>/$sub -b <feature>
+done
+
+conda create -n moose-<feature> --clone moose
+conda activate moose-<feature>
 ```
 
-Inside `../creep-model/blackbear`, `../moose` resolves to the paired MOOSE worktree — no `MOOSE_DIR` env juggling.
+Do NOT run `git submodule update --init` inside the meta-repo worktree — the per-submodule worktrees above are the source of truth. All four branches are local-only at create time; push happens when you open a PR.
+
+Inside `~/projects/<feature>/blackbear`, `../moose` resolves to the paired MOOSE worktree — no `MOOSE_DIR` env juggling.
+
+## Opening a PR
+
+Target idaholab via `--head maxnezdyur:`:
+
+```bash
+cd ~/projects/<feature>/<app>
+git push -u origin <feature>
+gh pr create --repo idaholab/<app> --base devel --head maxnezdyur:<feature>
+```
 
 ## Updating submodule pointers
 
@@ -44,4 +63,21 @@ git submodule update --remote moose      # or blackbear / isopod
 git add moose
 git commit -m "bump moose to $(git -C moose rev-parse --short HEAD)"
 git push
+```
+
+## Tearing down a feature workspace
+
+Remove submodule worktrees first, then the meta-repo worktree, then the env. Delete feature branches only if nothing worth keeping lives on them.
+
+```bash
+for sub in moose blackbear isopod; do
+  git -C ~/projects/moose_stack/$sub worktree remove ~/projects/<feature>/$sub
+done
+git -C ~/projects/moose_stack worktree remove ~/projects/<feature>
+conda env remove -n moose-<feature>
+
+# optional: drop the local branches if unused
+for r in moose_stack moose_stack/moose moose_stack/blackbear moose_stack/isopod; do
+  git -C ~/projects/$r branch -D <feature>
+done
 ```
