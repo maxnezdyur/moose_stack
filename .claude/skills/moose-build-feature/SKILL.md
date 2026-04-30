@@ -1,24 +1,26 @@
 ---
 name: moose-build-feature
-description: Spin up an agent team (implementer, test writer(s), docs writer, test runner) against a freeform markdown spec. Iterates write/test/check/refine until the build is clean and new regression tests pass. Manual-invoke only.
+description: Spin up an agent team (implementer, test writer(s), docs writer, test runner) against a structured spec.md (typically produced by /moose-design-feature). Iterates write/test/check/refine until the build is clean and new regression tests pass. Manual-invoke only.
 disable-model-invocation: true
 ---
 
 # /moose-build-feature
 
-Drive a feature end-to-end from a freeform markdown spec by creating a real Claude Code **team** (`TeamCreate`) and orchestrating the existing MOOSE subagents as named teammates over a shared task list.
+Drive a feature end-to-end from a structured `spec.md` (Summary / Physics / Reuse decisions / Test plan / Doc plan / Out of scope) by creating a real Claude Code **team** (`TeamCreate`) and orchestrating the existing MOOSE subagents as named teammates over a shared task list. Specs are typically produced by `/moose-design-feature`; freeform prose is also accepted, with reduced fidelity.
 
 Stops when the build is clean and the new regression tests pass, or after **10** iterations (then halts and surfaces state).
 
 ## Usage
 
 ```
-/moose-build-feature <path/to/spec.md>
+/moose-build-feature [path/to/spec.md]
 ```
 
-The spec is freeform prose. No required sections. You will infer the target repo and object kind and confirm with the user once before any teammate runs.
+If no path is given, defaults to `<worktree-root>/spec.md` (where `/moose-design-feature` writes by default).
 
-**Assumes the user already ran `/new-feature`** and is in that worktree. Don't create one.
+The spec is expected to follow the `/moose-design-feature` template — structured sections (Summary, Physics, Reuse decisions, Test plan, Doc plan, Out of scope). Freeform prose is also accepted; in that case you'll fall back to inference and a confirmation prompt.
+
+**Assumes the user already ran `/new-feature`** and is in that worktree. Don't create one. **Recommend `/moose-design-feature` first** if no spec exists at the default path.
 
 ## Team
 
@@ -38,16 +40,23 @@ You do **not** add `code-standards` or `pr-reviewer` — green gates are the don
 
 ## Steps
 
-### 1. Read the spec and infer dispatch
+### 1. Read the spec and dispatch
 
-1. `Read` the spec markdown.
-2. Infer:
-   - **Repo**: `moose` | `blackbear` | `isopod` (and module if applicable, e.g. `moose/modules/solid_mechanics`)
-   - **Object kind**: `Kernel` | `BC` | `Material` | `Postprocessor` | `Action` | etc.
-   - **Scope**: which files will be touched (`src/...`, `include/...`, `test/tests/<area>/<feature>/`, `doc/content/...`, `unit/...` if needed)
-   - **Whether unit tests apply** (default off; only if spec calls for class-level unit coverage)
-   - **Whether docs apply** (default on for new public classes)
-3. Ask the user **once** with `AskUserQuestion` to confirm `{repo, kind, files-to-touch, unit-tests on/off, docs on/off}`. Adjust based on their answer.
+1. **Resolve the spec path.** If `$ARGUMENTS` is set, use it. Otherwise default to `<worktree-root>/spec.md`. If neither exists, refuse: *"No spec found. Run `/moose-design-feature <idea>` first, or pass a spec path explicitly."*
+2. `Read` the spec.
+3. **Detect the format.**
+   - **Structured** (has `## Summary`, `## Physics / math`, `## Reuse decisions`, `## Test plan`, `## Doc plan`, `## Out of scope`) — parse each section directly. Skip the confirmation prompt; the user already made these decisions during `/moose-design-feature`.
+   - **Freeform** (legacy) — fall back to inference: target repo, object kind, files-to-touch from prose; default unit-tests off, docs on. Then ask the user **once** with `AskUserQuestion` to confirm `{repo, kind, files-to-touch, unit-tests on/off, docs on/off}`.
+4. **Extract dispatch from the parsed (or inferred) spec:**
+   - **Repo** — from `## Summary` → `**Repo:**` line, or inferred from prose.
+   - **Object kind** — from `## Summary` → `**Object kind:**` line, or inferred.
+   - **Files to touch** — from `## Summary` → `**Predicted files to touch:**` list, or inferred.
+   - **Unit tests on/off** — on iff the files-to-touch list contains a `unit/` path.
+   - **Docs on/off** — on iff `## Doc plan` says `**Needed:** yes` (or the freeform default if no Doc plan section exists).
+   - **Reuse decisions** — every entry under `## Reuse decisions`. These flow to the implementer's first message: `Reuse as-is` → "do not re-implement X; the existing class is authoritative." `Extend` → "extend X with <decision>; do not write a parallel implementation." `Parallel` → "duplicating X is authorized; the spec records the justification — do not second-guess it."
+   - **Test plan entries** — every entry under `## Test plan`. Each becomes one task on the shared task list, owned by `test-writer` (or `unit-test-writer` if the entry specifies gtest). The entry's named test, Tester kind, asserted behavior, and mutation rationale carry into the writer's first message.
+   - **Out of scope** — every entry under `## Out of scope`. Surfaced to all writers as hard "do not touch" items.
+5. **Reuse-only short-circuit.** If `## Reuse decisions` covers the whole feature with `Reuse as-is` entries (i.e. no new code is needed, only tests/docs), skip spawning `implementer` entirely. Tell the user: *"Spec says reuse-only — skipping implementer."* Continue with test/doc work.
 
 ### 2. Create the team
 
@@ -62,17 +71,26 @@ Spawn the teammates listed above via `Agent`, passing both `team_name` and `name
 - `test-writer`
 - `test-runner`
 
-Conditionally (based on step 1's confirmation):
+Conditionally (based on step 1's spec dispatch — `unit/` paths in files-to-touch, `Doc plan` section):
 - `unit-test-writer`
 - `docs-writer`
 
-Each spawn message should include the spec contents and the agreed `{repo, kind, files-to-touch}` so the teammate has context from turn one. Their existing agent prompts already load the right skills on first action — don't re-state those.
+Each spawn message should include the spec contents and the parsed dispatch (`{repo, kind, files-to-touch}` plus the relevant Reuse decisions and Out-of-scope items) so the teammate has context from turn one. Their existing agent prompts already load the right skills on first action — don't re-state those.
 
 **Do not respawn teammates within a run.** They go idle between turns; wake them with `SendMessage`. Respawning loses warmed context.
 
 ### 4. Seed the task list
 
-`TaskCreate` the initial round of work. Suggested skeleton (one task per teammate per iteration is fine; reuse and re-assign as you iterate):
+`TaskCreate` the initial round of work.
+
+**For structured specs**, the task list is driven by the spec sections — don't paraphrase, copy the entries through verbatim:
+
+- `iter-1: implement <feature>` — owner `implementer`. Carry the full **Reuse decisions** and **Out of scope** sections into the task body so the implementer treats them as hard constraints. (Skip this task if step 1 short-circuited to reuse-only.)
+- `iter-1: write test "<test_name>"` — **one task per `## Test plan` entry**, owner `test-writer` (or `unit-test-writer` if the entry specifies gtest). The task body carries that entry's Tester kind, asserted behavior, and mutation rationale.
+- `iter-1: write doc page for <feature>` — owner `docs-writer` *(only if `## Doc plan` is on)*. Body carries the spec's `**Public surface:**` line.
+- `iter-1: build + run new tests` — owner `test-runner` (blocked on the writers above)
+
+**For freeform specs**, fall back to the legacy skeleton:
 
 - `iter-1: implement <feature>` — owner `implementer`
 - `iter-1: write regression test for <feature>` — owner `test-writer`

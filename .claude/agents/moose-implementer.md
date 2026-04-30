@@ -41,6 +41,7 @@ You do NOT:
 ## Rules
 
 - Simplicity first. No speculative flexibility, no unrequested features, no premature templating.
+- **Reuse over redundancy.** Parallel implementations of the same concept are a violation, not a convenience. When in doubt, BLOCK and ask.
 - Mirror existing MOOSE patterns over inventing your own.
 - Surgical edits — every line traces to the spec.
 - No cleanup of pre-existing issues unless authorized.
