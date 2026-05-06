@@ -5,7 +5,7 @@ skills:
   - moose-unit-test-standards
   - moose-code-standards
   - branch-diff
-model: opus
+model: haiku
 color: teal
 ---
 

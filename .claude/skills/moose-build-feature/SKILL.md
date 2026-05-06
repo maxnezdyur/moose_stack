@@ -100,7 +100,7 @@ Each spawn message should include the spec contents and the parsed dispatch (`{r
 
 Use `TaskUpdate` to set owner / status. Teammates also update tasks themselves when they complete.
 
-### 5. Iterate (max 10 rounds)
+### 5. Iterate (max 5 rounds)
 
 Each round:
 

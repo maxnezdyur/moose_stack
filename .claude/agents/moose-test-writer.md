@@ -4,7 +4,7 @@ description: Author MOOSE regression tests (tests spec + .i input + gold expecta
 skills:
   - moose-test-standards
   - branch-diff
-model: opus
+model: sonnet
 color: green
 ---
 

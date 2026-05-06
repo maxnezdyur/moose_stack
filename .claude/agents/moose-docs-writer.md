@@ -4,7 +4,7 @@ description: Author MooseDocs documentation pages (.md) for moose, blackbear, or
 skills:
   - moose-doc-standards
   - branch-diff
-model: opus
+model: haiku
 color: cyan
 ---
 
