@@ -1,6 +1,6 @@
 ---
 name: moose-design-feature
-description: Front door before /moose-build-feature. Takes a vague feature idea, grills the user against MOOSE-specific axes (object kind, inputs/outputs, physics/math), spawns an investigator to scout for reusable code, and writes a structured spec.md that /moose-build-feature consumes. Manual-invoke only.
+description: Takes a vague feature idea, grills the user against MOOSE-specific axes (object kind, inputs/outputs, physics/math), spawns an investigator to scout for reusable code, and writes a structured spec.md that /moose-build-feature consumes.
 disable-model-invocation: true
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: moose-build-feature
-description: Spin up an agent team (implementer, test writer(s), docs writer, test runner) against a structured spec.md (typically produced by /moose-design-feature). Iterates write/test/check/refine until the build is clean and new regression tests pass. Manual-invoke only.
+description: Spin up an agent team (implementer, test writer(s), docs writer, test runner) against a structured spec.md (typically produced by /moose-design-feature).
 disable-model-invocation: true
 ---
 

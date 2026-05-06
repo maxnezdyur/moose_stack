@@ -56,6 +56,8 @@ Reference and pitfalls for authoring `.md` pages under `<repo>/doc/content/` in 
 
 **`block=` is `.i`/`.hit` only.** For `.C`/`.py` use `start=`/`end=`/`re=`.
 
+**Always use `!listing` for real test inputs — never paste them as inline fenced code blocks.** A fenced HIT snippet copied into the doc is a static fork of the input that drifts the moment the test changes (params renamed, blocks restructured, defaults updated). `!listing` re-extracts on every build, so the page stays correct. If the snippet you want isn't a discrete sub-block, slice it with `start=`/`end=` rather than pasting. The only time inline fenced HIT is acceptable is a tiny illustrative fragment that has no corresponding test input — and per pitfall #13 you should usually drop that to prose instead.
+
 ## Citations
 
 - `[!cite](key)` narrative; `[!citep](k1, k2)` parenthetical; `[!citet](key)` textual.
@@ -126,6 +128,32 @@ Every test block needs:
 | SQA RTM | `moose/modules/heat_transfer/doc/content/modules/heat_transfer/sqa/heat_transfer_rtm.md` |
 | Stub template | `moose/framework/doc/content/templates/stubs/moose_object.md.template` |
 
+## ASCII only — no smart quotes, em dashes, NBSP
+
+Every byte in a `.md` page must be 7-bit ASCII. AI output, web-copy, and "smart" editor autocorrect inject lookalikes that render fine but later trip grep, regex slicing in `!listing re=...`, citation key matching, CIVET tooling, and string compares. They're invisible in most editors. Treat any non-ASCII byte as a defect.
+
+| Banned char | U+ | Replace with |
+|---|---|---|
+| `'` `'` smart single quote | 2018 / 2019 | `'` |
+| `"` `"` smart double quote | 201C / 201D | `"` |
+| `–` en dash | 2013 | `-` |
+| `—` em dash | 2014 | `--` |
+| `…` horizontal ellipsis | 2026 | `...` |
+| non-breaking space | 00A0 | regular space |
+| narrow no-break space | 202F | regular space |
+| zero-width space | 200B | delete |
+| byte-order mark | FEFF | delete |
+
+Detect before commit (run from repo root):
+
+    grep -rnP '[^\x00-\x7F]' --include='*.md' doc/
+
+Most common entry vectors: pasting from a paper PDF, AI-generated prose (em dashes, smart quotes), macOS "Smart Quotes" / "Smart Dashes" autocorrect, copy from rendered web pages.
+
+When **authoring** a page (not just editing): type ASCII deliberately. Don't trust your editor to leave `"` and `'` as ASCII — disable Smart Quotes / Smart Dashes for `.md` files. When **pasting** anything from outside the repo, run the grep above on the touched files immediately, before any other edits, so the diff localises offenders.
+
+(Bibtex `.bib` files are exempt — author diacritics are legitimate. The rule is `.md` only.)
+
 ## Pitfalls — common ways pages break
 
 1. **Missing `addClassDescription`** → `!syntax description` red. Fix C++.
@@ -143,6 +171,8 @@ Every test block needs:
 13. **No real test input** — don't fabricate. Omit the example or write a test first.
 14. **SQA fields missing** fail `check`. `issues = '#000'` only as last resort.
 15. **Manual `!alert construction`** — reserved for auto-stubs.
+16. **Inlined HIT instead of `!listing`** — pasting fenced HIT from a real test input forks the snippet from its source; it goes stale silently. Reference the test input with `!listing ... block=...` (or `start=`/`end=`) so rebuilds re-extract.
+17. **Non-ASCII bytes** — smart quotes, em/en dashes, NBSP, zero-width space leak in via copy-paste or AI output. They render fine but break grep, `!listing re=...`, citation matching, and string compares later. See "ASCII only" above; scan with `grep -rnP '[^\x00-\x7F]' --include='*.md' doc/` before commit.
 
 ## Build / preview
 

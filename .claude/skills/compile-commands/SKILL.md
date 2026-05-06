@@ -1,6 +1,6 @@
 ---
 name: compile-commands
-description: Regenerate clangd's compile_commands.json for the moose_stack meta-repo. Asks which of moose (test), moose-combined (all modules), blackbear, isopod to rebuild the DB for, runs make in each, then merges them into a single compile_commands.json at the meta-repo root. Use when the user wants to refresh, rebuild, or regenerate the compile DB for clangd after a build or flag change. Accepts an optional space-separated list of names (e.g. /compile-commands moose-combined blackbear) to skip the prompt.
+description: Regenerate clangd's compile_commands.json for the moose_stack meta-repo. Asks which of moose (test), moose-combined (all modules), blackbear, isopod to rebuild the DB for, runs make in each, then merges them into a single compile_commands.json at the meta-repo root.
 context: fork
 agent: general-purpose
 model: haiku
