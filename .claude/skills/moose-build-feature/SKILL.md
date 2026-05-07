@@ -33,6 +33,7 @@ You are the **team lead**. You create the team, spawn named teammates, assign th
 | `unit-test-writer` | `moose-unit-test-writer` | gtest under `unit/` (spawn only if spec calls for it) |
 | `docs-writer` | `moose-docs-writer` | `.md` pages under `<repo>/doc/content/` (spawn only if spec calls for it) |
 | `test-runner` | `moose-test-runner` | Build (when authorized) + run + diagnose + gold regen |
+| `docs-builder` | `moose-docs-builder` | Final gate: full MooseDocs smoke build of the affected scope; filters errors against the branch diff |
 
 `investigator` is **not** a teammate — spawn it ad-hoc via `Agent` (no `team_name`) when a teammate reports `NEEDS_CONTEXT`. It returns its findings as a one-shot result, which you then forward via `SendMessage`.
 
@@ -70,6 +71,7 @@ Spawn the teammates listed above via `Agent`, passing both `team_name` and `name
 - `implementer`
 - `test-writer`
 - `test-runner`
+- `docs-builder` *(always — runs unconditionally as the final gate, even if no docs were authored, because C++ renames can break `!syntax` in untouched pages)*
 
 Conditionally (based on step 1's spec dispatch — `unit/` paths in files-to-touch, `Doc plan` section):
 - `unit-test-writer`
@@ -87,16 +89,18 @@ Each spawn message should include the spec contents and the parsed dispatch (`{r
 
 - `iter-1: implement <feature>` — owner `implementer`. Carry the full **Reuse decisions** and **Out of scope** sections into the task body so the implementer treats them as hard constraints. (Skip this task if step 1 short-circuited to reuse-only.)
 - `iter-1: write test "<test_name>"` — **one task per `## Test plan` entry**, owner `test-writer` (or `unit-test-writer` if the entry specifies gtest). The task body carries that entry's Tester kind, asserted behavior, and mutation rationale.
-- `iter-1: write doc page for <feature>` — owner `docs-writer` *(only if `## Doc plan` is on)*. Body carries the spec's `**Public surface:**` line.
-- `iter-1: build + run new tests` — owner `test-runner` (blocked on the writers above)
+- `iter-1: write doc page for <feature>` — owner `docs-writer` *(only if `## Doc plan` is on)*. Body carries the spec's `**Public surface:**` line. **Blocked on implementer + test-writer(s)** so `!listing` shortcodes can target real files; runs in parallel with `test-runner`.
+- `iter-1: build + run new tests` — owner `test-runner`. **Blocked on implementer + test-writer(s) only** (not docs-writer); runs in parallel with `docs-writer`.
+- `final: smoke docs build for <scope>` — owner `docs-builder`. **Blocked on the implementation loop reaching green** (test-runner all OK, plus any in-flight docs-writer work). Body carries `<scope>` and the base branch (`devel`).
 
 **For freeform specs**, fall back to the legacy skeleton:
 
 - `iter-1: implement <feature>` — owner `implementer`
 - `iter-1: write regression test for <feature>` — owner `test-writer`
 - `iter-1: write unit test for <feature>` — owner `unit-test-writer` *(if applicable)*
-- `iter-1: write doc page for <feature>` — owner `docs-writer` *(if applicable)*
-- `iter-1: build + run new tests` — owner `test-runner` (blocked on the writers above)
+- `iter-1: write doc page for <feature>` — owner `docs-writer` *(if applicable; blocked on implementer + test-writer(s); runs in parallel with `test-runner`)*
+- `iter-1: build + run new tests` — owner `test-runner` (blocked on implementer + test-writer(s) only; runs in parallel with `docs-writer`)
+- `final: smoke docs build for <scope>` — owner `docs-builder` (blocked on the implementation loop reaching green)
 
 Use `TaskUpdate` to set owner / status. Teammates also update tasks themselves when they complete.
 
@@ -113,24 +117,30 @@ Each round:
 
 Wait for the implementer's task to be marked complete and the idle notification to arrive.
 
-#### 5b. Tests + docs (parallel)
+#### 5b. Tests (parallel)
 
 `SendMessage` in parallel (single tool-call message with multiple `SendMessage` blocks) to:
 - `test-writer`
 - `unit-test-writer` *(if spawned)*
-- `docs-writer` *(if spawned)*
 
-Each reads the implementer's latest output via Read; teammates don't need to read each other.
+Each reads the implementer's latest output via Read.
 
-Wait for all of them to mark their tasks complete.
+Wait for all of them to mark their tasks complete. **Docs are deferred to 5c** so the doc page can `!listing` against the real implementation source *and* the real test input — both must exist on disk before docs-writer starts, or its listings will silently point at stale or missing files.
 
-#### 5c. Test runner (build + run, sequential after 5b)
+#### 5c. Docs + test runner (parallel after 5b)
 
-`SendMessage` to `test-runner` with **explicit build authorization** so it runs `make` instead of asking. Template:
+`SendMessage` in parallel (single tool-call message with two `SendMessage` blocks) to:
 
-> Run tests in scope `<scope>`, restricting to `--re=<new-test-name(s)>`.
-> You are authorized to build the affected app first (`cd <scope> && make -j 6`).
-> If any test produces a `MISSING GOLD FILE` status or a structural DIFF, do **not** regenerate gold yet — just report it.
+- `docs-writer` *(if spawned)* — body carries the spec's `**Public surface:**` line plus the now-final paths to the implementation and the test input, so `!listing` / `!syntax` shortcodes resolve.
+- `test-runner` — with **explicit build authorization** so it runs `make` instead of asking. Template:
+
+  > Run tests in scope `<scope>`, restricting to `--re=<new-test-name(s)>`.
+  > You are authorized to build the affected app first (`cd <scope> && make -j 6`).
+  > If any test produces a `MISSING GOLD FILE` status or a structural DIFF, do **not** regenerate gold yet — just report it.
+
+The two are independent: the test-runner only touches build artifacts and gold files; docs-writer only touches `<repo>/doc/content/`. They don't read each other's output.
+
+Wait for both to mark their tasks complete before routing. If docs-writer finishes first and the run is otherwise green, the iteration is still gated on test-runner.
 
 #### 5d. Route the test-runner report
 
@@ -162,17 +172,41 @@ If the user says values are wrong → route to `implementer` (the code is buggy)
 
 ### 6. Done
 
-Stop when **build clean + all new regression tests pass**. Before reporting:
+Stop the **implementation loop** when **build clean + all new regression tests pass**. Then run the docs gate, then shut down.
+
+#### 6a. Docs smoke gate
+
+`SendMessage` to `docs-builder` with the affected `<scope>` and base branch (`devel`). It runs `/moose-docs-smoke <scope>`, then filters smoke errors against `git diff --name-only devel...HEAD` in the submodule.
+
+Possible reports:
+
+| `docs-builder` report | Action |
+|---|---|
+| `PASS` | Continue to 6b. |
+| `PASS_WITH_WARNINGS` | Continue to 6b. Carry the warning list into the final report so the user knows about pre-existing doc rot. |
+| `FAIL` | Wake `docs-writer` with the filtered error lines + log path + the diff list. New `docs-fix-N` task. After `docs-writer` reports DONE, re-`SendMessage` `docs-builder` to re-smoke. |
+| `BLOCKED` | Surface to user (e.g. missing conda env, missing `*-opt` binary). Do not auto-fix — the cause is environmental. |
+
+**Doc-fix cap: 3 rounds.** This is **separate** from the implementation iteration cap. If the third re-smoke still reports `FAIL`:
+
+1. Stop dispatching doc-fix work. Do **not** auto-shut-down or `TeamDelete`.
+2. Surface to the user: the smoke log path, the unresolved in-diff error lines, and which routes were tried.
+3. Ask: extend by N more doc-fix rounds, escalate (likely needs C++ change → wake `implementer`), or shut down. On extend, continue from where you stopped. On shutdown, proceed to 6b with `DONE_WITH_CONCERNS` flagged.
+
+**Routing nuance.** If `docs-writer` reports it can't fix without a C++ change (e.g. missing `addClassDescription`, renamed class still referenced in `!syntax`), the team lead may route once to `implementer` instead of counting that against the doc-fix cap. Don't ping-pong — one C++-side attempt, then back to docs-writer.
+
+#### 6b. Shutdown
 
 1. Gracefully shut down each teammate: `SendMessage { to: <name>, message: { type: "shutdown_request" } }`.
 2. Wait for shutdown responses.
 3. `TeamDelete` to clean up `~/.claude/teams/<team_name>/` and `~/.claude/tasks/<team_name>/`.
 
-Then report to the user:
+#### 6c. Final report
 
 - Files created / modified (per teammate)
 - The exact commands `test-runner` ran (so user can reproduce)
 - Final test counts (passed / failed / skipped)
+- Docs smoke result (`PASS` / `PASS_WITH_WARNINGS` / `FAIL` after cap) + log path + warning list if any
 - Any `DONE_WITH_CONCERNS` flagged across the run
 - Suggested commit message; **do not commit**
 
@@ -194,7 +228,7 @@ If iteration 10 finishes without all gates green:
 
 - **Never commit or push.** The user owns commits. Final report includes a suggested commit message; that's it.
 - **Never run `clang-format` / `black`.** The pre-commit hook handles style. (If the hook fails on commit, the user fixes it.)
-- **Never run `moosedocs.py` build/check.** Docs are written but not gate-checked; the user reviews them manually.
+- **Only `docs-builder` runs `moosedocs.py`.** All other teammates (`implementer`, `test-writer`, `unit-test-writer`, `docs-writer`, `test-runner`) remain forbidden from invoking `moosedocs.py build` / `check` / `generate`. The team lead routes the docs gate exclusively through `docs-builder` in §6a.
 - **Don't create or destroy worktrees / branches / conda envs.** That's `/new-feature`'s job.
 - **Don't substitute for a teammate** — even one-line edits go through the right teammate so the diff is consistent and skills load correctly.
 - **Don't respawn a teammate** within a run; wake idle teammates with `SendMessage`. Respawning loses warmed context.
@@ -205,7 +239,8 @@ If iteration 10 finishes without all gates green:
 When you start the run (after team creation, before iteration 1), briefly tell the user:
 
 - Style isn't checked (pre-commit hook handles it on commit).
-- Docs aren't gate-checked (you'll need to eyeball the rendered output later).
+- Docs **build** is gate-checked via `docs-builder` in §6a (full MooseDocs smoke build, errors filtered against the branch diff). Doc **quality** isn't — warnings (red citations, missing images, Levenshtein hints) are surfaced for the user's manual review but don't fail the gate.
+- The smoke build is slow: ~5–10 min per round, up to 4 rounds (1 initial + 3 doc-fix) per run, so worst case ~20–40 min on top of the implementation loop. Bump with `SMOKE_TIMEOUT=N` if needed.
 - Team state lives in the shared task list (`~/.claude/tasks/<team_name>/`); a session crash loses iteration history.
 - They can interrupt at any time; on resume, you'll pick up from the open tasks in the shared list.
 
