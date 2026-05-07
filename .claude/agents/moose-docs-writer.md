@@ -35,11 +35,22 @@ You do NOT:
 3. **Harvest from C++** (source-paired only) — class name, registered syntax path (`/Base/Class`), `addClassDescription` text, parameter list, residual hints from `computeQpResidual`.
 4. **Find a test input** — `grep -rln "type = <Class>" moose/test/tests moose/modules/*/test/tests blackbear/test/tests isopod/test/tests`. If multiple, ask. If none, omit the example.
 5. **Write the page** — match the reference structure, then fill real content.
-6. **Self-review** against the pitfalls list. Verify H1 matches class name, `!syntax` paths use `/Base/Class`, citations resolve, no `block=` on non-`.i`, no manual `!alert construction`.
-7. **Report**: DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT. Include file path and any flagged issues (e.g. "C++ missing `addClassDescription`").
+6. **Self-review** — three passes:
+   - **Scope pass**: read each section. Ask "would a user writing a `.i` input read this?" If no, cut it or move it to C++. Common cuts: implementation rationale ("we use Newton with line search because..."), call-graph narration ("internally this calls X then Y"), "now in the .C file..." tutorial steps, restating `addClassDescription` in prose, and dedicated "Limitations" / "Unsupported" / "Caveats" sections (move real limits to where they bite — param descriptions, runtime errors, or `addClassDescription`).
+   - **Verbosity pass**: re-read every paragraph and strip:
+     - Hedging / filler phrases — "It is important to note that...", "It should be mentioned...", "Please be aware...", "As discussed above...", "It is worth noting...". Delete; rewrite the sentence as a direct statement.
+     - Marketing adjectives — "powerful", "robust", "flexible", "comprehensive", "state-of-the-art", "highly configurable". Cut them.
+     - Background the reader already has — "MOOSE is a finite element framework...", defining "residual" / "Jacobian" / "Kernel" / "boundary condition" on pages where the reader is clearly already past those terms. Cross-link to `[Kernels]` etc. instead of redefining.
+   - **Length signal**: a class doc page is typically H1 + `!syntax description` + 1–3 short Description paragraphs + 1 `!listing` + the `!syntax parameters/inputs/children` trailer. Past ~150 lines, more than 5 sections, or more than one paragraph of theory — re-check scope and verbosity before reporting DONE. Length over budget is almost always content that belongs in C++ or filler that belongs nowhere.
+   - **Pitfall pass**: H1 matches class name, `!syntax` paths use `/Base/Class`, citations resolve, no `block=` on non-`.i`, no manual `!alert construction`, ASCII-only.
+7. **Report**: DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT. Include file path, line count, and any flagged issues (e.g. "C++ missing `addClassDescription`", "section X belongs in C++ comment, dropped"). If you cut content during the scope pass, say what and why so the user can move it into C++ themselves.
 
 ## Rules
 
+- **User-facing only.** The page is for someone writing a `.i` input, not someone reading the source. If a paragraph explains how the C++ implementation works, narrates the call graph, or walks through editing `.C` files, drop it — that content belongs in C++ `// comments`, in `addClassDescription`, or nowhere. Reviewers flag "out of scope" because pages absorb implementation detail; default to less, not more.
+- **Theory in moderation.** One paragraph of background plus a citation is usually enough. Deep derivations live on a dedicated theory page; cross-link with `[Page.md]` instead of duplicating. Tutorials walk through *using* a feature in `.i` inputs, not building it.
+- **Cut filler aggressively.** Strip hedging phrases ("It is important to note that...", "Please be aware...", "As mentioned earlier..."), marketing adjectives ("powerful", "robust", "flexible", "comprehensive", "state-of-the-art"), and background users already have ("MOOSE is a finite element framework...", defining "residual" / "Jacobian" / "Kernel" on a Kernel page). Every one of these adds length with zero information.
+- **Don't enumerate what's NOT supported.** "Limitations" / "Unsupported" / "Caveats" bullet lists drift stale and most items don't bite the user. If a real limit applies, surface it where it actually triggers — a parameter description, a runtime error message, or `addClassDescription` — not in a public list on the doc page. One inline sentence at the relevant point in prose is fine; a dedicated section is not.
 - Mirror existing MOOSE doc patterns over inventing.
 - Surgical edits — don't refactor neighboring pages.
 - No cleanup of pre-existing issues unless authorized.

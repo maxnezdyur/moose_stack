@@ -31,17 +31,20 @@ Examples:
    - **Restart** — proceed as if no spec existed; the existing file gets overwritten at step 6.
    - **Cancel** — stop the skill.
 
-### 2. Light grill — round 1
+### 2. Light grill — round 1 (delegate to `/moose-grill`)
 
-Grill the user across the three MOOSE-specific axes using `AskUserQuestion`. One or two questions per axis. Don't ask things the codebase can answer — `Grep`/`Glob` first.
+Invoke the `moose-grill` skill via `Skill(moose-grill)`, passing the user's freeform idea as the argument. That skill:
 
-| Axis | Sample probes |
-|---|---|
-| Object kind + base class | "Is this a `Kernel`, `IntegratedBC`, `Material`, `Postprocessor`, `Action`, `UserObject`, …?" "Which base class — e.g. `ADKernelGrad` vs `Kernel`?" |
-| Inputs / outputs | "What `coupled` variables does it read?" "What materials does it consume?" "Does it write an AuxVariable, a Reporter, or just a residual contribution?" "What `validParams` does it need?" |
-| Physics / math | "Write the equation in plain math or LaTeX. What residual term, what Jacobian entries?" Push back hard on hand-waving — vague math becomes vague code. |
+- Reads `.claude/contexts/moose/AUTHORING-MAP.md` and picks the relevant authoring guide(s).
+- Walks the picked guide's **When to use this** decision tree to lock in object kind + base class.
+- Walks the **Contract**, **Coupling**, and **Common pitfalls** sections to capture required overrides, `validParams`, coupled variables / material properties, and pitfalls considered.
+- Refines a guide's decision tree inline (with user confirmation) when grilling reveals a real ambiguity.
+- Captures the residual / contribution math verbatim from the user (the authoring guides don't validate physics).
+- Returns a structured plan with `Repo`, `Object kind / base class`, `Required overrides`, `validParams shape`, `Coupling`, `Residual / contribution math`, `Pitfalls considered`, `Decision-tree refinements applied`, and `Predicted files to touch`.
 
-For each grill round, ask 1–2 questions at a time. Don't dump all questions at once.
+You consume that plan directly in subsequent steps — no need to re-grill these axes. If the plan comes back with `Authoring guide(s) consulted: none` (no guide matched the user's case), fall back to the legacy three-axis grill (Object kind + base class, Inputs / outputs, Physics / math) for this round only.
+
+Don't ask things the codebase can answer — let `moose-grill` handle the authoring-side picks; reserve `Grep`/`Glob` for verifying claims and for the scout step.
 
 ### 3. Scout — round 1
 
@@ -146,7 +149,7 @@ When the investigator reports back, parse its findings:
 
 ### 5. Loop until converged
 
-Repeat steps 2–4 with progressively tighter questions, each round informed by what scout already turned up. After each round, self-assess whether all six spec sections (see §6) can be filled in concretely. Each section needs at least one specific fact, not a placeholder.
+Repeat steps 2–4 with progressively tighter questions, each round informed by what scout already turned up. Subsequent rounds re-invoke `moose-grill` only if a scout finding contradicts the plan (e.g., the user picked `Kernel` but reuse-halt found a better `IntegratedBC` base) — otherwise carry the prior plan forward and grill on math/inputs gaps directly. After each round, self-assess whether all six spec sections (see §6) can be filled in concretely. Each section needs at least one specific fact, not a placeholder.
 
 When the skill judges itself ready, present a draft spec to the user via `AskUserQuestion`:
 - **Looks good — write it** → go to step 6
@@ -239,4 +242,5 @@ Do **not** auto-invoke `/moose-build-feature`. The human review pass on the spec
 
 - `/moose-build-feature` — the consumer of this skill's output. Match its `{repo, kind, files-to-touch}` vocabulary so step 1 of that skill confirms cleanly.
 - `moose-implementer` agent — has the "Reuse over redundancy" rule this skill operationalizes.
+- `/moose-grill` — handles the base-class / contract / coupling / pitfalls grilling using the authoring guides at `.claude/contexts/moose/*-authoring.md`. Step 2 of this skill delegates to it.
 - `grill-me` skill — generic grilling reference; this skill is MOOSE-axis-specific so it doesn't invoke grill-me directly.
