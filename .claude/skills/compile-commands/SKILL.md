@@ -4,7 +4,6 @@ description: Regenerate clangd's compile_commands.json for the moose_stack meta-
 context: fork
 agent: general-purpose
 model: haiku
-effort: low
 allowed-tools:
   - Bash(make *)
   - Bash(jq *)

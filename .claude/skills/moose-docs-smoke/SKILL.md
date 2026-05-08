@@ -4,7 +4,6 @@ description: Smoke-test the MooseDocs site for moose, blackbear, or isopod with 
 context: fork
 agent: general-purpose
 model: haiku
-effort: low
 allowed-tools:
   - Bash(bash *)
   - Bash(cat *)
