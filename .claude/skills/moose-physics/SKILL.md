@@ -164,10 +164,10 @@ After writing the spec, print exactly:
 ```
 Spec written: <absolute path to physics-spec.md>
 Target app: <app>
-Next: invoke moose-input-writer with this spec.
+Next: invoke /moose-input-writer with this spec.
 ```
 
-Do not auto-spawn the writer. The two-step gate is intentional: the user reviews the spec before authoring the input.
+Do not auto-invoke the writer skill. The two-step gate is intentional: the user reviews the spec before authoring the input.
 
 ## Hard rules
 
@@ -175,7 +175,7 @@ Do not auto-spawn the writer. The two-step gate is intentional: the user reviews
 - **Only physics belongs in the spec.** Type-level MOOSE choices (which `BC` class, which solver) go under "Left to writer," never assumed inline.
 - **No codebase scouting.** Do not grep `*/test/tests/**/*.i` or other source code, do not spawn investigators. `PHYSICS-MAP.md` and the input catalog are curated indexes — read only the rows they point to. Never tree-walk beyond what the maps explicitly reference.
 - **Resume, don't overwrite.** If `physics-spec.md` exists, fill gaps rather than restarting.
-- **No auto-write hand-off.** Print the next step; don't spawn the writer agent.
+- **No auto-write hand-off.** Print the next step; don't auto-invoke the writer skill.
 
 ## Out of scope (v1)
 

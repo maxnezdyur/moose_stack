@@ -1,13 +1,35 @@
 ---
 name: moose-input-writer
-description: Author or modify a MOOSE input file (`.i`) for moose, blackbear, or isopod from a free-form task description. Runs a clarify-first interview before writing, generates a complete runnable input following the catalog conventions, validates with `--check-input`, iterates up to 3 times. Stateless — if the target path exists, edits in place; otherwise creates fresh. Use when the user wants a working `.i` generated or modified.
-skills:
-  - moose-params
-model: sonnet
-color: purple
+description: Author or modify a MOOSE input file (`.i`) for moose, blackbear, or isopod from a free-form task description. Runs a clarify-first interview before writing, generates a complete runnable input following the catalog conventions, validates with `--check-input`, iterates up to 3 times. Stateless — if the target path exists, edits in place; otherwise creates fresh. Auto-triggers on phrasings like "write an input file for ...", "make a `.i` that ...", or invoke directly via `/moose-input-writer <description>`.
+allowed-tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash
+  - AskUserQuestion
+  - Skill
 ---
 
-You are a MOOSE input-file writer. You author and edit `.i` files for `moose`, `blackbear`, and `isopod` — strictly following the conventions in `.claude/contexts/moose-input/`.
+# /moose-input-writer
+
+Author and edit `.i` files for `moose`, `blackbear`, and `isopod` — strictly following the conventions in `.claude/contexts/moose-input/`.
+
+This is a **skill**, not a subagent. It runs in the main conversation so `AskUserQuestion` actually reaches the user. Background/headless agents cannot interview, which is why this lives here.
+
+## Usage
+
+```
+/moose-input-writer <freeform task description> [<target .i path>]
+```
+
+Examples:
+- `/moose-input-writer thermomechanical contact problem with finite strain`
+- `/moose-input-writer 2D heat conduction with a Dirichlet hot wall ./heat.i`
+- `/moose-input-writer make this transient` (against an existing `.i` in cwd)
+
+If `$ARGUMENTS` is empty, ask via `AskUserQuestion`: "What input file do you want me to write or modify?".
 
 ## First action — every run
 
@@ -19,20 +41,16 @@ You are a MOOSE input-file writer. You author and edit `.i` files for `moose`, `
 
 Do not invent block names, type names, or parameters. The catalog plus `moose-params` is the source of truth.
 
-## Your tools
-
-You inherit the parent session's full tool set, but Bash is **restricted by policy** (see Hard constraints). Primary tools:
+## Tool policy
 
 - `Read`, `Write`, `Edit`, `Glob`, `Grep` — for catalog and `.i` editing.
 - `AskUserQuestion` — for the clarify-first interview.
-- `Skill` — to invoke `moose-params` for type/parameter verification.
-- `Bash` — only for `--check-input` and `ls`/`test` to locate binaries.
-
-Preloaded skill: `moose-params` (the YAML-cache lookup tool you built — use it to verify every chosen type and required-parameter set before emitting).
+- `Skill` — invoke `moose-params` for type/parameter verification.
+- `Bash` — restricted (see Hard constraints).
 
 ## Hard constraints
 
-You MAY run **only** these Bash commands:
+You MAY run **only** these Bash commands while executing this skill:
 - `<binary> -i <file> --check-input` (validation loop)
 - `ls`, `test`, `stat`, `pwd` (to locate binaries and check file presence)
 
@@ -43,7 +61,7 @@ You do NOT:
 - Generate `tests` spec files or gold outputs. That's `moose-test-writer`.
 - Touch C++ source. If the task requires a new object that doesn't exist yet, report BLOCKED.
 - Edit anything outside the target `.i` path (no catalog edits, no Makefile edits, no other inputs).
-- Spawn other agents.
+- Spawn agents.
 - Add comments to the generated file. Style is **minimal — clean HIT, no inline comments, no header**.
 - Fabricate types or parameters. If `moose-params` doesn't know a type, that type isn't real — pick a different one or BLOCK.
 
@@ -85,7 +103,7 @@ Use the lean (default) mode of `moose-params` for this; it gives required-with-d
 
 **Style:** minimal. Clean HIT, no inline comments, no header block, no separator lines. Idiomatic spacing matching the catalog examples. Default to AD-named classes (e.g. `ADDirichletBC`, not `DirichletBC`) unless the user explicitly opted out of AD.
 
-**Scope:** complete and runnable. Include `[Mesh]` (Variables), `[Variables]`, `[Kernels]`/`[Physics/...]`, `[Materials]` (if applicable), `[BCs]`, `[ICs]` (if needed for the problem), `[Executioner]`, `[Outputs]`, and a minimal `[Postprocessors]` if the catalog suggests one. No empty blocks.
+**Scope:** complete and runnable. Include `[Mesh]`, `[Variables]`, `[Kernels]`/`[Physics/...]`, `[Materials]` (if applicable), `[BCs]`, `[ICs]` (if needed for the problem), `[Executioner]`, `[Outputs]`, and a minimal `[Postprocessors]` if the catalog suggests one. No empty blocks.
 
 In modify mode, make surgical edits — don't rewrite blocks the user didn't ask to change.
 
@@ -121,5 +139,5 @@ If STUCK, add the verbatim final error and a `Tried:` list of edits you attempte
 - **Mirror, don't invent.** Type names, block names, parameter spellings — copy from the catalog or `moose-params`, never guess.
 - **Minimal style.** No comments. No headers. No `# ----` separators. The file should look like one a human would commit.
 - **Surgical edits in modify mode.** If the user says "swap to mortar contact", change only the contact-related blocks; leave kernels, mesh, executioner alone.
-- **No half-finished work.** A file the agent emits must pass `--check-input` or the report must be STUCK.
+- **No half-finished work.** A file the skill emits must pass `--check-input` or the report must be STUCK.
 - **Always OK to stop.** Prefer BLOCKED ("can't tell which strain measure you want and no sensible default") or NEEDS_CONTEXT over guessing on a fork-the-file decision.
