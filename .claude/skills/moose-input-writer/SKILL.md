@@ -69,28 +69,38 @@ You do NOT:
 
 ### Step 2 — interview (create mode) or load (modify mode)
 
-**Create mode.** Identify the 1–4 questions whose answers genuinely fork the file shape. Examples:
-- Dimension (2D / 3D)
-- Strain measure (small / finite / total Lagrangian / incremental)
-- AD vs non-AD
-- Steady vs transient
-- Contact algorithm (mortar / node-face / penalty)
-- Coupling style (full thermomech via `[Modules]`, or hand-wired kernels)
-- **Mesh source** — when the spec implies non-trivial topology (mixed element types, 1D-in-3D shared nodes, conforming interfaces, embedded inclusions): ask whether the user has a `.e` / `.msh` mesh file, or wants you to approximate with in-input generators. Never silently substitute a proxy geometry.
-- **Controls / stochastic wiring** — if the spec calls for `[Controls]`, parameter sweeps, or stochastic-tools coupling: ask which parameters must be controllable and confirm the path before wiring.
+**Create mode — grill one question at a time until no structural assumption remains.**
 
-Pose them in **a single batched `AskUserQuestion` call** of up to 4 questions. Phrase each question with the recommended option first. Only ask a second batch if the first answers expose new ambiguity that genuinely changes the file shape — never to gather details that have sensible defaults.
+Use `AskUserQuestion` with **exactly one question per call**. Wait for the answer. Then re-evaluate: do any *structural* forks remain unanswered? If yes, ask the next single question. Repeat until every writer-side axis below is explicitly answered. **Do not assume.** **Do not batch.** A "sensible default" is never an acceptable substitute for a structural decision.
 
-**Spec-driven runs.** When `physics-spec.md` is present, the interview's job is **not** to re-litigate decisions the spec already locked. Use it instead to:
-1. Resolve any spec requirement you cannot directly express in HIT (e.g. spec says "1D BAR elements sharing nodes with 3D HEX" — that needs an external mesh; ask for the path or report BLOCKED).
+Phrase each question with the recommended option first when one applies. Never spend a question on a numeric placeholder — those get filled silently after the interview converges.
+
+**Writer-side axes that must converge before writing:**
+
+1. **Mesh source** — in-input generators (`GeneratedMeshGenerator`, etc.) vs external file (`.e` / `.msh` via `FileMeshGenerator`). Required as a question whenever the spec implies non-trivial topology: mixed element types (e.g. 1D BAR sharing nodes with 3D HEX), conforming interfaces, embedded inclusions, non-rectangular geometry, or anything that won't come out of `GeneratedMeshGenerator`.
+2. **AD vs non-AD** — default AD, but confirm if the spec requires hand-coded Jacobians or non-AD-only objects.
+3. **Steady vs transient** — and if transient: time horizon and ramp shape (per spec) before defaulting `dt`.
+4. **Strain measure** (when mechanics is active) — small / finite / total Lagrangian / incremental.
+5. **Contact algorithm** (when contact is active) — mortar / node-face / penalty.
+6. **Coupling style** (when multi-physics) — `[Physics]` shorthand actions, `[Modules]` action, or hand-wired kernels.
+7. **FE vs FV vs Linear-FV** — when the catalog presents this as a decision tree for the active physics.
+8. **Controls / stochastic wiring** — if the spec asks for `[Controls]`, parameter sweeps, or stochastic-tools coupling, ask which parameters must be controllable and confirm the path before wiring. Never defer this to `Concerns:`.
+9. **Solver / preconditioner** — only ask if the user has stated a preference or if the default would obviously fail for the problem class. Otherwise default and move on (this one is fine to leave as writer's call).
+
+**Convergence criterion.** Before you proceed to Step 3, every axis above is either (a) answered explicitly by the user this run, (b) locked by `physics-spec.md`, or (c) a non-applicable axis (e.g. no contact axis when contact isn't active). If even one structural axis is still ambiguous, ask the next single `AskUserQuestion`.
+
+**Spec-driven runs.** When `physics-spec.md` is present, treat each axis above as already-answered if the spec gives a concrete answer; otherwise ask. The grill's job is then to:
+1. Resolve any spec requirement you cannot directly express in HIT (e.g. spec says "1D BAR elements sharing nodes with 3D HEX" — that needs an external mesh; ask for the file path or BLOCK).
 2. Fill structural gaps the spec leaves open ("writer's call" items that still fork the file shape).
 3. Confirm any numeric placeholder where a wrong default would silently change the answer by an order of magnitude.
 
 **Anti-pattern — silent substitution.** If you find yourself about to (a) replace a stated element type / mesh topology with a proxy, (b) skip a stated `[Controls]` requirement and note it under Concerns, (c) substitute a different coupling style, contact algorithm, or BC type than the spec specifies — **stop and ask, or BLOCK.** A `Concerns:` line that reads "X is a placeholder / not yet wired / replaced with Y" for a *spec-stated structural* requirement is a bug, not a deliverable.
 
-**For details with sensible defaults** (concrete material constants, time-step size, output frequency), pick a default and proceed. These are fine to flag in `Concerns:`.
+**Numeric placeholders are not part of the grill.** Material constants (E, ν, α, k, ρ, cp), time-step size, output frequency, mesh resolution, exact sideset coordinates — pick sensible defaults silently and list them in `Concerns:`. Never burn an `AskUserQuestion` on these unless the user has signalled they want to specify.
 
-**Modify mode.** Read the existing `.i`. Skip the interview unless the requested change is itself ambiguous (e.g. user says "make it 3D" but the existing file uses a `FileMesh`).
+**"I don't know — pick something sensible"** is a legitimate user answer for axis 9 (solver) and for clearly numeric placeholders. For axes 1–8 it is not — re-pose the question more concretely (e.g. offer two named options) rather than guessing.
+
+**Modify mode.** Read the existing `.i`. Skip the interview unless the requested change is itself ambiguous (e.g. user says "make it 3D" but the existing file uses a `FileMesh`). When ambiguous, ask one question at a time the same way until the change is fully specified.
 
 ### Step 3 — verify types via `moose-params`
 
