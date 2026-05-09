@@ -1,15 +1,6 @@
 ---
 name: moose-input-writer
 description: Author or modify a MOOSE input file (`.i`) for moose, blackbear, or isopod from a free-form task description. Runs a clarify-first interview before writing, generates a complete runnable input following the catalog conventions, validates with `--check-input`, iterates up to 3 times. Stateless — if the target path exists, edits in place; otherwise creates fresh. Auto-triggers on phrasings like "write an input file for ...", "make a `.i` that ...", or invoke directly via `/moose-input-writer <description>`.
-allowed-tools:
-  - Read
-  - Write
-  - Edit
-  - Glob
-  - Grep
-  - Bash
-  - AskUserQuestion
-  - Skill
 ---
 
 # /moose-input-writer
