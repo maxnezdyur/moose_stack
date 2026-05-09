@@ -55,12 +55,14 @@ You do NOT:
 - Spawn agents.
 - Add comments to the generated file. Style is **minimal — clean HIT, no inline comments, no header**.
 - Fabricate types or parameters. If `moose-params` doesn't know a type, that type isn't real — pick a different one or BLOCK.
+- Silently substitute for a spec-stated structural requirement (element type, mesh topology, coupling, contact, controllability). If you can't satisfy it directly, ask via `AskUserQuestion` or report BLOCKED. Do not paper over the deviation in `Concerns:`.
 
 ## Workflow
 
 ### Step 1 — orient and detect mode
 
 - Read `INPUT-MAP.md` and the relevant catalog guides.
+- **If `physics-spec.md` exists in cwd, read it in full.** It is the authoritative requirements document — every structural statement in it (element type, mesh topology, coupling style, contact algorithm, control wiring, BC placement) is a **hard constraint**, not a default you may override. Numeric placeholders (material constants, time step, mesh resolution) are fine to fill in with sensible defaults.
 - Resolve the target file path: use the path the caller provided; if none, derive `./<derived_name>.i` in cwd. Derivation: lowercase the prompt, drop filler ("a", "an", "the", "with", "for", "problem", "case"), join with `_`, truncate to ~5 tokens. E.g. "thermomechanical contact problem with finite strain" → `thermomech_contact_finite_strain.i`.
 - Stat the path. If it exists, set mode = `modify`; else mode = `create`.
 - Detect the binary (cwd rule above). Verify it exists with `test -x <binary>`. If missing, report BLOCKED with: "Binary not built. Run `cd <app-dir> && METHOD=opt make -j8`."
@@ -74,10 +76,19 @@ You do NOT:
 - Steady vs transient
 - Contact algorithm (mortar / node-face / penalty)
 - Coupling style (full thermomech via `[Modules]`, or hand-wired kernels)
+- **Mesh source** — when the spec implies non-trivial topology (mixed element types, 1D-in-3D shared nodes, conforming interfaces, embedded inclusions): ask whether the user has a `.e` / `.msh` mesh file, or wants you to approximate with in-input generators. Never silently substitute a proxy geometry.
+- **Controls / stochastic wiring** — if the spec calls for `[Controls]`, parameter sweeps, or stochastic-tools coupling: ask which parameters must be controllable and confirm the path before wiring.
 
 Pose them in **a single batched `AskUserQuestion` call** of up to 4 questions. Phrase each question with the recommended option first. Only ask a second batch if the first answers expose new ambiguity that genuinely changes the file shape — never to gather details that have sensible defaults.
 
-For details with sensible defaults (mesh dimensions, time-step size, output frequency, exact Young's modulus value), pick a default. The user will iterate.
+**Spec-driven runs.** When `physics-spec.md` is present, the interview's job is **not** to re-litigate decisions the spec already locked. Use it instead to:
+1. Resolve any spec requirement you cannot directly express in HIT (e.g. spec says "1D BAR elements sharing nodes with 3D HEX" — that needs an external mesh; ask for the path or report BLOCKED).
+2. Fill structural gaps the spec leaves open ("writer's call" items that still fork the file shape).
+3. Confirm any numeric placeholder where a wrong default would silently change the answer by an order of magnitude.
+
+**Anti-pattern — silent substitution.** If you find yourself about to (a) replace a stated element type / mesh topology with a proxy, (b) skip a stated `[Controls]` requirement and note it under Concerns, (c) substitute a different coupling style, contact algorithm, or BC type than the spec specifies — **stop and ask, or BLOCK.** A `Concerns:` line that reads "X is a placeholder / not yet wired / replaced with Y" for a *spec-stated structural* requirement is a bug, not a deliverable.
+
+**For details with sensible defaults** (concrete material constants, time-step size, output frequency), pick a default and proceed. These are fine to flag in `Concerns:`.
 
 **Modify mode.** Read the existing `.i`. Skip the interview unless the requested change is itself ambiguous (e.g. user says "make it 3D" but the existing file uses a `FileMesh`).
 
@@ -120,7 +131,7 @@ Interview answers: <one-line summary, only in create mode>
 --check-input: PASS (after N attempts) | FAIL
 ```
 
-If DONE_WITH_CONCERNS, add a `Concerns:` section listing things the user should verify (e.g. "I assumed a 1×1 GeneratedMesh — replace with your real mesh", "default Young's modulus is a placeholder").
+If DONE_WITH_CONCERNS, add a `Concerns:` section listing **only numeric placeholders or factual notes** the user should verify — e.g. "default Young's modulus is a placeholder", "back sideset = z-min per GeneratedMesh convention". Structural deviations from a stated requirement do not belong here; if you would need to write one, you should have asked or BLOCKED in Step 2.
 
 If STUCK, add the verbatim final error and a `Tried:` list of edits you attempted.
 
@@ -132,3 +143,4 @@ If STUCK, add the verbatim final error and a `Tried:` list of edits you attempte
 - **Surgical edits in modify mode.** If the user says "swap to mortar contact", change only the contact-related blocks; leave kernels, mesh, executioner alone.
 - **No half-finished work.** A file the skill emits must pass `--check-input` or the report must be STUCK.
 - **Always OK to stop.** Prefer BLOCKED ("can't tell which strain measure you want and no sensible default") or NEEDS_CONTEXT over guessing on a fork-the-file decision.
+- **Spec is law.** When `physics-spec.md` exists, its structural statements (element types, mesh topology, coupling, contact, controls) are hard requirements. Ask or BLOCK before deviating — never substitute and apologise in `Concerns:`.
