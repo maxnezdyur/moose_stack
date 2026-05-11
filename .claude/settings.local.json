@@ -1,8 +1,9 @@
 {
+  "skillListingBudgetFraction": 0.03,
   "permissions": {
     "allow": [
-      "Bash(mkdir -p *)"
+      "Bash(mkdir -p *)",
+      "Bash(rtk *)"
     ]
-  },
-  "skillListingBudgetFraction": 0.03
+  }
 }
