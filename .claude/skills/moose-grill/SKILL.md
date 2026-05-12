@@ -1,7 +1,6 @@
 ---
 name: moose-grill
 description: Pre-coding grill for MOOSE C++ work that walks the user through the authoring-guide decision trees (kernel/material/postprocessor/etc.), challenges the base-class pick, surfaces pitfalls before code is written, and refines guide decision trees inline when the grill reveals an ambiguity. Use directly via /moose-grill or as the grill phase of /moose-design-feature.
-disable-model-invocation: true
 ---
 
 # /moose-grill
