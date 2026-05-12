@@ -1,0 +1,30 @@
+[features]
+multi_agent = true
+
+[agents]
+max_threads = 10
+max_depth = 3
+
+  [agents.moose-docs-builder]
+  description = "Smoke-build the MooseDocs site for one of moose, blackbear, or isopod and report whether the build broke because of files in this branch's diff. Used as the final gate of /moose-build-feature, after the implementation loop is green and before team shutdown. Wraps the moose-docs-smoke skill and adds in-diff error filtering."
+  config_file = "agents/moose-docs-builder.toml"
+
+  [agents.moose-docs-writer]
+  description = "Author MooseDocs documentation pages (.md) for moose, blackbear, or isopod. Knows MOOSE doc standards, shortcode syntax, file-location rules, citation handling, and common pitfalls. Use when the user wants a new or rewritten doc page for a class, theory topic, module landing page, or SQA spec."
+  config_file = "agents/moose-docs-writer.toml"
+
+  [agents.moose-implementer]
+  description = "Write MOOSE-style C++/Python for moose, blackbear, or isopod. Knows MOOSE coding standards (ClangFormat, .C files, naming, const-correctness, range loops, member access, virtual destructors, etc.). Reads the assigned task, edits code, self-reviews against standards, reports DONE. Does NOT run tests, builds, or formatters."
+  config_file = "agents/moose-implementer.toml"
+
+  [agents.moose-test-runner]
+  description = "Run, diagnose, and regenerate gold files for MOOSE regression tests in moose, blackbear, or isopod. Knows the per-scope cd/build/run cheat sheet, the failure-diagnosis flowchart, and the manual gold regeneration workflow. Use when the user wants to actually execute tests, debug a failure, or refresh outdated gold files."
+  config_file = "agents/moose-test-runner.toml"
+
+  [agents.moose-test-writer]
+  description = "Author MOOSE regression tests (tests spec + .i input + gold expectations) for moose, blackbear, or isopod. Knows tests HIT syntax, SQA traceability fields, the Tester catalog, directory layout, parametrization patterns, and anti-patterns. Use when the user wants a new or extended regression test for a class, feature, or bug fix."
+  config_file = "agents/moose-test-writer.toml"
+
+  [agents.moose-unit-test-writer]
+  description = "Author MOOSE gtest unit tests for moose, blackbear, or isopod. Knows the unit/ layout, the MooseObjectUnitTest and MFEMObjectUnitTest fixtures, the _throw_on_error pattern, the factory-based construction pattern, and unit-vs-regression decisions. Use when the user wants a new gtest unit test for a class or wants to know whether a test should be unit or regression."
+  config_file = "agents/moose-unit-test-writer.toml"
