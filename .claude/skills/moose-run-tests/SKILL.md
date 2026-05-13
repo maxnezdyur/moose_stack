@@ -17,7 +17,7 @@ For *authoring* tests, see **moose-test-standards** (regression) and **moose-uni
 ```bash
 conda activate moose
 cd <app>/test          # or moose/modules/<m>/test, blackbear, isopod
-./run_tests -j 8
+./run_tests -j 2
 ```
 
 The harness walks upward from CWD looking for a `testroot` file. Discovery is `os.walk` from CWD, looking for files literally named `tests` (override with `-i <name>`). Skips `.git`, `contrib/`, `.svn/`, and any directory containing `.moose_ignore`.
@@ -152,13 +152,13 @@ Field codes: `n`/`N` name, `j` justification dots, `c` caveats, `s` status, `p` 
 
 ```bash
 # Run everything in this testroot, 8 slots
-./run_tests -j 8
+./run_tests -j 2
 
 # One test by regex (matches against <spec_dir>/<test_name>)
 ./run_tests --re=simple_diffusion
 
 # Only the failures from last run
-./run_tests --failed-tests -j 8
+./run_tests --failed-tests -j 2
 
 # Replay last run's results without executing
 ./run_tests --show-last-run
@@ -174,8 +174,8 @@ METHOD=dbg ./run_tests --re=my_test -v
 ./run_tests --check-input --re=my_test
 
 # Run heavy tests
-./run_tests --heavy -j 8
-./run_tests --all-tests -j 8     # heavy + non-heavy
+./run_tests --heavy -j 2
+./run_tests --all-tests -j 2     # heavy + non-heavy
 
 # Recover-mode (each test → part1 + part2)
 ./run_tests --re=transient --recover
@@ -184,10 +184,10 @@ METHOD=dbg ./run_tests --re=my_test -v
 ./run_tests --re=my_test --valgrind -j 1
 
 # Show 10 slowest jobs
-./run_tests -j 8 --longest-jobs 10
+./run_tests -j 2 --longest-jobs 10
 
 # Per-test output files
-./run_tests -j 8 --sep-files -o /tmp/out
+./run_tests -j 2 --sep-files -o /tmp/out
 
 # See what would be run
 ./run_tests --dry-run --re=my_test

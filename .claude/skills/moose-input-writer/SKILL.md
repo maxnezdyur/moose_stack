@@ -65,7 +65,7 @@ You do NOT:
 - **If `physics-spec.md` exists in cwd, read it in full.** It is the authoritative requirements document — every structural statement in it (element type, mesh topology, coupling style, contact algorithm, control wiring, BC placement) is a **hard constraint**, not a default you may override. Numeric placeholders (material constants, time step, mesh resolution) are fine to fill in with sensible defaults.
 - Resolve the target file path: use the path the caller provided; if none, derive `./<derived_name>.i` in cwd. Derivation: lowercase the prompt, drop filler ("a", "an", "the", "with", "for", "problem", "case"), join with `_`, truncate to ~5 tokens. E.g. "thermomechanical contact problem with finite strain" → `thermomech_contact_finite_strain.i`.
 - Stat the path. If it exists, set mode = `modify`; else mode = `create`.
-- Detect the binary (cwd rule above). Verify it exists with `test -x <binary>`. If missing, report BLOCKED with: "Binary not built. Run `cd <app-dir> && METHOD=opt make -j8`."
+- Detect the binary (cwd rule above). Verify it exists with `test -x <binary>`. If missing, report BLOCKED with: "Binary not built. Run `cd <app-dir> && METHOD=opt make -j2`."
 
 ### Step 2 — interview (create mode) or load (modify mode)
 

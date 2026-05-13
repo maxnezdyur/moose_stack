@@ -17,3 +17,16 @@ Meta-repo pinning three forks as submodules: `moose/`, `blackbear/`, `isopod/`. 
 - `moose` → `devel`
 - `blackbear`, `isopod` → `devel`
 - This meta-repo → `main`
+
+## Building
+
+Always build via `.codex/scripts/build.sh` — never call `make` directly and never inline `CONDA_PREFIX=… PATH=… make`. The script discovers the meta-repo root, resolves the conda env, sets `CONDA_PREFIX`/`CONDA_DEFAULT_ENV`/`PATH`, and runs `make -jN METHOD=<method>` in the right dir.
+
+```
+.codex/scripts/build.sh <target> [opt|dbg] [--env <name>] [-j N] [-- <extra make args>]
+```
+
+Targets: `moose-test`, `moose-combined`, `blackbear`, `isopod`, any moose module name (e.g. `heat_transfer`), or any path containing a `Makefile`. Defaults: `opt`, `--env moose`, `-j` defaults to 4 if user has not overriden. Use `dbg` for debug builds.
+
+## Testing
+conda run -n moose env PATH=$(conda info --base)/envs/moose/bin:$PATH MOOSE_MPI_COMMAND=$(conda info --base)/envs/moose/bin/mpiexec.hydra python ./run_tests

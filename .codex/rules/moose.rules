@@ -1,0 +1,16 @@
+# Project-layer execpolicy rules for moose_stack.
+# Requires `trust_level = "trusted"` on this project (already set in ~/.codex/config.toml).
+
+# --- builds ----------------------------------------------------------------
+prefix_rule(pattern=["make"], decision="allow", justification="MOOSE/local builds")
+prefix_rule(pattern=["rtk", "make"], decision="allow", justification="MOOSE/local builds via rtk")
+prefix_rule(pattern=[".codex/scripts/build.sh"], decision="allow", justification="meta-repo build wrapper")
+
+# --- run_tests harness -----------------------------------------------------
+prefix_rule(pattern=["./run_tests"], decision="allow", justification="MOOSE regression harness")
+prefix_rule(pattern=["python", "./run_tests"], decision="allow", justification="MOOSE run_tests via python (any args, any env)")
+prefix_rule(pattern=["rtk", "python", "./run_tests"], decision="allow", justification="MOOSE run_tests via python through rtk")
+
+# --- conda env activation wrappers around builds/tests ---------------------
+prefix_rule(pattern=["conda", "run"], decision="allow", justification="conda run wrappers — any env, any inner command")
+prefix_rule(pattern=["rtk", "conda", "run"], decision="allow", justification="conda run wrappers through rtk")

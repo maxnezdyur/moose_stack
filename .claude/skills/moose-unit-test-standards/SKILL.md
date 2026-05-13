@@ -55,7 +55,7 @@ Meta-app Makefiles (`blackbear/unit/Makefile`) flag-flip every module they depen
 
 ### Building & running
 
-    cd moose/unit && make -j8                       # builds moose-unit-opt
+    cd moose/unit && make -j2                       # builds moose-unit-opt
     ./run_tests                                     # invokes ./moose-unit-$METHOD
     ./moose-unit-opt --gtest_filter=MooseUtils.*    # direct gtest call
     METHOD=dbg ./run_tests                          # use dbg binary

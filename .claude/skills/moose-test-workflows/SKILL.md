@@ -27,8 +27,8 @@ The "what to actually do" layer. For flags, see **moose-run-tests**. For authori
 The contributing guide does NOT prescribe a specific test command before pushing. Implicit floor:
 
     cd <changed-scope>          # framework / module / blackbear / isopod
-    make -j 6                    # ~2GB RAM per job; drop -j on RAM-constrained boxes
-    ./run_tests -j 6             # full suite for this scope
+    make -j 2                    # ~2GB RAM per job; drop -j on RAM-constrained boxes
+    ./run_tests -j 2             # full suite for this scope
 
 If you touched framework code that other scopes link against, re-run their suites too. CIVET catches OS/compiler/PETSc/parallel/heavy/distributed-mesh permutations you can't reproduce locally.
 
@@ -50,7 +50,7 @@ Engineers periodically run `--error-deprecated` to catch deprecation drift, but 
     ./run_tests --show-last-run
 
     # Re-run only failures from last run
-    ./run_tests --failed-tests -j 8
+    ./run_tests --failed-tests -j 2
 
 `-j 1` matters for clean stdout interleaving when reading verbose output.
 
@@ -76,7 +76,7 @@ There is no automated mapping. Standard manual approach:
 
     # By module — cd to the module root
     cd moose/modules/<m>
-    ./run_tests -j 6
+    ./run_tests -j 2
 
 If you changed framework code, both `moose/test` and any module that links the changed file may need re-running.
 
@@ -169,9 +169,9 @@ The `[bracket]` after a test name is the skip reason:
 
 ### Race condition
 
-`./run_tests --re=foo -j 1` passes; `-j 8` fails. Run `--pedantic-checks` to detect:
+`./run_tests --re=foo -j 1` passes; `-j 2` fails. Run `--pedantic-checks` to detect:
 
-    ./run_tests --re=foo --pedantic-checks -j 8
+    ./run_tests --re=foo --pedantic-checks -j 2
 
 The harness snapshots mtimes pre/post-run, intersects modified-file sets between non-prereq parallel jobs, and prints "race partner" sets. Fix with `prereq = 'other_test'` or `working_directory = 'subdir'`.
 
@@ -194,7 +194,7 @@ Pass criterion: `ERROR SUMMARY: 0 errors` in output. Anything else → `MEMORY E
 Binary's capability metadata is stale. Rebuild:
 
     cd <scope>
-    make -j 6
+    make -j 2
 
 Common after pulling changes that touched `framework/src/base/CapabilityRegistry.C`.
 
