@@ -17,3 +17,19 @@ Meta-repo pinning three forks as submodules: `moose/`, `blackbear/`, `isopod/`. 
 - `moose` → `devel`
 - `blackbear`, `isopod` → `devel`
 - This meta-repo → `main`
+
+## Environment
+
+Two parallel env-management flows. Pick by host:
+
+- Local machine (conda) → [`docs/local.md`](docs/local.md)
+- INL HPC (container modules; hostnames like `sawtooth*`, `lemhi*`, `bitterroot*`, `hoodoo*`) → [`docs/hpc.md`](docs/hpc.md)
+
+Quick host check before running any moose commands:
+
+```bash
+case "$HOSTNAME" in
+  sawtooth*|lemhi*|bitterroot*|hoodoo*|teton*) echo "HPC — see docs/hpc.md" ;;
+  *) echo "local — see docs/local.md" ;;
+esac
+```

@@ -20,8 +20,16 @@ Meta-repo pinning three forks as submodules: `moose/`, `blackbear/`, `isopod/`. 
 
 ## Environment
 
-Each worktree has a dedicated conda environment named `moose-<branch>`. Before running any moose commands or scripts, activate it:
+Two parallel env-management flows. Pick by host:
+
+- Local machine (conda) → [`docs/local.md`](docs/local.md)
+- INL HPC (container modules; hostnames like `sawtooth*`, `lemhi*`, `bitterroot*`, `hoodoo*`) → [`docs/hpc.md`](docs/hpc.md)
+
+Quick host check before running any moose commands:
 
 ```bash
-conda activate moose-$(git rev-parse --abbrev-ref HEAD)
+case "$HOSTNAME" in
+  sawtooth*|lemhi*|bitterroot*|hoodoo*) echo "HPC — see docs/hpc.md" ;;
+  *) echo "local — see docs/local.md" ;;
+esac
 ```
