@@ -65,7 +65,7 @@ mpiexec -n $SLURM_NTASKS moose-dev-exec ./blackbear-opt -i input.i
 
 Two reusable scripts live at the meta-repo root under [`../scripts/`](../scripts/):
 
-- [`scripts/build-opt.sbatch`](../scripts/build-opt.sbatch) — `sbatch`-able dual-purpose script. Bakes in `#SBATCH` headers for the `short` partition with 32 ranks and bootstraps itself into the container. Builds `moose_combined-opt`, `blackbear-opt`, `isopod-opt` in dependency order.
+- [`scripts/build-opt.sbatch`](../scripts/build-opt.sbatch) — `sbatch`-able dual-purpose script. Bakes in `#SBATCH` headers for the `short` partition with 32 ranks and bootstraps itself into the container. Builds `combined-opt` (moose/modules/combined), `blackbear-opt`, and `isopod-opt` in dependency order.
 - [`scripts/moose-job.sbatch`](../scripts/moose-job.sbatch) — multi-node SLURM template for production runs using `moose-dev-exec`. Parametrized via `APP_PATH`, `INPUT`, and `MOOSE_DEV_VERSION`.
 
 INL requires `--wckey=<project>` on every `salloc` and `sbatch`. The templates default to `neams`; override via `sbatch --wckey=<other>` as needed.

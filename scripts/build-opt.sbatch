@@ -8,7 +8,7 @@
 #SBATCH --output=%x.%j.out
 #SBATCH --error=%x.%j.err
 #
-# Build -opt binaries for moose_combined, blackbear, isopod.
+# Build -opt binaries for moose's combined module app, blackbear, and isopod.
 #
 # Primary use (one-shot, async, queue):
 #   sbatch scripts/build-opt.sbatch                # defaults above: short partition, 32 ranks, 2h
@@ -88,9 +88,9 @@ build() {
   fi
 }
 
-# moose framework + modules first; blackbear and isopod link against it.
-build moose_combined "$STACK/moose/modules" moose_combined-opt
-build blackbear      "$STACK/blackbear"     blackbear-opt
-build isopod         "$STACK/isopod"        isopod-opt
+# moose framework + all modules first (combined-opt); blackbear and isopod link against it.
+build combined  "$STACK/moose/modules/combined" combined-opt
+build blackbear "$STACK/blackbear"              blackbear-opt
+build isopod    "$STACK/isopod"                 isopod-opt
 
 echo "=== all builds OK ==="
