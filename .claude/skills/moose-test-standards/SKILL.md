@@ -6,35 +6,30 @@ user-invocable: false
 
 # MOOSE Regression Test Standards
 
-Reference for authoring regression tests in `moose`, `moose/modules/<m>`, `blackbear`, and `isopod`. Covers the `tests` HIT spec, the companion `.i` input, the `gold/` outputs, and SQA traceability. Apply whenever editing a `tests` spec or test input.
+Reference for authoring tests in `moose`, `moose/modules/<m>`, `blackbear`, `isopod`. Covers the `tests` HIT spec, the `.i` input, `gold/` outputs, and SQA traceability.
 
-For *running* tests, debugging failures, or regenerating golds, see the **moose-run-tests** skill.
+For *running* tests, debugging, or regenerating golds: see **moose-run-tests**.
 
-## File location
+## File layout
 
-A regression test is a directory under `<repo>/test/tests/<area>/<feature>/` (or `<repo>/modules/<m>/test/tests/...`) containing:
+A test is a directory under `<repo>/test/tests/<area>/<feature>/`:
 
 ```
-tests              # HIT spec — required
-<feature>.i        # MOOSE input — required (one or more)
-gold/              # reference outputs — required when using a diff-style Tester
-  <feature>_out.e  # exodus / csv / json / png reference
-mesh.e             # optional committed mesh
-*.cmp              # optional custom Exodiff comparison file
+tests              # HIT spec
+<feature>.i        # input(s)
+gold/<...>         # reference outputs (required for diff Testers)
 ```
 
-Test scope per repo (where you `cd` and what binary the harness invokes):
+Test scope per repo:
 
-| Scope | cd here | Binary | testroot |
-|---|---|---|---|
-| moose framework | `moose/test/` | `moose_test-opt` | `moose/test/testroot` (`app_name = moose_test`) |
-| module | `moose/modules/<m>/` | `<m>-opt` (production app — also runs tests) | `moose/modules/<m>/testroot` (`app_name = <m>`) |
-| blackbear | `blackbear/` | `blackbear-opt` (production) | none — `run_tests` passes `app_name='blackbear'` directly |
-| isopod | `isopod/` | `isopod-opt` (production) | `isopod/testroot` |
+| Scope | cd here | Binary |
+|---|---|---|
+| moose framework | `moose/test/` | `moose_test-opt` |
+| module | `moose/modules/<m>/` | `<m>-opt` (production app) |
+| blackbear | `blackbear/` | `blackbear-opt` |
+| isopod | `isopod/` | `isopod-opt` |
 
-The harness walks upward from CWD to find `testroot`, or falls back to the `app_name` baked into the `run_tests` shim.
-
-**`<Module>TestApp.C` exists** at `moose/modules/<m>/test/src/base/` for many modules — but it's NOT a separate binary. It's a class that registers test-only objects, used when downstream apps (combined, blackbear, isopod) link the module with `--allow-test-objects`. Module tests run on the production `<m>-opt` binary.
+Module tests run on the production `<m>-opt` binary. `<Module>TestApp.C` is a class that registers test-only objects (not a separate binary); downstream apps link it with `--allow-test-objects`.
 
 ## Spec HIT skeleton
 
@@ -51,305 +46,169 @@ The harness walks upward from CWD to find `testroot`, or falls back to the `app_
 []
 ```
 
-- One top-level `[Tests]` block.
-- Children of `[Tests]` are either **leaf tests** (have `type =`) or **requirement-grouping parents** (have `requirement =`, contain leaf children with `detail =`).
-- `[]` and `[../]` close blocks identically. New tests use `[]`.
-- Strings: single or double quotes. Adjacent quoted fragments concatenate (`'foo ' 'bar'` → `foo bar`) — used for long requirement lines.
-- Lists: space-separated tokens in one quoted string. `issues = '#1234 #5678'`.
+- `[]` closes blocks (same as `[../]`; use `[]` in new tests).
+- Strings: single or double quotes; adjacent quoted fragments concatenate.
+- Lists: space-separated tokens in one quoted string.
+- Six SQA params on `[Tests]` propagate to leaves: `design`, `issues`, `verification`, `validation`, `deprecated`, `collections`. **Tester params do NOT inherit** (no `[GlobalParams]` analog).
 
-### Auto-inheritance from `[Tests]`
+## SQA traceability
 
-Six SQA params declared on `[Tests]` propagate to every leaf as defaults: `design`, `issues`, `verification`, `validation`, `deprecated`, `collections`. Children can override locally.
-
-**Tester params (`type`, `input`, `cli_args`, `prereq`, `max_parallel`, etc.) do NOT inherit.** No `[GlobalParams]` analog exists for tests.
-
-## SQA traceability fields
-
-Required on every test (or inherited from `[Tests]`/parent):
+Required (or inherited):
 
 | Field | Convention |
 |---|---|
-| `requirement = '...'` | Active voice, present tense, "shall" wording. `'The system shall <verb> <object>.'` Subject can be `'PorousFlow shall'`, `'BlackBear shall'`, etc. |
-| `design = 'Foo.md Bar.md'` | Space-separated `.md` filenames; suffix-matched against `git ls-files`. |
-| `issues = '#1234 #5678'` | `#NNNN` (same repo), `repo#NNNN` (cross-repo), or 6+ hex SHA. **`#000` is anti-pattern** — cite a real PR. |
+| `requirement` | Active voice + "shall". `'The system shall <verb> <object>.'` |
+| `design` | Space-separated `.md` filenames; suffix-matched against `git ls-files`. |
+| `issues` | `#NNNN`, `repo#NNNN`, or 6+ hex SHA. **`#000` is anti-pattern.** |
 
-Optional:
+Optional: `detail` (sub-req text), `collections` (one of `FUNCTIONAL`/`USABILITY`/`PERFORMANCE`/`SYSTEM`/`FAILURE_ANALYSIS`), `verification`/`validation` (`.md`), `deprecated = true` (cannot coexist with other SQA fields).
 
-| Field | Use |
-|---|---|
-| `detail = '...'` | Sub-requirement text on a child of a requirement-grouping parent (see hierarchical pattern below). |
-| `collections = 'FUNCTIONAL ...'` | One or more of `FUNCTIONAL`, `USABILITY`, `PERFORMANCE`, `SYSTEM`, `FAILURE_ANALYSIS`. Anything else fails the SQA check. Defaults to functional; usually only set for non-functional categories. |
-| `verification = 'foo.md'` / `validation = 'foo.md'` | V&V doc pointers. |
-| `deprecated = true` | Excludes test from SQA. Cannot coexist with any other SQA field. |
-
-### Hierarchical pattern (parent + `detail` children)
-
-Use when one requirement is exercised by several test cases:
+### Hierarchical pattern (one requirement, multiple cases)
 
 ```hit
-[Tests]
-  issues = '#1654'
-  design = 'bcs/ADNeumannBC.md'
-  [ad]
-    requirement = 'The system shall support Neumann boundary conditions using AD for a 1D problem'
-    [test]
-      type = 'Exodiff'
-      input = '1d_neumann.i'
-      exodiff = '1d_neumann_out.e'
-      detail = 'using a generated mesh.'
-    []
-    [from_cubit]
-      type = 'Exodiff'
-      input = 'from_cubit.i'
-      exodiff = 'from_cubit_out.e'
-      detail = 'using an imported mesh.'
-    []
-    [jac]
-      type = 'PetscJacobianTester'
-      input = '1d_neumann.i'
-      run_sim = True
-      ratio_tol = 1e-7
-      detail = 'and shall produce the exact Jacobian.'
-    []
+[ad]
+  requirement = 'The system shall support Neumann BCs using AD'
+  [test]
+    type = 'Exodiff'; input = '1d.i'; exodiff = '1d_out.e'
+    detail = 'using a generated mesh.'
+  []
+  [from_cubit]
+    type = 'Exodiff'; input = 'cubit.i'; exodiff = 'cubit_out.e'
+    detail = 'using an imported mesh.'
   []
 []
 ```
 
-The RTM renders this as: "The system shall support Neumann boundary conditions … (a) using a generated mesh, (b) using an imported mesh, (c) and shall produce the exact Jacobian."
+Children of a requirement-grouping parent must use `detail`, NOT their own `requirement`/`design`/`issues` (triggers `log_extra_*`).
 
-**Children of a requirement-grouping parent must use `detail`, not their own `requirement`/`design`/`issues`/`collections` — those trigger `log_extra_*` errors.**
-
-## Universal Tester parameters
-
-From the base `Tester` class. Apply to every `type =`.
+## Universal Tester params
 
 | Param | Use |
 |---|---|
-| `type` | Tester class name (Exodiff, CSVDiff, RunException, etc.). Required. |
-| `input` | The `.i` file (relative to spec dir). |
-| `cli_args` | Extra CLI args. Mix MOOSE syntax (`Outputs/exodus=false`) with raw PETSc flags (`-pc_type hypre`). |
-| `prereq` | Other test names that must run first. `prereq = ALL` runs last. Use `parent/child` for nested specs. |
-| `should_execute = false` | Skip the executable invocation but still run post-checks. Used to chain a tester onto a previous run. |
-| `max_parallel` / `min_parallel` | MPI rank bounds. `max_parallel = 1` forces serial. |
-| `max_threads` / `min_threads` | Thread bounds. `max_threads = 1` disables threading. |
-| `mesh_mode = REPLICATED` / `DISTRIBUTED` | Restrict to one mesh mode. |
-| `valgrind = NONE` / `NORMAL` / `HEAVY` | Default `NONE`. |
-| `heavy = true` | Only run with `--heavy`. |
-| `recover = false` | Opt out of recovery split. Required for steady solves, `--mesh-only`, `--check-input`, custom-postprocessor tests. |
-| `restep = false` | Opt out of restep mode. Often paired with `recover = false` on checkpoint chains. |
-| `capabilities = '...'` | Boolean expression on build capabilities. **Use this** instead of legacy `petsc_version`/`method`/`mumps`/`slepc_version` (those still parse but are deprecated shims). Examples: `'method=opt'`, `'petsc>=3.18 & vtk'`, `'mfem & platform=linux'`, `'!installation_type=relocated'`. |
-| `allow_test_objects = true` | Pass `--allow-test-objects` to the binary (needed when using objects registered to `<App>TestApp` rather than `<App>App`). |
-| `working_directory = '../sub_app'` | chdir before running. |
-| `max_time = 600` | Wall-clock seconds. Default 300. |
+| `type`, `input` | Required. `input` is relative to spec dir. |
+| `cli_args` | Mix MOOSE syntax (`Outputs/exodus=false`) + raw PETSc flags (`-pc_type hypre`). |
+| `prereq` | Tests that must run first; `ALL` = run last. |
+| `should_execute = false` | Skip exec, run post-checks only. |
+| `max_parallel`/`min_parallel`, `max_threads`/`min_threads` | MPI / thread bounds. |
+| `mesh_mode = REPLICATED`/`DISTRIBUTED` | Restrict mesh mode. |
+| `valgrind = NONE`/`NORMAL`/`HEAVY` | Default `NONE`. |
+| `heavy = true` | Only with `--heavy`. |
+| `recover = false` | Opt out of recovery (steady, `--mesh-only`, `--check-input`, custom-pp). |
+| `restep = false` | Opt out of restep. |
+| `capabilities` | Boolean expr on build caps (`'petsc>=3.18 & vtk'`, `'method=opt'`). **Use this — NOT legacy `petsc_version`/`method`/`mumps`/`slepc_version`.** |
+| `allow_test_objects = true` | Required for test-only objects on module/app binaries. |
+| `working_directory` | chdir before running. |
+| `max_time` | Wall seconds (default 300). |
 
-`RunApp`-derived testers also accept: `expect_out` (regex), `absent_out`, `match_literal`, `delete_output_before_running`, `errors`, `compute_devices`, `allow_warnings`/`allow_unused`/`allow_override`/`allow_deprecated`. `FileTester`-derived (Exodiff, CSVDiff, CheckFiles, ImageDiff, AnalyzeJacobian) add `gold_dir` (default `gold`), `abs_zero` (1e-10), `rel_err` (5.5e-6).
+`RunApp`-derived also: `expect_out`/`absent_out`/`match_literal`/`errors`/`allow_warnings`/`allow_unused`/`allow_deprecated`. `FileTester`-derived (Exodiff/CSVDiff/CheckFiles/ImageDiff/AnalyzeJacobian): `gold_dir` (default `gold`), `abs_zero` (1e-10), `rel_err` (5.5e-6).
 
-## Tester catalog — when to use each
+## Tester catalog
 
 | Tester | Use | Key params |
 |---|---|---|
-| `Exodiff` | Exodus output diff vs gold (most physics tests) | `exodiff = 'a.e b.e'` (list), `custom_cmp = '*.cmp'`, `partial`, `map`, `abs_zero`, `rel_err` |
-| `CSVDiff` | Postprocessor / VPP CSV diff | `csvdiff = 'a.csv'`, `override_columns`/`override_rel_err`/`override_abs_zero`, `ignore_columns`, `custom_columns` |
-| `JSONDiff` | Reporter JSON, mesh-only JSON dumps | `jsondiff = 'a.json'`, `ignored_regex_items`, `keep_system_information`. Auto-ignores app/version metadata. |
-| `XMLDiff` | VTK PVD/VTU (MFEM, IGA), checkpoint XML | `xmldiff = 'a.pvd a.vtu'`, `ignored_items` |
-| `CheckFiles` | Files must (not) exist after run | `check_files`, `check_not_exists`, `file_expect_out` |
-| `ImageDiff` | PNG comparison (chigger/VTK rendering) | `imagediff = 'a.png'`, `allowed = 0.98`. `display_required = false` by default. |
-| `RunApp` | Smoke test, stdout-pattern check | `expect_out` (regex), `absent_out`, `errors`, `match_literal` |
-| `RunException` | Run expected to fail with a specific message | `expect_err` (or `expect_assert`), `expect_exit_code = 1`. Forces `recover/restep = false`. Requires either `expect_err` or `expect_assert`. |
-| `RunCommand` | Arbitrary shell command (no MOOSE app) | `command = '...'` |
-| `PetscJacobianTester` | Jacobian validation via `-snes_test_jacobian` | `ratio_tol`, `difference_tol`, `state`, `run_sim`, `only_final_jacobian`. Auto adds `method=opt`. |
-| `AnalyzeJacobian` | Jacobian via standalone analysis script | `expect_out`, `resize_mesh`, `mesh_size`, `off_diagonal`. Forces `max_parallel = 1`. |
-| `PythonUnitTest` | Python `unittest` module | `input = 'test.py'`, `test_case`, `buffer`, `separate` |
-| `MMSTest` | MMS convergence (extends PythonUnitTest) | Same as PythonUnitTest. Auto-requires pandas+matplotlib + `method=opt`. |
-| `CSVValidationTester` | Compare CSV against measured data (statistical) | `mean_limit`, `std_limit`, `err_type` |
-| `SignalTester` | Send Unix signal mid-run | `signal = 'SIGUSR1'` |
-| `SchemaDiff` | Base for JSONDiff/XMLDiff. Direct use rare. | |
+| `Exodiff` | Exodus diff vs gold | `exodiff = 'a.e b.e'`, `custom_cmp`, `partial`, `map` |
+| `CSVDiff` | Postprocessor / VPP CSV | `csvdiff`, `override_columns`, `ignore_columns` |
+| `JSONDiff` | Reporter JSON, mesh-only JSON | `jsondiff`, `ignored_regex_items` (auto-ignores app/version) |
+| `XMLDiff` | VTK PVD/VTU (MFEM, IGA) | `xmldiff`, `ignored_items` |
+| `CheckFiles` | Files (not) exist after run | `check_files`, `check_not_exists` |
+| `ImageDiff` | PNG comparison | `imagediff`, `allowed = 0.98` |
+| `RunApp` | Smoke test, stdout match | `expect_out`, `absent_out`, `errors` |
+| `RunException` | Expected failure | `expect_err` or `expect_assert`, `expect_exit_code = 1`. Forces `recover/restep = false`. |
+| `RunCommand` | Arbitrary shell, no MOOSE | `command` |
+| `PetscJacobianTester` | `-snes_test_jacobian` | `ratio_tol`, `difference_tol`, `state`, `run_sim` |
+| `AnalyzeJacobian` | Standalone Jacobian script | `expect_out`, `off_diagonal`. Forces `max_parallel = 1`. |
+| `PythonUnitTest` | Python `unittest` | `input='test.py'`, `test_case` |
+| `MMSTest` | MMS convergence | Extends `PythonUnitTest`; auto-requires pandas+matplotlib+`method=opt`. |
+| `CSVValidationTester` | CSV vs measured data | `mean_limit`, `std_limit` |
+| `SignalTester` | Signal mid-run | `signal = 'SIGUSR1'` |
 
-**`Exodiff` has no `should_crash` param** — that's `RunException`.
+**No `should_crash` on Exodiff** — that's `RunException`.
 
-## Directory layout and gold conventions
+## Gold conventions
 
-Single-test dir:
+- No `Outputs/file_base` set → `gold/<input_basename>_out.<ext>`.
+- `cli_args = 'Outputs/file_base=foo'` → `gold/foo.<ext>` (no `_out`).
+- Symlink in `gold/` when two inputs share output.
+- Multiapp: `<parent_base>_<multiapp_block><idx>.e`. Multilevel chains levels. List every level in `exodiff = '...'`.
+- **Gold MUST be committed** — binary blobs and all.
 
-```
-my_feature/
-  my_feature.i
-  tests
-  gold/my_feature_out.e
-```
+## Input file conventions
 
-AD/non-AD pair (shared gold):
-
-```
-ad_elastic/
-  finite_elastic-noad.i      # writes the gold
-  finite_elastic.i           # AD version, same gold
-  tests                      # noAD has no prereq; AD has prereq=...-noad + jacobian tester
-  gold/finite_elastic_out.e
-```
-
-Multiapp:
-
-```
-picard/
-  picard_parent.i
-  picard_sub.i
-  tests
-  gold/picard_parent_out.e
-  gold/picard_parent_out_sub0.e
-```
-
-Sub-app exodus naming: `<parent_base>_<multiapp_block_name><idx>.e`. Multilevel: `<parent>_<L1name>-<idx>_<L2name>-<idx>.e`. Each level needs a gold. List them all in `exodiff = '...'`.
-
-### Gold naming rule
-
-- No `Outputs/file_base` set → gold is `gold/<input_basename>_out.<ext>`.
-- `cli_args = 'Outputs/file_base=foo'` → gold is `gold/foo.<ext>` (no `_out`).
-- Symlink in `gold/` when two inputs produce identical output.
-
-## Input file conventions for tests
-
-- Tiny `GeneratedMesh` (10x10 typical, often 4x4).
-- Small `Executioner/num_steps` (5–20 for transients, fewer for modules).
-- `[Outputs]` last, `exodus = true` (or `csv`/`json`).
+- Tiny mesh (4x4 to 10x10).
+- Small `num_steps` (5–20).
+- `[Outputs]` last; `exodus = true` default.
 - No explicit `Outputs/file_base` unless parametrizing.
-- Mesh-only: drop `[Variables]/[Kernels]/[Executioner]`, run via `cli_args = '--mesh-only out.e'`, set `recover = false`.
-- `--check-input` for syntax-only validation; set `recover = false`.
+- Mesh-only: `cli_args = '--mesh-only out.e'` + `recover = false`.
+- `--check-input`: `recover = false`.
 
 ## Parametrization patterns
 
-### AD vs non-AD pair
-
-Two sibling inputs sharing one gold. noAD runs first (writes gold); AD runs with `prereq` and must match. Add a `PetscJacobianTester` triple. See `moose/modules/solid_mechanics/test/tests/ad_elastic/tests` for the canonical 9× repetition.
-
-### Mesh refinement convergence
-
-One input, multiple `cli_args`:
-
-```hit
-[level_00]
-  type = CSVDiff
-  input = mms.i
-  csvdiff = mms_00.csv
-  cli_args = 'Mesh/uniform_refine=0 Outputs/file_base=mms_00'
-[]
-[level_01]
-  cli_args = 'Mesh/uniform_refine=1 Outputs/file_base=mms_01'
-  ...
-```
-
-### Time-integrator sweep
-
-```hit
-[heun_0]
-  cli_args = 'Executioner/TimeIntegrator/type=Heun Executioner/dt=0.00390625 Outputs/file_base=heun_0'
-  exodiff = 'heun_0.e'
-  restep = false
-[]
-```
-
-### PETSc options sweep
-
-`cli_args` mixes `Executioner/automatic_scaling=true` (MOOSE syntax) with `-pc_type hypre` (raw PETSc).
-
-### 2D vs 3D
-
-`cli_args = 'Mesh/dim=3 Mesh/nz=1'` flips a 2D input.
-
-### Material type swap
-
-`cli_args = 'Materials/foo/type=ADFoo'` — same input, different material.
+| Pattern | Mechanism |
+|---|---|
+| **AD vs non-AD** | Two inputs share one gold; noAD writes it, AD `prereq`s noAD; add `PetscJacobianTester` triple. |
+| **Mesh refinement** | One input, sweep `Mesh/uniform_refine=N` + `Outputs/file_base` via `cli_args`. |
+| **Time-integrator sweep** | `cli_args = 'Executioner/TimeIntegrator/type=Heun ... Outputs/file_base=heun_0'`; usually `restep = false`. |
+| **PETSc sweep** | `cli_args` mixes MOOSE syntax + raw `-pc_type ...`. |
+| **2D ↔ 3D** | `cli_args = 'Mesh/dim=3 Mesh/nz=1'`. |
+| **Material swap** | `cli_args = 'Materials/foo/type=ADFoo'`. |
 
 ## Recover and restart
 
-`recover = true` is the **default**. The harness automatically clones each spec into:
+`recover = true` is default. The harness clones each spec into:
+1. `<test>_part1` — `--test-checkpoint-half-transient`, no checks.
+2. `<test>` — `--recover --recoversuffix cpr`, prereq part1.
 
-1. `<test>_part1` — runs with `--test-checkpoint-half-transient`, no checks.
-2. `<test>` — runs with `--recover --recoversuffix cpr`, prereq part1, full checks. `delete_output_before_running = false`.
+You write only the "normal" run. **Opt out** (`recover = false`) for: steady, `--mesh-only`, `--check-input`, custom-pp, multiapp move.
 
-You write only the "normal" run; the harness adds the recover legs.
+`--recover` is incompatible with `--test-restep`. On the first leg of a manual checkpoint chain, set both `recover = false` and `restep = false`.
 
-**Opt out** with `recover = false` for: steady solves, `--mesh-only` runs, `--check-input` runs, custom-postprocessor tests, multiapp move tests, anything where mid-transient checkpoint is malformed.
-
-`--recover` and `--test-restep` are incompatible. On the first leg of a manual checkpoint chain, set both `recover = false` and `restep = false`.
-
-### Manual restart chain (separate inputs)
-
-```hit
-[steady_1]
-  type = Exodiff
-  input = restart_steady.i
-  exodiff = steady_out.e
-[]
-[trans_from_steady]
-  type = Exodiff
-  input = restart_transient.i
-  exodiff = out.e
-  prereq = steady_1
-[]
-```
-
-The transient input reads `Mesh/file = steady_out.e` and `Variables/u/initial_from_file_var = u`. `prereq` orders execution; previous output stays on disk.
+Manual restart: one spec runs steady; the next reads `Mesh/file = steady_out.e` and `Variables/u/initial_from_file_var = u`, with `prereq = steady_1`.
 
 ## Test-only objects
 
-Test-only objects live under `<app>/test/src/` and register to `<App>TestApp` (not `<App>App`).
+Live under `<app>/test/src/`, register to `<App>TestApp` (not `<App>App`). `--allow-test-objects` is OFF by default everywhere except `MooseTestApp`. Tests using test-only objects on module/blackbear/isopod must set `allow_test_objects = true`.
 
-**`--allow-test-objects` is OFF by default everywhere except `MooseTestApp`** (which uses `--disallow-test-objects` to opt out). Module/blackbear/isopod tests that need test-only objects must set `allow_test_objects = true` in the spec.
+Module tests cannot use `MooseTestApp` test objects — only those from their own module + its `DEPEND_MODULES` chain.
 
-**Module tests cannot use `MooseTestApp` test-only objects** — module binaries don't link the moose_test object library. They can only use test objects from their own module (and its `DEPEND_MODULES` chain).
-
-## Reference test files — read one before authoring
+## Reference test files
 
 | Pattern | Reference |
 |---|---|
-| Simple Exodiff kernel test | `moose/test/tests/kernels/simple_transient_diffusion/{tests,simple_transient_diffusion.i,gold/}` |
-| Multiple specs, shared input | `moose/test/tests/kernels/simple_transient_diffusion/tests` (8 tests, 3 inputs) |
-| Hierarchical requirement+detail | `moose/test/tests/bcs/ad_1d_neumann/tests` |
-| AD vs non-AD pair + Jacobian | `moose/modules/solid_mechanics/test/tests/ad_elastic/tests` |
+| Simple Exodiff | `moose/test/tests/kernels/simple_transient_diffusion/` |
+| Hierarchical req+detail | `moose/test/tests/bcs/ad_1d_neumann/tests` |
+| AD vs non-AD + Jacobian | `moose/modules/solid_mechanics/test/tests/ad_elastic/tests` |
 | Mesh refinement sweep | `moose/modules/level_set/test/tests/verification/1d_level_set_mms/tests` |
-| Time-integrator sweep | `moose/test/tests/time_integrators/convergence/tests` |
-| Multiapp parent + sub | `moose/test/tests/multiapps/picard/{tests,picard_parent.i,picard_sub.i}` |
-| Multilevel multiapp | `moose/test/tests/multiapps/picard_multilevel/2level_picard/tests` |
+| Multiapp parent+sub | `moose/test/tests/multiapps/picard/` |
 | Restart chain | `moose/test/tests/restart/restart_diffusion/tests` |
-| Recover with checkpoint | `moose/modules/porous_flow/test/tests/recover/tests` |
 | Mesh-only + check-input | `moose/test/tests/mesh/mesh_only/tests` |
-| Custom Exodiff `.cmp` | `blackbear/test/tests/concrete_ASR_swelling/{tests,asr_confined.cmp}` |
-| Capabilities gating | `blackbear/test/tests/neml_complex/tests` (`capabilities = 'neml'`) |
+| Custom `.cmp` | `blackbear/test/tests/concrete_ASR_swelling/` |
+| Capabilities gating | `blackbear/test/tests/neml_complex/tests` |
 | `RunException` | `moose/test/tests/controls/time_periods/error/tests` |
-| `PythonUnitTest` / `MMSTest` | `moose/test/tests/linearfvkernels/advection/tests` |
-| SignalTester | `moose/test/tests/misc/signal_handler/tests` |
-| Optimization multiapp (isopod) | `isopod/test/tests/optimizationreporter/boundary_measurement/tests` |
+| `PythonUnitTest`/`MMSTest` | `moose/test/tests/linearfvkernels/advection/tests` |
 
 ## Anti-patterns
 
-1. **Missing `requirement`/`design`/`issues`** — fails SQA check.
-2. **`issues = '#000'`** — passes regex but is meaningless. Cite a real PR.
-3. **Vague `requirement`** — passive voice, no "shall", unclear subject. Use `<Subject> shall <verb> <object>`.
-4. **Per-leaf `requirement`** when one parent + N `detail` children would do — triggers `log_duplicate_requirement`.
-5. **Child of requirement-grouping parent has its own `requirement`/`design`/`issues`** — triggers `log_extra_*`. Use `detail`.
-6. **`design` pointing at a deleted/renamed `.md`** — fails `log_design_files`. Grep specs when renaming docs.
-7. **`detail` on a top-level leaf** (no parent requirement) — `log_top_level_detail`.
-8. **`deprecated = true` paired with any other SQA field** — pick one.
-9. **Custom `collections` value** outside `FUNCTIONAL/USABILITY/PERFORMANCE/SYSTEM/FAILURE_ANALYSIS`.
-10. **Same `requirement` text in two specs** — `log_duplicate_requirement`. Rephrase.
-11. **Legacy `petsc_version =`/`method =`/`mumps =`** — use `capabilities = '...'` instead.
-12. **Re-stating `design`/`issues` on every child when `[Tests]` already inherits them** — wasted lines, drift risk.
-13. **Forgetting `recover = false` + `restep = false`** on the first leg of a manual checkpoint chain.
-14. **`block=` on `!listing` in test docs** — that's a doc concern, not a test concern. (Mentioned only because it surfaces in spec markdown.)
-15. **Fabricated `input` paths** — input is relative to the spec dir; don't invent paths. If no real test exists, write the input first.
-16. **Gold file not committed** — gold MUST be in git for the test to pass on a clean checkout. Binary blobs and all.
-17. **`should_crash`** on Exodiff — doesn't exist. Use `RunException`.
-18. **`max_time` left default for a long test** — default 300s. Either raise it or set `heavy = true`.
-19. **Missing `allow_test_objects = true`** when using test-only objects on a module/app binary.
-20. **Mismatched gold naming after `Outputs/file_base=` override** — gold becomes `<file_base>.<ext>`, not `<file_base>_out.<ext>`.
+- Missing `requirement`/`design`/`issues`, or `issues = '#000'`, or vague passive `requirement`.
+- Per-leaf `requirement` when parent + N `detail` children would do.
+- Child of grouping parent with its own `requirement`/`design`/`issues` (use `detail`).
+- `design` pointing at deleted/renamed `.md`; grep specs when renaming docs.
+- `detail` on top-level leaf (no parent requirement).
+- `deprecated = true` paired with any other SQA field.
+- Custom `collections` value outside the five standard ones.
+- Duplicate `requirement` text across specs.
+- Legacy `petsc_version`/`method`/`mumps` — use `capabilities`.
+- Re-stating `design`/`issues` on children when `[Tests]` already inherits.
+- Missing `recover = false` + `restep = false` on first leg of manual checkpoint chain.
+- Fabricated `input` paths or uncommitted gold files.
+- `should_crash` on Exodiff — use `RunException`.
+- Default `max_time` (300s) on a long test — raise it or set `heavy = true`.
+- Missing `allow_test_objects = true` for test-only objects on module/app binaries.
+- Mismatched gold naming after `Outputs/file_base=` override (`<file_base>.<ext>`, not `_out`).
 
-## Build / preview
+## Quick recipe
 
-See the **moose-run-tests** skill for `./run_tests` flags, gold regen, debugging, and CIVET.
-
-Quick recipe:
-
-    cd <app>/test
-    ./run_tests --re=<my_test> -v --no-color -j 1   # run one test verbosely
-    ./run_tests --check-input --re=<my_test>        # syntax-only validation
+```
+cd <app>/test
+./run_tests --re=<my_test> -v --no-color -j 1   # verbose single test
+./run_tests --check-input --re=<my_test>        # syntax-only
+```
