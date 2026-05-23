@@ -29,7 +29,7 @@ Quick host check before running any moose commands:
 
 ```bash
 case "$HOSTNAME" in
-  sawtooth*|lemhi*|bitterroot*|hoodoo*) echo "HPC — see docs/hpc.md" ;;
+  sawtooth*|lemhi*|bitterroot*|hoodoo*|teton*) echo "HPC — see docs/hpc.md" ;;
   *) echo "local — see docs/local.md" ;;
 esac
 ```
