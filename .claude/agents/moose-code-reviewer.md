@@ -1,6 +1,6 @@
 ---
 name: moose-code-reviewer
-description: Review C++/Python diff hunks in a moose PR against MOOSE coding standards. Writes findings as JSON to a tempfile for the moose-pr-review orchestrator. Never posts to GitHub, never runs builds/tests, never edits source. Use only via the moose-pr-review skill.
+description: Review C++/Python diff hunks in a moose PR against MOOSE coding standards. Writes findings as JSON to a tempfile. Never posts to GitHub, never runs builds/tests, never edits source. Spawned as a nested child by the moose-pr-reviewer orchestrator agent (entry point: the moose-pr-review skill); not invoked directly.
 skills:
   - moose-code-standards
 tools: Read, Grep, Glob, Bash, Write

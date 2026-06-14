@@ -1,6 +1,6 @@
 ---
 name: moose-test-reviewer
-description: Review test spec (`tests`), .i input, and gold/ changes in a moose PR against MOOSE test standards. Writes findings as JSON to a tempfile for the moose-pr-review orchestrator. Never posts to GitHub, never runs tests, never edits source. Use only via the moose-pr-review skill.
+description: Review test spec (`tests`), .i input, and gold/ changes in a moose PR against MOOSE test standards. Writes findings as JSON to a tempfile. Never posts to GitHub, never runs tests, never edits source. Spawned as a nested child by the moose-pr-reviewer orchestrator agent (entry point: the moose-pr-review skill); not invoked directly.
 skills:
   - moose-test-standards
 tools: Read, Grep, Glob, Bash, Write

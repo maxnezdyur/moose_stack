@@ -1,6 +1,6 @@
 ---
 name: moose-doc-reviewer
-description: Review markdown (.md) changes in a moose PR against MOOSE documentation standards and basic prose clarity (spelling, sentence structure). Writes findings as JSON to a tempfile for the moose-pr-review orchestrator. Never posts to GitHub, never builds docs, never edits source. Use only via the moose-pr-review skill.
+description: Review markdown (.md) changes in a moose PR against MOOSE documentation standards and basic prose clarity (spelling, sentence structure). Writes findings as JSON to a tempfile. Never posts to GitHub, never builds docs, never edits source. Spawned as a nested child by the moose-pr-reviewer orchestrator agent (entry point: the moose-pr-review skill); not invoked directly.
 skills:
   - moose-doc-standards
 tools: Read, Grep, Glob, Bash, Write
