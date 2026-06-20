@@ -32,6 +32,8 @@ If no path is given, defaults to `<worktree-root>/spec.md` (where `/moose-design
 
 ## Team
 
+You are the **team lead**. There's one implicit team per session — you don't create or name it (`TeamCreate`/`TeamDelete` no longer exist; cleanup is automatic on session exit). Spawn named teammates with `Agent` (each gets a `name` + `subagent_type`), coordinate them through a **shared task list** (`TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet`), and route with `SendMessage`. The task list — not your prose — is the source of truth for who-does-what and what's done.
+
 | Teammate name | `subagent_type` | Role |
 |---|---|---|
 | `implementer` | `moose-implementer` | C++/Python under `<repo>/src` and `<repo>/include` |
@@ -39,7 +41,7 @@ If no path is given, defaults to `<worktree-root>/spec.md` (where `/moose-design
 | `unit-test-writer` | `moose-unit-test-writer` | gtest under `unit/` — spawn only if spec calls for it |
 | `test-runner` | `moose-test-runner` | Build (when authorized) + run + diagnose + gold regen |
 
-`investigator` is **not** a teammate — spawn ad-hoc via `Agent` (no `team_name`) when a teammate reports `NEEDS_CONTEXT`; forward its findings via `SendMessage`.
+`moose-scout` is **not** a standing teammate — spawn it ad-hoc with `Agent` when a teammate reports `NEEDS_CONTEXT`; forward its findings via `SendMessage`.
 
 If the spec has `## Doc plan: yes`, refuse with: *"This spec calls for docs — use `/moose-build-feature` instead. `/moose-build-core` does not run the docs gate."* No silent demotion.
 
@@ -54,11 +56,9 @@ If the spec has `## Doc plan: yes`, refuse with: *"This spec calls for docs — 
 5. **Extract dispatch:** `repo`, `object kind`, `files to touch`, `unit-tests on/off` (on iff `unit/` is in files-to-touch), reuse decisions, test plan entries, out-of-scope items.
 6. **Reuse-only short-circuit.** If `## Reuse decisions` is entirely `Reuse as-is`, skip `implementer`. Tell the user. Continue with test work only.
 
-### 2. Create the team
+### 2. Set up the run
 
-1. `team_name = moose-core-<feature>` where `<feature>` is the worktree directory name.
-2. `TeamCreate { team_name, description: "<one line from the spec>" }`.
-3. Tell the user: chosen team, which teammates you'll spawn, and the §Caveats.
+No team to create — the session *is* the team. Pick a short run label (`moose-core-<feature>`, where `<feature>` is the worktree directory name) to title your tasks and reports. Tell the user the label, which teammates you'll spawn, and the §Caveats.
 
 ### 3. Spawn teammates
 
@@ -70,19 +70,20 @@ Always:
 Conditional:
 - `unit-test-writer` — iff files-to-touch contains a `unit/` path
 
-Spawn via `Agent` with both `team_name` and `name`. Each spawn message carries the spec slice the teammate needs:
+Spawn via `Agent` with a `name` + `subagent_type`. Each spawn message carries the spec slice the teammate needs:
 - `implementer`: Summary, Physics, Reuse decisions, Out of scope.
 - `test-writer` / `unit-test-writer`: Summary, matching Test plan entry, Out of scope.
 - `test-runner`: Summary + list of test names. Nothing else.
 
 **Don't respawn teammates within a run.** Wake idle teammates with `SendMessage`.
 
-### 4. Seed the task list
+### 4. Seed the shared task list
 
-`TaskCreate` the initial round:
+The task list is the single source of truth for the run — teammates read it, claim work, and report progress through it. `TaskCreate` one task per item below, then `TaskUpdate` each to set its `owner` and `blockedBy`. Teammates move their task `pending → in_progress → completed` via `TaskUpdate`; you watch with `TaskList`/`TaskGet` and wake or route with `SendMessage`.
+
 - `iter-1: implement <feature>` — owner `implementer`. Body carries Reuse decisions + Out of scope. (Skip if reuse-only.)
 - `iter-1: write test "<test_name>"` — one task per `## Test plan` entry, owner `test-writer` (or `unit-test-writer` if gtest). Body carries Tester kind, asserted behavior, mutation rationale.
-- `iter-1: build + run new tests` — owner `test-runner`. Blocked on implementer + test-writer(s).
+- `iter-1: build + run new tests` — owner `test-runner`. `blockedBy` implementer + test-writer(s).
 
 ### 5. Iterate (max 5 rounds)
 
@@ -117,7 +118,7 @@ Wait for completion.
 | RACE | `SendMessage` to `test-writer` (suggest `prereq` / `working_directory` fix) |
 | Skip caveat | Surface to user; usually env/build issue |
 | Teammate `BLOCKED` | Halt loop, surface report |
-| Teammate `NEEDS_CONTEXT` | Spawn `investigator` (one-shot), forward findings to the asker |
+| Teammate `NEEDS_CONTEXT` | Spawn `moose-scout` (one-shot), forward findings to the asker |
 
 #### 5e. Gold-file pause
 
@@ -132,9 +133,8 @@ If values are wrong → route to `implementer` instead.
 
 Stop when **build clean + all new regression tests pass**.
 
-1. Gracefully shut down each teammate: `SendMessage { to: <name>, message: { type: "shutdown_request" } }`. Wait for responses.
-2. `TeamDelete` to clean up `~/.claude/teams/<team_name>/` and `~/.claude/tasks/<team_name>/`.
-3. Final report:
+1. Gracefully shut down each teammate: `SendMessage { to: <name>, message: { type: "shutdown_request" } }`. Wait for responses. There's no `TeamDelete` — once teammates have shut down the run is complete and the session cleans up automatically.
+2. Final report:
    - Files created / modified (per teammate)
    - The exact commands `test-runner` ran
    - Final test counts (passed / failed / skipped)
@@ -145,14 +145,14 @@ Stop when **build clean + all new regression tests pass**.
 
 If iteration 5 finishes without green:
 
-1. Stop dispatching; **don't** auto-shut-down or `TeamDelete`.
+1. Stop dispatching; **don't** auto-shut-down the teammates (leave them running for inspection).
 2. Summarize the last iteration's failure, routing tried, unresolved blocker.
 3. Ask: extend the budget (by how much), simplify the spec, or escalate. On extend, continue from where you stopped.
 
 ## Failure handling
 
-- **`BLOCKED`** → halt, surface report, don't tear down the team.
-- **`NEEDS_CONTEXT`** → spawn `investigator` via plain `Agent` (no `team_name`); forward its cited findings to the asking teammate via `SendMessage`.
+- **`BLOCKED`** → halt, surface report, leave the teammates running for inspection.
+- **`NEEDS_CONTEXT`** → spawn `moose-scout` ad-hoc via `Agent`; forward its cited findings to the asking teammate via `SendMessage`.
 - **`DONE_WITH_CONCERNS`** → record in `TaskUpdate`, continue, surface in final report.
 
 ## Hard constraints
@@ -167,12 +167,12 @@ If iteration 5 finishes without green:
 
 ## Caveats to surface up front
 
-After team creation, before iteration 1, briefly tell the user:
+After spawning teammates, before iteration 1, briefly tell the user:
 
 - This is the **slim** path: no `docs-writer`, no `docs-builder` smoke gate. If your C++ renames could break `!syntax` in untouched doc pages, rerun with `/moose-build-feature`.
 - Style isn't checked (pre-commit hook handles it on commit).
 - Iteration cap is **5** rounds; on hit, surfaces state and asks before extending.
-- Team state lives in `~/.claude/tasks/<team_name>/`; a session crash loses iteration history.
+- Run state lives in the session's shared task list; a session crash loses in-flight iteration history.
 - Interrupt at any time; on resume, picks up from the open tasks in the shared list.
 
 ## Canonical references

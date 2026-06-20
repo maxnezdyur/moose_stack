@@ -1,6 +1,6 @@
 ---
 name: moose-design-feature
-description: Takes a vague feature idea, grills the user against MOOSE-specific axes (object kind, inputs/outputs, physics/math), spawns an investigator to scout for reusable code, and writes a structured spec.md that /moose-build-feature consumes.
+description: Takes a vague feature idea, grills the user against MOOSE-specific axes (object kind, inputs/outputs, physics/math), spawns `moose-scout` agents to scout for reusable code, and writes a structured spec.md that /moose-build-feature consumes.
 disable-model-invocation: true
 ---
 
@@ -47,30 +47,30 @@ Don't ask things the codebase can answer — let `moose-grill` handle the author
 
 ### 3. Scout — round 1
 
-Decompose the feature into independent **search angles**, then spawn one background `investigator` per angle in a **single message with multiple `Agent` tool calls in parallel** (`run_in_background: true` on each). Use `subagent_type: "investigator"`.
+Decompose the feature into independent **search angles**, then spawn one background `moose-scout` per angle in a **single message with multiple `Agent` tool calls in parallel** (`run_in_background: true` on each). Use `subagent_type: "moose-scout"`.
 
-**When to fan out (multiple investigators):**
+**When to fan out (multiple moose-scouts):**
 - The feature touches more than one MOOSE object kind (e.g. a Kernel + a paired Material).
 - The physics term has a distinct mathematical name *and* a distinct user-facing name (search both vocabularies separately — they live in different parts of the tree).
-- The feature plausibly already exists in more than one repo (e.g. solid-mechanics in `moose/modules/solid_mechanics` *and* `blackbear`); give each repo its own investigator.
+- The feature plausibly already exists in more than one repo (e.g. solid-mechanics in `moose/modules/solid_mechanics` *and* `blackbear`); give each repo its own moose-scout.
 - A test-side angle is independent of the implementation-side angle (e.g. "are there existing `tests` specs that exercise this physics" vs "are there existing classes that compute it").
 
-**When one investigator is enough:**
+**When one moose-scout is enough:**
 - Single object kind, single repo, single conceptual name with no obvious synonyms.
 - Tiny features (one-liner extensions of an existing class).
 
-**Cap at ~4 parallel investigators.** More than that and findings start overlapping; you also lose the ability to hold them all in context when they return. If you'd want more angles, queue the extras for round 2.
+**Cap at ~4 parallel moose-scouts.** More than that and findings start overlapping; you also lose the ability to hold them all in context when they return. If you'd want more angles, queue the extras for round 2.
 
 **Per-angle prompt template** — fill in the bracketed pieces and send each as a separate `Agent` call.
 
 The template has three jobs:
-1. Pin down the **operator / equation**, not just the keywords. Without this an investigator will report "diffusion kernel" as a match for Navier–Stokes momentum because the names overlap.
-2. List **negative criteria** — what would NOT count as a match — so the investigator drops near-cousins instead of returning them.
-3. Force **per-hit verification**: the investigator must open each candidate, read the residual line, and rate the match strength. Grep hits don't count.
+1. Pin down the **operator / equation**, not just the keywords. Without this a `moose-scout` will report "diffusion kernel" as a match for Navier–Stokes momentum because the names overlap.
+2. List **negative criteria** — what would NOT count as a match — so the moose-scout drops near-cousins instead of returning them.
+3. Force **per-hit verification**: the moose-scout must open each candidate, read the residual line, and rate the match strength. Grep hits don't count.
 
 ```
 Agent({
-  subagent_type: "investigator",
+  subagent_type: "moose-scout",
   run_in_background: true,
   prompt: "Search angle: <one-line angle name, e.g. 'Kernel implementations of anisotropic conduction'>
 
@@ -94,7 +94,7 @@ Agent({
            - <angle-specific Tester `type = X` references, if applicable>
            - <angle-specific base class hierarchy>
 
-           Do NOT search outside this angle — a sibling investigator is covering <other angle>.
+           Do NOT search outside this angle — a sibling moose-scout is covering <other angle>.
 
            ## What is NOT a match (negative criteria)
 
@@ -132,11 +132,11 @@ Agent({
 
 **Briefing the user:** before launching, tell them in one line which angles you're fanning out across (e.g. *"Scouting in parallel: Kernel side in moose, Material side in blackbear, test-side across both. I'll fold findings in as each returns."*). Then continue the grill loop while they run.
 
-**Returning findings:** investigators land independently. As each notification arrives, merge its findings into a running list. Don't wait for all of them to land before continuing the grill — only block on them when you reach the reuse-halt check in step 4.
+**Returning findings:** moose-scouts land independently. As each notification arrives, merge its findings into a running list. Don't wait for all of them to land before continuing the grill — only block on them when you reach the reuse-halt check in step 4.
 
 ### 4. Reuse halt — when scout returns
 
-When the investigator reports back, parse its findings:
+When the moose-scout reports back, parse its findings:
 
 - **Exact or near-exact match exists** → STOP the loop. Surface the match (file:line + one-line description). Use `AskUserQuestion` to force a decision before continuing:
   - **Reuse as-is** — abandon writing new code; spec captures only test/doc work
@@ -186,7 +186,7 @@ Use this template. Fill every section concretely; do not leave `TODO`s.
 <one-line description of computeQpResidual, computeValue, execute, etc.>
 
 ## Reuse decisions
-<one entry per investigator finding>
+<one entry per moose-scout finding>
 
 ### `<file_path>:<line>` — `<ClassName>`
 **What it does:** <one sentence>
@@ -229,11 +229,11 @@ Do **not** auto-invoke `/moose-build-feature`. The human review pass on the spec
 - **Never run builds, tests, or formatters.** Spec phase only.
 - **Refuse outside a worktree.** No spec without `/new-feature` first.
 - **No filler in the spec.** If a section can't be filled concretely, the loop is not done — keep grilling.
-- **Investigator findings are advisory.** The user owns reuse decisions, recorded in the spec.
+- **Scout findings are advisory.** The user owns reuse decisions, recorded in the spec.
 
 ## Failure handling
 
-- **Investigator returns BLOCKED or empty** → continue without scout for that round; note in spec under Reuse decisions: "Investigator failed: <reason>". Don't fabricate findings.
+- **`moose-scout` returns BLOCKED or empty** → continue without scout for that round; note in spec under Reuse decisions: "Scout failed: <reason>". Don't fabricate findings.
 - **User abandons mid-grill** → no spec is written. Tell the user: "No spec saved. Re-run when ready."
 - **Existing spec is malformed on resume** → fall back to restart with a warning.
 
@@ -241,5 +241,6 @@ Do **not** auto-invoke `/moose-build-feature`. The human review pass on the spec
 
 - `/moose-build-feature` — the consumer of this skill's output. Match its `{repo, kind, files-to-touch}` vocabulary so step 1 of that skill confirms cleanly.
 - `moose-implementer` agent — has the "Reuse over redundancy" rule this skill operationalizes.
+- `moose-scout` agent — the CodeGraph-powered reuse scout this skill fans out in step 3; rates candidate matches structural / behavioral / naming.
 - `/moose-grill` — handles the base-class / contract / coupling / pitfalls grilling by exploring MOOSE's class hierarchy with codegraph. Step 2 of this skill delegates to it.
 - `grill-me` skill — generic grilling reference; this skill is MOOSE-axis-specific so it doesn't invoke grill-me directly.
