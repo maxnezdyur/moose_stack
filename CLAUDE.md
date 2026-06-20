@@ -18,6 +18,10 @@ Meta-repo pinning three forks as submodules: `moose/`, `blackbear/`, `isopod/`. 
 - `blackbear`, `isopod` → `devel`
 - This meta-repo → `main`
 
+## Git context — skills target the submodule, not the meta-repo
+
+When I invoke a git-oriented skill — `branch-diff`, `commit`, and the like — I almost always mean the **submodule I'm working in** (`moose/`, `blackbear/`, or `isopod/`), not the meta-repo root. The meta-repo only pins submodule tips; the real changes live inside a submodule. Default the skill's working directory to that inner repo (detect it from `cwd`, or ask which submodule if it's ambiguous)
+
 ## Environment
 
 Two parallel env-management flows. Pick by host:
