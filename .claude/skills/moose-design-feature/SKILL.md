@@ -1,12 +1,12 @@
 ---
 name: moose-design-feature
-description: Takes a vague feature idea, grills the user against MOOSE-specific axes (object kind, inputs/outputs, physics/math), spawns `moose-scout` agents to scout for reusable code, and writes a structured spec.md that /moose-build-feature consumes.
+description: Takes a vague feature idea, grills the user against MOOSE-specific axes (object kind, inputs/outputs, physics/math), spawns `moose-scout` agents to scout for reusable code, and writes a structured spec.md that /moose-build consumes.
 disable-model-invocation: true
 ---
 
 # /moose-design-feature
 
-Convert a vague feature idea into a concrete `spec.md` for `/moose-build-feature`. Grills the user, scouts the codebase for reuse, halts on near-matches, and stops at a written spec — does NOT auto-build.
+Convert a vague feature idea into a concrete `spec.md` for `/moose-build`. Grills the user, scouts the codebase for reuse, halts on near-matches, and stops at a written spec — does NOT auto-build.
 
 ## Usage
 
@@ -217,15 +217,15 @@ Tell the user:
 > Spec written to `<worktree-root>/spec.md`. Review it, edit if needed, then run:
 >
 > ```
-> /moose-build-feature spec.md
+> /moose-build spec.md
 > ```
 
-Do **not** auto-invoke `/moose-build-feature`. The human review pass on the spec is load-bearing.
+Do **not** auto-invoke `/moose-build`. The human review pass on the spec is load-bearing.
 
 ## Hard constraints
 
 - **Never edit code.** This skill writes one file: `spec.md`. Nothing else.
-- **Never commit, push, or invoke `/moose-build-feature`.** Hand-off is manual.
+- **Never commit, push, or invoke `/moose-build`.** Hand-off is manual.
 - **Never run builds, tests, or formatters.** Spec phase only.
 - **Refuse outside a worktree.** No spec without `/new-feature` first.
 - **No filler in the spec.** If a section can't be filled concretely, the loop is not done — keep grilling.
@@ -239,7 +239,7 @@ Do **not** auto-invoke `/moose-build-feature`. The human review pass on the spec
 
 ## Canonical references
 
-- `/moose-build-feature` — the consumer of this skill's output. Match its `{repo, kind, files-to-touch}` vocabulary so step 1 of that skill confirms cleanly.
+- `/moose-build` — the consumer of this skill's output. Match its `{repo, kind, files-to-touch}` vocabulary so step 1 of that skill confirms cleanly.
 - `moose-implementer` agent — has the "Reuse over redundancy" rule this skill operationalizes.
 - `moose-scout` agent — the CodeGraph-powered reuse scout this skill fans out in step 3; rates candidate matches structural / behavioral / naming.
 - `/moose-grill` — handles the base-class / contract / coupling / pitfalls grilling by exploring MOOSE's class hierarchy with codegraph. Step 2 of this skill delegates to it.

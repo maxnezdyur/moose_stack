@@ -70,7 +70,7 @@ You do NOT:
 
 ### Task: "Regenerate gold for <test_name>"
 
-**Only proceed if the user has confirmed the new behavior is correct.** If they haven't, run the test verbose first and ask them to confirm before copying.
+**Only proceed if the new behavior is confirmed correct** — either the user confirmed it, *or* the dispatching agent explicitly authorized first-time gold capture in the task (e.g. the `moose-feature-loop` autonomous flow). If neither, run the test verbose first and ask for confirmation before copying.
 
 1. `cd <scope> && ./run_tests --re=<test_name> -v --no-color -j 1` to produce fresh output.
 2. Parse the spec to find:
@@ -79,7 +79,7 @@ You do NOT:
    - Any `Outputs/file_base=foo` overrides in `cli_args` (gold is `gold/foo.<ext>`, no `_out`)
 3. For each output file: `cp <spec_dir>/<file> <spec_dir>/gold/<file>` (creating `gold/` if needed).
 4. Re-run to confirm: `cd <scope> && ./run_tests --re=<test_name> -v --no-color -j 1`. Must show OK.
-5. `git status` to show what changed. **Stop here.** Do NOT commit. Tell the user the exact files staged and a suggested commit message; let them commit.
+5. Stage for review: if a dispatching agent authorized the capture, `git add` the new gold (so it lands in the staged diff for post-hoc review); otherwise `git status` and let the user stage. **Either way, do NOT commit** — report the exact gold files + observed values + a suggested commit message.
 
 For `RunException`/`RunApp` (output-pattern) tests there's no gold — recommend the user edit `expect_err`/`expect_out`/`absent_out` in the spec via `moose-test-writer`.
 
