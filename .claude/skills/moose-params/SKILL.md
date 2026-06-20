@@ -1,6 +1,6 @@
 ---
 name: moose-params
-description: Look up the registered-syntax YAML entry for an exact MOOSE object type name (e.g. `ADDirichletBC`). Auto-triggers on phrasings like "what params does X take", "params for X", "dump X", or invoke directly via `/moose-params <Type> [<ParamName> | --full]`. Returns a lean summary by default; a second positional arg drills into a single parameter; `--full` returns the complete YAML node. Reads from `<meta-repo>/.claude/cache/syntax.yaml`. Does NOT advise which object to pick — for that, see `.claude/contexts/moose-input/`.
+description: Look up the registered-syntax YAML entry for an exact MOOSE object type name (e.g. `ADDirichletBC`). Auto-triggers on phrasings like "what params does X take", "params for X", "dump X", or invoke directly via `/moose-params <Type> [<ParamName> | --full]`. Returns a lean summary by default; a second positional arg drills into a single parameter; `--full` returns the complete YAML node. Reads from `<meta-repo>/.claude/cache/syntax.yaml`. Does NOT advise which object to pick — to find candidate objects, search the C++ source with codegraph (`codegraph_search` / `codegraph_explore`).
 allowed-tools:
   - Bash(yq *)
   - Bash(ls *)
@@ -98,7 +98,7 @@ Cache missing. Run:
 
 ## Out of scope
 
-- Choosing *which* object to pick — that's `.claude/contexts/moose-input/`.
+- Choosing *which* object to pick — search the C++ source with codegraph (`codegraph_explore`).
 - Substring/fuzzy match.
 - Auto-regenerating the cache.
 - Caring which binary produced the cache.

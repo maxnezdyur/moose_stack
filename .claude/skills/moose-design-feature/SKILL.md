@@ -35,14 +35,13 @@ Examples:
 
 Invoke the `moose-grill` skill via `Skill(moose-grill)`, passing the user's freeform idea as the argument. That skill:
 
-- Reads `.claude/contexts/moose/AUTHORING-MAP.md` and picks the relevant authoring guide(s).
-- Walks the picked guide's **When to use this** decision tree to lock in object kind + base class.
-- Walks the **Contract**, **Coupling**, and **Common pitfalls** sections to capture required overrides, `validParams`, coupled variables / material properties, and pitfalls considered.
-- Refines a guide's decision tree inline (with user confirmation) when grilling reveals a real ambiguity.
-- Captures the residual / contribution math verbatim from the user (the authoring guides don't validate physics).
-- Returns a structured plan with `Repo`, `Object kind / base class`, `Required overrides`, `validParams shape`, `Coupling`, `Residual / contribution math`, `Pitfalls considered`, `Decision-tree refinements applied`, and `Predicted files to touch`.
+- Uses codegraph to identify candidate base classes for the object kind and explore their existing subclasses.
+- Locks in object kind + base class by comparing the candidates against the user's plan.
+- Reads the base class and a representative subclass via codegraph to capture required overrides, `validParams`, coupled variables / material properties, and pitfalls considered.
+- Captures the residual / contribution math verbatim from the user (source exploration doesn't validate physics).
+- Returns a structured plan with `Repo`, `Base class`, `Reference subclass(es)`, `Required overrides`, `validParams shape`, `Coupling`, `Residual / contribution math`, `Pitfalls considered`, and `Predicted files to touch`.
 
-You consume that plan directly in subsequent steps — no need to re-grill these axes. If the plan comes back with `Authoring guide(s) consulted: none` (no guide matched the user's case), fall back to the legacy three-axis grill (Object kind + base class, Inputs / outputs, Physics / math) for this round only.
+You consume that plan directly in subsequent steps — no need to re-grill these axes. If the plan comes back with `Base class: undetermined` (codegraph found no clear base for the user's case), fall back to the legacy three-axis grill (Object kind + base class, Inputs / outputs, Physics / math) for this round only.
 
 Don't ask things the codebase can answer — let `moose-grill` handle the authoring-side picks; reserve `Grep`/`Glob` for verifying claims and for the scout step.
 
@@ -242,5 +241,5 @@ Do **not** auto-invoke `/moose-build-feature`. The human review pass on the spec
 
 - `/moose-build-feature` — the consumer of this skill's output. Match its `{repo, kind, files-to-touch}` vocabulary so step 1 of that skill confirms cleanly.
 - `moose-implementer` agent — has the "Reuse over redundancy" rule this skill operationalizes.
-- `/moose-grill` — handles the base-class / contract / coupling / pitfalls grilling using the authoring guides at `.claude/contexts/moose/*-authoring.md`. Step 2 of this skill delegates to it.
+- `/moose-grill` — handles the base-class / contract / coupling / pitfalls grilling by exploring MOOSE's class hierarchy with codegraph. Step 2 of this skill delegates to it.
 - `grill-me` skill — generic grilling reference; this skill is MOOSE-axis-specific so it doesn't invoke grill-me directly.

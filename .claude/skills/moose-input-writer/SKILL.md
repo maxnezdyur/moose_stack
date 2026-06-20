@@ -1,11 +1,11 @@
 ---
 name: moose-input-writer
-description: Author or modify a MOOSE input file (`.i`) for moose, blackbear, or isopod from a free-form task description. Runs a clarify-first interview before writing, generates a complete runnable input following the catalog conventions, validates with `--check-input`, iterates up to 3 times. Stateless — if the target path exists, edits in place; otherwise creates fresh. Auto-triggers on phrasings like "write an input file for ...", "make a `.i` that ...", or invoke directly via `/moose-input-writer <description>`.
+description: Author or modify a MOOSE input file (`.i`) for moose, blackbear, or isopod from a free-form task description. Runs a clarify-first interview before writing, generates a complete runnable input following MOOSE input conventions, validates with `--check-input`, iterates up to 3 times. Stateless — if the target path exists, edits in place; otherwise creates fresh. Auto-triggers on phrasings like "write an input file for ...", "make a `.i` that ...", or invoke directly via `/moose-input-writer <description>`.
 ---
 
 # /moose-input-writer
 
-Author and edit `.i` files for `moose`, `blackbear`, and `isopod` — strictly following the conventions in `.claude/contexts/moose-input/`.
+Author and edit `.i` files for `moose`, `blackbear`, and `isopod` — types and parameters verified against `moose-params`, block structure mirrored from existing example inputs.
 
 This is a **skill**, not a subagent. It runs in the main conversation so `AskUserQuestion` actually reaches the user. Background/headless agents cannot interview, which is why this lives here.
 
@@ -24,17 +24,18 @@ If `$ARGUMENTS` is empty, ask via `AskUserQuestion`: "What input file do you wan
 
 ## First action — every run
 
-1. Read `.claude/contexts/moose-input/INPUT-MAP.md` to orient.
-2. Identify the catalog guides relevant to the task (e.g. for "thermomechanical contact w/ finite strain": `heat-transfer.md`, `solid-mechanics.md`, `contact.md`, `materials.md`, `mesh.md`, `executioner.md`). Read **only** those.
+1. Find existing example inputs for the physics involved: `Grep`/`Glob` over `*/test/tests/**/*.i` (and module test dirs) for the blocks and object types the task implies. Mirror their structure — don't invent block layouts.
+2. When you need to understand what an object *does* or which base class it derives from (e.g. choosing between two candidate types), use codegraph: `codegraph_explore "<TypeName>"` returns its C++ source and relatives.
 3. Detect mode and binary:
    - **Mode** — if the target file path exists, you are in **modify** mode (load it, treat task as edit). Otherwise **create** mode.
    - **Binary** — auto-detect from cwd: `moose/` → `moose/test/moose_test-opt`; `blackbear/` → `blackbear/blackbear-opt`; `isopod/` → `isopod/isopod-opt`. If cwd is the meta-repo root or anywhere else, default to `isopod/isopod-opt`.
 
-Do not invent block names, type names, or parameters. The catalog plus `moose-params` is the source of truth.
+Do not invent block names, type names, or parameters. `moose-params` plus existing example inputs are the source of truth.
 
 ## Tool policy
 
-- `Read`, `Write`, `Edit`, `Glob`, `Grep` — for catalog and `.i` editing.
+- `Read`, `Write`, `Edit`, `Glob`, `Grep` — for finding example inputs and `.i` editing.
+- `codegraph_explore` / `codegraph_search` — to inspect an object's C++ class, base class, or find similar objects when choosing types.
 - `AskUserQuestion` — for the clarify-first interview.
 - `Skill` — invoke `moose-params` for type/parameter verification.
 - `Bash` — restricted (see Hard constraints).
@@ -51,7 +52,7 @@ You do NOT:
 - Generate mesh files. Use `[Mesh]` generators (`GeneratedMeshGenerator`, etc.) or expect the user to supply a file path.
 - Generate `tests` spec files or gold outputs. That's `moose-test-writer`.
 - Touch C++ source. If the task requires a new object that doesn't exist yet, report BLOCKED.
-- Edit anything outside the target `.i` path (no catalog edits, no Makefile edits, no other inputs).
+- Edit anything outside the target `.i` path (no Makefile edits, no other inputs).
 - Spawn agents.
 - Add comments to the generated file. Style is **minimal — clean HIT, no inline comments, no header**.
 - Fabricate types or parameters. If `moose-params` doesn't know a type, that type isn't real — pick a different one or BLOCK.
@@ -61,7 +62,7 @@ You do NOT:
 
 ### Step 1 — orient and detect mode
 
-- Read `INPUT-MAP.md` and the relevant catalog guides.
+- Find and read existing example inputs for the physics (`Grep`/`Glob` over `*/test/tests/**/*.i`); use codegraph to inspect any unfamiliar object's C++ class.
 - **If `physics-spec.md` exists in cwd, read it in full.** It is the authoritative requirements document — every structural statement in it (element type, mesh topology, coupling style, contact algorithm, control wiring, BC placement) is a **hard constraint**, not a default you may override. Numeric placeholders (material constants, time step, mesh resolution) are fine to fill in with sensible defaults.
 - Resolve the target file path: use the path the caller provided; if none, derive `./<derived_name>.i` in cwd. Derivation: lowercase the prompt, drop filler ("a", "an", "the", "with", "for", "problem", "case"), join with `_`, truncate to ~5 tokens. E.g. "thermomechanical contact problem with finite strain" → `thermomech_contact_finite_strain.i`.
 - Stat the path. If it exists, set mode = `modify`; else mode = `create`.
@@ -83,7 +84,7 @@ Phrase each question with the recommended option first when one applies. Never s
 4. **Strain measure** (when mechanics is active) — small / finite / total Lagrangian / incremental.
 5. **Contact algorithm** (when contact is active) — mortar / node-face / penalty.
 6. **Coupling style** (when multi-physics) — `[Physics]` shorthand actions, `[Modules]` action, or hand-wired kernels.
-7. **FE vs FV vs Linear-FV** — when the catalog presents this as a decision tree for the active physics.
+7. **FE vs FV vs Linear-FV** — when the active physics supports more than one discretization.
 8. **Controls / stochastic wiring** — if the spec asks for `[Controls]`, parameter sweeps, or stochastic-tools coupling, ask which parameters must be controllable and confirm the path before wiring. Never defer this to `Concerns:`.
 9. **Solver / preconditioner** — only ask if the user has stated a preference or if the default would obviously fail for the problem class. Otherwise default and move on (this one is fine to leave as writer's call).
 
@@ -113,9 +114,9 @@ Use the lean (default) mode of `moose-params` for this; it gives required-with-d
 
 ### Step 4 — write or edit the file
 
-**Style:** minimal. Clean HIT, no inline comments, no header block, no separator lines. Idiomatic spacing matching the catalog examples. Default to AD-named classes (e.g. `ADDirichletBC`, not `DirichletBC`) unless the user explicitly opted out of AD.
+**Style:** minimal. Clean HIT, no inline comments, no header block, no separator lines. Idiomatic spacing matching existing example inputs. Default to AD-named classes (e.g. `ADDirichletBC`, not `DirichletBC`) unless the user explicitly opted out of AD.
 
-**Scope:** complete and runnable. Include `[Mesh]`, `[Variables]`, `[Kernels]`/`[Physics/...]`, `[Materials]` (if applicable), `[BCs]`, `[ICs]` (if needed for the problem), `[Executioner]`, `[Outputs]`, and a minimal `[Postprocessors]` if the catalog suggests one. No empty blocks.
+**Scope:** complete and runnable. Include `[Mesh]`, `[Variables]`, `[Kernels]`/`[Physics/...]`, `[Materials]` (if applicable), `[BCs]`, `[ICs]` (if needed for the problem), `[Executioner]`, `[Outputs]`, and a minimal `[Postprocessors]` if appropriate. No empty blocks.
 
 In modify mode, make surgical edits — don't rewrite blocks the user didn't ask to change.
 
@@ -147,8 +148,8 @@ If STUCK, add the verbatim final error and a `Tried:` list of edits you attempte
 
 ## Rules
 
-- **Catalog first.** When the catalog gives a decision tree (e.g. "FE vs FV vs Linear-FV"), follow it. Don't invent.
-- **Mirror, don't invent.** Type names, block names, parameter spellings — copy from the catalog or `moose-params`, never guess.
+- **Examples first.** Base block structure and type choices on existing example inputs (`*/test/tests/**/*.i`) and `moose-params`. Don't invent decision trees.
+- **Mirror, don't invent.** Type names, block names, parameter spellings — copy from `moose-params` or an existing input, never guess.
 - **Minimal style.** No comments. No headers. No `# ----` separators. The file should look like one a human would commit.
 - **Surgical edits in modify mode.** If the user says "swap to mortar contact", change only the contact-related blocks; leave kernels, mesh, executioner alone.
 - **No half-finished work.** A file the skill emits must pass `--check-input` or the report must be STUCK.
