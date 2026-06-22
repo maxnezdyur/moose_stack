@@ -1,6 +1,6 @@
 ---
 name: moose-design-feature
-description: Takes a vague feature idea, grills the user against MOOSE-specific axes (object kind, inputs/outputs, physics/math), spawns `moose-scout` agents to scout for reusable code, and writes a structured spec.md that /moose-build consumes.
+description: Takes a vague feature idea, grills the user against MOOSE-specific axes (object kind, inputs/outputs, physics/math), spawns `moose-scout` agents to scout for reusable code, and writes a structured spec.md that /moose-build consumes — plus a shareable, self-contained blueprint.html rendered from that spec.
 disable-model-invocation: true
 ---
 
@@ -26,7 +26,7 @@ Examples:
 
 1. Read `$ARGUMENTS`. If empty, ask the user for the idea via `AskUserQuestion`.
 2. Detect the worktree root: walk up from CWD until you find a `.git` file (not directory — submodule worktrees have a `.git` *file*) and a sibling `moose/`, `blackbear/`, `isopod/` layout. If detection fails, refuse with: *"Run /new-feature first; this skill only runs inside a feature worktree."*
-3. Check for `<worktree-root>/spec.md`. If present, ask via `AskUserQuestion`:
+3. Check for `<worktree-root>/specs/spec.md`. If present, ask via `AskUserQuestion`:
    - **Resume** — load the existing spec, identify which sections are still incomplete, jump into grilling on those.
    - **Restart** — proceed as if no spec existed; the existing file gets overwritten at step 6.
    - **Cancel** — stop the skill.
@@ -155,7 +155,9 @@ When the skill judges itself ready, present a draft spec to the user via `AskUse
 - **Keep grilling about X** → user names a section that needs more depth; loop continues there
 - **Cancel** → stop without writing
 
-### 6. Write `<worktree-root>/spec.md`
+### 6. Write `<worktree-root>/specs/spec.md`
+
+Create the `specs/` folder if it does not exist (`mkdir -p <worktree-root>/specs`), then write the spec there. All planning artifacts for the feature — `spec.md` now, and `blueprint.html` later (step 6b) — live together in this one `specs/` folder so nothing scatters across the worktree root.
 
 Use this template. Fill every section concretely; do not leave `TODO`s.
 
@@ -210,21 +212,34 @@ Use this template. Fill every section concretely; do not leave `TODO`s.
 - ...
 ```
 
+### 6b. Emit the shareable HTML blueprint (`<worktree-root>/specs/blueprint.html`)
+
+After `specs/spec.md` is written, render a shareable, self-contained HTML view of it. **This step does not re-explore the codebase** — the spec already embodies the codegraph-grounded grill (`moose-grill`) + scout (`moose-scout`). Step 6b is a pure formatter.
+
+1. **Resolve the blueprint skill.** `BP=~/.claude/skills/blueprint`. If `BP/SKILL.md` is unreadable, warn (*"blueprint skill not found at `<BP>`; skipping HTML — spec.md is written"*) and skip the rest of 6b. **Never fail the skill over this optional artifact.**
+2. **Read the template, not the workflow.** Read `BP/SKILL.md` and lift its **Plan Template** (the `<!DOCTYPE html>…</html>` block) and its **Instructions** (self-containment, visual identity via `:root` CSS custom properties, `{{placeholder}}` rules, append-only metadata). **Do NOT execute** `BP/workflows/create-plan.md` steps 1–3 (Analyze / Explore / Design — generic `grep`/`Read`, no codegraph) or `BP/workflows/build-plan.md`. Use only its authoring/save mechanics.
+3. **Map spec → template** per [`references/spec-to-html.md`](references/spec-to-html.md). Fill **every** `{{placeholder}}`; duplicate `<!-- repeat -->` blocks per file / phase / task / test / reuse-finding / questionable; keep all CSS inline (no external links). **Preserve every `file:line` citation** from Reuse decisions verbatim. Set `created` via `date -u +%Y-%m-%dT%H:%M:%SZ`, set agent + session, back-ref `specs/spec.md`. Status markers stay `[]` (the build hasn't run). `QUESTIONABLE` defaults true → fill the Questionables section from the spec's open questions / deferred items.
+4. **Pair code with math, where it makes sense.** When the spec's Physics section gives **both** a MOOSE pseudocode form (e.g. a `computeQpResidual` expression like `_test[_i][_qp] * (...)`) **and** a math form, render them as a `.physics-pair` block (two columns: intended-`computeQpResidual()` code | the equation). Apply **only** to residual / Jacobian / contribution-computing overrides — never to `validParams`, registration, or plumbing. If the spec supplies only one half, don't fabricate the other. Write all math as `$$…$$` (display) or `\(…\)` (inline) **in prose, never inside `<pre>`/`<code>`**.
+5. **Save** the authored HTML to `<worktree-root>/specs/blueprint.html`.
+6. **Render the math (self-contained KaTeX).** Run `node <this skill's dir>/references/inline-katex.js <worktree-root>/specs/blueprint.html`. It pre-renders every `$$…$$` / `\(…\)` using MOOSE's vendored KaTeX (`<worktree>/moose/framework/doc/content/contrib/katex/`, no install) and base64-inlines the fonts → one offline self-contained file (~+450 KB). If KaTeX isn't found it degrades gracefully (LaTeX stays text) — don't fail the skill.
+7. **Self-check & open.** No `{{` outside image-slot comments; no external `http(s)` stylesheet/script links; math rendered (or text if KaTeX absent); all six spec sections present. Optionally `open` the file.
+
 ### 7. Stop
 
 Tell the user:
 
-> Spec written to `<worktree-root>/spec.md`. Review it, edit if needed, then run:
+> Spec written to `<worktree-root>/specs/spec.md`, and a shareable HTML view to `<worktree-root>/specs/blueprint.html`. Review the spec, edit if needed, then run:
 >
 > ```
-> /moose-build spec.md
+> /moose-build specs/spec.md
 > ```
 
 Do **not** auto-invoke `/moose-build`. The human review pass on the spec is load-bearing.
 
 ## Hard constraints
 
-- **Never edit code.** This skill writes one file: `spec.md`. Nothing else.
+- **Never edit code.** This skill writes only into `<worktree-root>/specs/`: `spec.md` (step 6) and `blueprint.html` (step 6b). Nothing else.
+- **The HTML step never re-explores.** Step 6b reads the blueprint skill's *template + Instructions only*; it must never run blueprint's generic Explore/Design (`create-plan.md` 1–3) or Build workflows — those bypass codegraph. All exploration is `moose-grill` + `moose-scout`.
 - **Never commit, push, or invoke `/moose-build`.** Hand-off is manual.
 - **Never run builds, tests, or formatters.** Spec phase only.
 - **Refuse outside a worktree.** No spec without `/new-feature` first.
@@ -244,3 +259,4 @@ Do **not** auto-invoke `/moose-build`. The human review pass on the spec is load
 - `moose-scout` agent — the CodeGraph-powered reuse scout this skill fans out in step 3; rates candidate matches structural / behavioral / naming.
 - `/moose-grill` — handles the base-class / contract / coupling / pitfalls grilling by exploring MOOSE's class hierarchy with codegraph. Step 2 of this skill delegates to it.
 - `grill-me` skill — generic grilling reference; this skill is MOOSE-axis-specific so it doesn't invoke grill-me directly.
+- `blueprint` skill (`~/.claude/skills/blueprint/SKILL.md`) — the HTML Plan Template + formatting Instructions that step 6b reads at runtime. Step 6b uses its *template only*, never its generic exploration/build workflows. See [`references/spec-to-html.md`](references/spec-to-html.md) for the spec→HTML mapping.

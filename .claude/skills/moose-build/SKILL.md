@@ -14,7 +14,7 @@ Take a structured `spec.md` (from `/moose-design-feature`) to **build clean + ne
 /moose-build [path/to/spec.md] [--core]
 ```
 
-- Defaults to `<worktree-root>/spec.md`. Spec format from `/moose-design-feature` (Summary / Physics / Reuse decisions / Test plan / Doc plan / Out of scope); freeform accepted with reduced fidelity.
+- Defaults to `<worktree-root>/specs/spec.md`. Spec format from `/moose-design-feature` (Summary / Physics / Reuse decisions / Test plan / Doc plan / Out of scope); freeform accepted with reduced fidelity.
 - `--core` = **slim mode**: skip the docs gate entirely (use when the feature adds no registered syntax and no doc page). Refuse `--core` if the spec's `## Doc plan` section says `**Needed:** yes`.
 - **Assumes the user already ran `/new-feature`** and is inside that worktree. Refuse otherwise.
 
@@ -34,7 +34,7 @@ Take a structured `spec.md` (from `/moose-design-feature`) to **build clean + ne
 
 ### 1. Read spec + compile the goal slice
 
-1. Resolve the spec path (arg or `<worktree-root>/spec.md`). Refuse if missing: *"No spec found. Run `/moose-design-feature` first."*
+1. Resolve the spec path (arg or `<worktree-root>/specs/spec.md`; also accept a legacy `<worktree-root>/spec.md` if the new path is absent). Refuse if missing: *"No spec found. Run `/moose-design-feature` first."*
 2. Detect the worktree root (walk up for a `.git` **file** beside a `moose/`+`blackbear/`+`isopod/` layout). Refuse if not in a feature worktree.
 3. Detect format: **structured** (the six headings) → parse directly; **freeform** → infer + one `AskUserQuestion` to confirm `{repo, kind, files, unit-tests, docs}`.
 4. Extract the **spec slice** for the loop: `repo`, `object_kind`, `files_to_touch`, `scope`, `reuse_decisions[]`, `test_plan[]` (Tester kind + asserted behavior + mutation rationale, verbatim), `out_of_scope[]`, `unit_on` (any `unit/` in files), `reuse_only` (every reuse decision is `Reuse as-is`).

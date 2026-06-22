@@ -42,6 +42,7 @@ No pairing prompt — every submodule always gets a feature-branch worktree. Use
 3. Create the meta-repo worktree on a new feature branch:
    ```bash
    git -C ~/projects/moose_stack worktree add ~/projects/<feature> -b <feature>
+   mkdir -p ~/projects/<feature>/specs   # home for spec.md + blueprint.html (see /moose-design-feature)
    ```
    This leaves submodule paths as empty directories (gitlinks only).
 4. For each of `moose`, `blackbear`, `isopod`, create a submodule worktree on a matching feature branch:
