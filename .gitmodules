@@ -7,3 +7,6 @@
 [submodule "isopod"]
 	path = isopod
 	url = https://github.com/maxnezdyur/isopod.git
+[submodule "marlin"]
+	path = marlin
+	url = https://github.com/maxnezdyur/marlin.git
