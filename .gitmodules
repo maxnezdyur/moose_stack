@@ -10,3 +10,6 @@
 [submodule "marlin"]
 	path = marlin
 	url = https://github.com/maxnezdyur/marlin.git
+[submodule "marlin-paper"]
+	path = marlin-paper
+	url = https://github.com/maxnezdyur/marlin-paper.git
