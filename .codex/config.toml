@@ -3,30 +3,42 @@ multi_agent = true
 
 [agents]
 max_threads = 10
-max_depth = 3
+max_depth = 1
 
   [agents.moose-code-reviewer]
-  description = "Review C++/Python diff hunks in a moose PR against MOOSE coding standards. Writes findings as JSON to a tempfile for the moose-pr-review orchestrator. Never posts to GitHub, never runs builds/tests, never edits source. Use only via the moose-pr-review skill."
+  description = "Review C++/Python diff hunks in a moose PR against MOOSE coding standards. Writes findings as JSON to a tempfile. Never posts to GitHub, never runs builds/tests, never edits source. Spawned as a nested child by the moose-pr-reviewer orchestrator agent (entry point: the moose-pr-review skill); not invoked directly."
   config_file = "agents/moose-code-reviewer.toml"
 
   [agents.moose-doc-reviewer]
-  description = "Review markdown (.md) changes in a moose PR against MOOSE documentation standards and basic prose clarity (spelling, sentence structure). Writes findings as JSON to a tempfile for the moose-pr-review orchestrator. Never posts to GitHub, never builds docs, never edits source. Use only via the moose-pr-review skill."
+  description = "Review markdown (.md) changes in a moose PR against MOOSE documentation standards and basic prose clarity (spelling, sentence structure). Writes findings as JSON to a tempfile. Never posts to GitHub, never builds docs, never edits source. Spawned as a nested child by the moose-pr-reviewer orchestrator agent (entry point: the moose-pr-review skill); not invoked directly."
   config_file = "agents/moose-doc-reviewer.toml"
 
   [agents.moose-docs-builder]
-  description = "Smoke-build the MooseDocs site for one of moose, blackbear, or isopod and report whether the build broke because of files in this branch's diff. Used as the final gate of /moose-build-feature, after the implementation loop is green and before team shutdown. Wraps the moose-docs-smoke skill and adds in-diff error filtering."
+  description = "Smoke-build the MooseDocs site for one of moose, blackbear, or isopod and report whether the build broke because of files in this branch's diff. Spawned as a nested child by the moose-docs-writer parent to gate its pages, or directly by the build lead for a code-only !syntax check when no docs were authored. Wraps the moose-docs-smoke skill and adds in-diff error filtering. Read-only: never authors, edits, or routes fixes itself."
   config_file = "agents/moose-docs-builder.toml"
 
   [agents.moose-docs-writer]
   description = "Author MooseDocs documentation pages (.md) for moose, blackbear, or isopod. Knows MOOSE doc standards, shortcode syntax, file-location rules, citation handling, and common pitfalls. Use when the user wants a new or rewritten doc page for a class, theory topic, module landing page, or SQA spec."
   config_file = "agents/moose-docs-writer.toml"
 
+  [agents.moose-feature-loop]
+  description = "Goal-driven autonomous build loop for ONE MOOSE feature in moose, blackbear, or isopod. Given a feature spec slice, it compiles a definition-of-done (build clean + each planned test green), then works unattended toward it — spawning moose-implementer / moose-test-writer / moose-unit-test-writer / moose-test-runner (and moose-scout for context) as nested children, assessing the runner's verdict each round, and routing fixes internally until every success criterion holds. Regenerates and stages gold autonomously (no pause; reviewed post-hoc). Returns GOAL_MET / NEEDS_DESIGN / BLOCKED / STALLED. Spawned by the /moose-build skill; never commits, builds, or edits files itself."
+  config_file = "agents/moose-feature-loop.toml"
+
   [agents.moose-implementer]
   description = "Write MOOSE-style C++/Python for moose, blackbear, or isopod. Knows MOOSE coding standards (ClangFormat, .C files, naming, const-correctness, range loops, member access, virtual destructors, etc.). Reads the assigned task, edits code, self-reviews against standards, reports DONE. Does NOT run tests, builds, or formatters."
   config_file = "agents/moose-implementer.toml"
 
+  [agents.moose-pr-reviewer]
+  description = "Orchestrator for moose PR review. Pulls the PR locally, classifies changed files into code/test/doc buckets, spawns the three reviewer sub-agents as nested children in parallel, merges their JSON, and posts a single GitHub PENDING review (draft comments). Never submits the review. Spawned by the moose-pr-review skill after the skill's main-thread pre-flight. Keeps all file-routing and JSON-merge glue out of the main conversation."
+  config_file = "agents/moose-pr-reviewer.toml"
+
+  [agents.moose-scout]
+  description = "CodeGraph-powered read-only reuse scout for moose, blackbear, and isopod. Given one search angle (or a teammate's context question), it finds code that may already implement the feature, opens each candidate and reads its actual residual/contribution code via CodeGraph, rates the match (structural / behavioral / naming), and returns `file_path:line`-cited findings — or an explicit \"no match\". Spawned per search-angle (`run_in_background: true`) by /moose-blueprint, directly by moose-implementer for one-shot reuse recon, and on a child's `NEEDS_CONTEXT` by the moose-feature-loop agent (under /moose-build). Read-only: never edits, builds, runs tests, or spawns other agents."
+  config_file = "agents/moose-scout.toml"
+
   [agents.moose-test-reviewer]
-  description = "Review test spec (`tests`), .i input, and gold/ changes in a moose PR against MOOSE test standards. Writes findings as JSON to a tempfile for the moose-pr-review orchestrator. Never posts to GitHub, never runs tests, never edits source. Use only via the moose-pr-review skill."
+  description = "Review test spec (`tests`), .i input, and gold/ changes in a moose PR against MOOSE test standards. Writes findings as JSON to a tempfile. Never posts to GitHub, never runs tests, never edits source. Spawned as a nested child by the moose-pr-reviewer orchestrator agent (entry point: the moose-pr-review skill); not invoked directly."
   config_file = "agents/moose-test-reviewer.toml"
 
   [agents.moose-test-runner]

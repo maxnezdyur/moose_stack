@@ -71,7 +71,7 @@ Then present a draft summary via `AskUserQuestion`: **Looks good — write it** 
 
 Authoring — a pure formatter over the grill plan, scout findings, and user decisions; **never re-explores the codebase** (codegraph already ran via grill + scout; the blueprint skill's generic Explore/Design/Build workflows would bypass it):
 
-1. `BP=~/.claude/skills/blueprint`. Read the HTML skeleton from `BP/references/plan-template.html` and the formatting rules from `BP/SKILL.md`'s **Plan conventions (all workflows)** section. Do NOT execute `BP/workflows/create-plan.md` steps 1–3 or `BP/workflows/build-plan.md`. If `BP` is unreadable, warn and author a plain self-contained HTML page instead — the six contract blocks are the deliverable; the template is only the visual identity.
+1. Read the HTML skeleton from this skill's own [`references/plan-template.html`](references/plan-template.html) — a pinned copy of the global blueprint template; no cross-skill reads at authoring time. If it's missing, warn and author a plain self-contained HTML page instead — the six contract blocks are the deliverable; the template is only the visual identity.
 2. Fill it per [`references/blueprint-format.md`](references/blueprint-format.md) — the authoritative contract-block schema, template slot mapping, `.physics-pair` code↔math pairing, metadata header, and offline KaTeX rendering (`node <this skill's dir>/references/inline-katex.js <worktree-root>/specs/blueprint.html`; uses MOOSE's vendored KaTeX, degrades gracefully to plain-text LaTeX).
 3. Save to `<worktree-root>/specs/blueprint.html`. Self-check: all six contract `id`s present and non-placeholder, no `{{` outside image-slot comments, no external `http(s)` stylesheet/script links, every `file:line` citation verbatim.
 

@@ -2,17 +2,16 @@
 
 Authoritative format for `/moose-blueprint` **step 6**. The inputs are the `moose-grill` plan,
 the merged `moose-scout` findings, and the user's recorded decisions; the output is the single
-deliverable `specs/blueprint.html`. The HTML skeleton and CSS come from the `blueprint` skill's
-`references/plan-template.html`, and the formatting rules from its SKILL.md's
-**Plan conventions (all workflows)** section — both read at runtime; this file does not
-duplicate them.
+deliverable `specs/blueprint.html`. The HTML skeleton and CSS come from this skill's own
+`references/plan-template.html` (a pinned copy of the global blueprint template); this file
+defines how to fill it.
 
 ## Hard rules (non-negotiable)
 
 - **Pure formatter — never re-explore.** Codegraph already ran (`moose-grill` + `moose-scout`)
-  to produce the plan. Step 6 only formats it. It must **never** run the blueprint skill's
-  `workflows/create-plan.md` steps 1–3 (Analyze / Explore / Design — generic grep, no codegraph)
-  nor `workflows/build-plan.md`. Read only the template + Plan conventions.
+  to produce the plan. Step 6 only formats it — read only the local template; never invoke the
+  generic blueprint skill's workflows (its Analyze / Explore / Design steps are generic grep,
+  no codegraph, and its build workflow belongs to /moose-build's territory).
 - **Fill every `{{placeholder}}`.** The only `{{...}}` allowed to remain in the output are the
   image-slot tokens *inside* `<!-- ... -->` comments (blueprint leaves these for manual fill).
 - **Self-contained.** All CSS inline; **no external `http(s)` stylesheet/script links**. Math is
@@ -98,6 +97,7 @@ Graceful degrade: if KaTeX isn't found, LaTeX is left as plain text (still a val
 
 ## Metadata header
 
+- Every field except `created` is an append-only comma-separated list — append on resume, never overwrite
 - `created` = `date -u +%Y-%m-%dT%H:%M:%SZ` at generation time; `modified` = same (initial)
 - `commits` = — (none at design time)
 - `agent name` = e.g. `Claude via /moose-blueprint`

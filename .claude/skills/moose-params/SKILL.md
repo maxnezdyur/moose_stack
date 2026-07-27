@@ -89,7 +89,7 @@ If the cache file is missing (yq complains), tell the user once:
 
 ```
 Cache missing. Run:
-  bash /Users/maxnezdyur/projects/moose_stack/.claude/skills/moose-params/refresh.sh <path-to-app-opt-binary>
+  bash /Users/maxnezdyur/projects/moose_stack/.agents/skills/moose-params/refresh.sh <path-to-app-opt-binary>
 ```
 
 Out of scope: choosing *which* object to pick (that's codegraph over the C++ source), auto-regenerating the cache, caring which binary produced it.

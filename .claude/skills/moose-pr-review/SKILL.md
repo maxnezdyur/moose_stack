@@ -49,5 +49,5 @@ Print the orchestrator's summary block verbatim, then end the turn. The PENDING 
 
 ## References
 
-- `.claude/agents/moose-pr-reviewer.md` — the orchestrator: checkout, classify, fan-out, merge, post. Trust its workflow.
-- `.claude/agents/moose-{code,test,doc}-reviewer.md` — the three nested reviewers (restricted tools, no `Agent`, so the tree bottoms out at depth 2).
+- The `moose-pr-reviewer` agent definition — the orchestrator: checkout, classify, fan-out, merge, post. Trust its workflow.
+- The `moose-code-reviewer` / `moose-test-reviewer` / `moose-doc-reviewer` agent definitions — the three nested reviewers (restricted tools, no `Agent`, so the tree bottoms out at depth 2).
