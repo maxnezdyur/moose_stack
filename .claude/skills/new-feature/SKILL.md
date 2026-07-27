@@ -1,6 +1,6 @@
 ---
 name: new-feature
-description: Scaffold a new moose_stack feature workspace — creates a meta-repo worktree with feature branches on all three submodules, a cloned conda env, and a bootstrapped CodeGraph index. Manual-invoke only.
+description: Scaffold a new moose_stack feature workspace — creates a meta-repo worktree with feature branches on all three submodules, a fresh conda env pinned to the checkout's moose-dev version, and a bootstrapped CodeGraph index. Manual-invoke only.
 disable-model-invocation: true
 allowed-tools:
   - Bash(git worktree *)
@@ -8,6 +8,7 @@ allowed-tools:
   - Bash(git -C *)
   - Bash(conda create *)
   - Bash(conda env list)
+  - Bash(yq *)
   - Bash(ls *)
   - Bash(rmdir *)
   - Bash(mkdir *)
@@ -18,7 +19,7 @@ allowed-tools:
 
 # /new-feature
 
-Scaffold a feature workspace: a meta-repo worktree with matching feature branches on the meta-repo and all three submodules (`moose`, `blackbear`, `isopod`), a cloned conda env, and a bootstrapped CodeGraph index. Every submodule always gets a worktree — no pairing prompt; matching branch names on all four repos let the meta-repo bump pointers cleanly later. Use the app(s) you need, leave the rest untouched.
+Scaffold a feature workspace: a meta-repo worktree with matching feature branches on the meta-repo and all three submodules (`moose`, `blackbear`, `isopod`), a fresh version-pinned conda env, and a bootstrapped CodeGraph index. Every submodule always gets a worktree — no pairing prompt; matching branch names on all four repos let the meta-repo bump pointers cleanly later. Use the app(s) you need, leave the rest untouched.
 
 ## Usage
 
@@ -58,11 +59,13 @@ On failure at any step, stop and report — do not partially tear down; the user
    cp    ~/projects/moose_stack/.codegraph/.gitignore   ~/projects/<feature>/.codegraph/.gitignore
    ( cd ~/projects/<feature> && codegraph sync . )   # re-parses only changed files; prunes files absent from the worktree
    ```
-   Copy only `codegraph.db` + `.gitignore` — never `daemon.sock`/`daemon.pid`/`*-wal`/`*-shm`; the new worktree spawns its own daemon on first `sync`. The DB stays gitignored and machine-local (it exceeds GitHub's 100 MB limit and goes stale immediately). This step is independent of the conda clone — safe to run concurrently with it.
-5. Conda env — never mutate the base `moose` env, always clone:
+   Copy only `codegraph.db` + `.gitignore` — never `daemon.sock`/`daemon.pid`/`*-wal`/`*-shm`; the new worktree spawns its own daemon on first `sync`. The DB stays gitignored and machine-local (it exceeds GitHub's 100 MB limit and goes stale immediately). This step is independent of the conda env — safe to run concurrently with it.
+5. Conda env — fresh, pinned to the moose-dev version this checkout needs (never clone, never mutate the base `moose` env). Read the version from the feature worktree's own moose — the same source the MOOSE install docs' `!versioner!` shortcode substitutes into `conda create -n moose moose-dev=<version>`:
    ```bash
-   conda create -n moose-<feature> --clone moose -y
+   yq -r '.packages."moose-dev".version' ~/projects/<feature>/moose/scripts/versioner.yaml   # e.g. 2026.05.08
+   conda create -n moose-<feature> moose-dev=<version> -c https://conda.software.inl.gov/public -y
    ```
+   MOOSE and its conda packages move in lockstep: if the branch later bumps `moose` to a commit whose `versioner.yaml` reports a different version, recreate the env with the new pin.
 6. Report: workspace path, env name, the four branches created, CodeGraph status (or skipped), and remind the user to `conda activate moose-<feature>`.
 
 ## Notes

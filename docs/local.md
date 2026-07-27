@@ -8,18 +8,19 @@ Per-feature env setup on a local machine. Pairs with [`../README.md`](../README.
 conda create -n moose moose-dev -c https://conda.software.inl.gov/public
 ```
 
-This is the shared base. Never modify it directly — clone it per feature.
+This is the shared base for day-to-day work in the meta-repo. Never modify it directly.
 
 ## Per-feature env
 
-After creating the feature worktrees per `../README.md`:
+After creating the feature worktrees per `../README.md`, create a fresh env pinned to the moose-dev version the checkout needs (read from the worktree's own moose — the same source MOOSE's install docs use):
 
 ```bash
-conda create -n moose-<feature> --clone moose
+yq -r '.packages."moose-dev".version' ~/projects/<feature>/moose/scripts/versioner.yaml
+conda create -n moose-<feature> moose-dev=<version> -c https://conda.software.inl.gov/public
 conda activate moose-<feature>
 ```
 
-Cloning isolates any `update_and_rebuild_*` runs from the base.
+A fresh pinned env matches the checkout exactly and isolates any `update_and_rebuild_*` runs from the base. MOOSE and its conda packages move in lockstep — if the branch bumps `moose` to a commit whose `versioner.yaml` reports a different version, recreate the env with the new pin.
 
 ## Build
 
