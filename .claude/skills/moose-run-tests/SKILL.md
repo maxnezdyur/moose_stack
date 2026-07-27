@@ -1,21 +1,19 @@
 ---
 name: moose-run-tests
-description: MOOSE ./run_tests cheat sheet — real CLI flags, common recipes, status taxonomy, skip-caveat decoder, manual gold regeneration workflow, capability gating, CIVET basics, debugging recipes, env vars, and a list of commonly assumed flags that don't actually exist. Auto-loads when running, debugging, or filtering MOOSE tests; also invocable as /moose-run-tests.
+description: MOOSE ./run_tests cheat sheet — real CLI flags, common recipes, status taxonomy, skip-caveat decoder, capability gating, CIVET basics, env vars, and a list of commonly assumed flags that don't actually exist. Auto-loads when running, debugging, or filtering MOOSE tests; also invocable as /moose-run-tests.
 user-invocable: true
 ---
 
 # MOOSE `./run_tests` Cheat Sheet
 
-Reference for running, filtering, debugging, and regenerating golds in `moose`, `moose/modules/<m>`, `blackbear`, `isopod`. For *authoring*, see **moose-test-standards** / **moose-unit-test-standards**.
-
-**Full flag list:** `./run_tests --help`. This skill covers only the gotchas, the workflows the CLI doesn't document, and flags people invent that don't exist.
+Flag/status reference for `moose`, `moose/modules/<m>`, `blackbear`, `isopod`. Procedures, failure diagnosis, and gold regeneration live in **moose-test-workflows**; authoring conventions in **moose-test-standards** / **moose-unit-test-standards**. Full flag list: `./run_tests --help` — this covers only the gotchas and the flags people invent.
 
 ## Where to run
 
 `run_tests` is a tiny Python shim and does NOT activate conda.
 
 ```bash
-conda activate moose
+conda activate moose   # in a /new-feature worktree: its moose-<feature> clone
 cd <app>/test          # or moose/modules/<m>/test, blackbear/, isopod/
 ./run_tests -j 2
 ```
@@ -28,8 +26,8 @@ The harness walks upward from CWD looking for a `testroot` file, then `os.walk`s
 
 ```bash
 ./run_tests -j 2                                 # full suite
-./run_tests --re=<name> -v --no-color -j 1       # one test, verbose, debuggable
-./run_tests --check-input --re=<name>            # parse-only, no solve
+./run_tests --re=<name> -v --no-color -j 1       # one test, verbose (-j 1 keeps stdout uninterleaved)
+./run_tests --check-input --re=<name>            # parse-only, no solve — fastest signal
 ./run_tests --failed-tests -j 2                  # rerun previous failures
 ./run_tests --show-last-run                      # replay results, no execution
 ./run_tests --dbg --re=<name> -v                 # dbg binary (mooseAssert fires)
@@ -68,36 +66,24 @@ Process exit is bitwise OR of failures.
 
 The `[bracket]` after a test name is the skip reason:
 
-| Caveat | Cause |
-|---|---|
-| `[Need petsc>=3.18]` etc. | `capabilities = '...'` check failed (text mirrors the expression) |
-| `[mesh_mode!=DISTRIBUTED]` | Spec restricts mesh mode |
-| `[HEAVY]` | `heavy = true` and `--heavy` not passed |
-| `[NO RECOVER]` / `[NO RESTEP]` | Spec opts out + that mode is active |
-| `[max_cpus=N]` / `[min_cpus=N]` | Parallel constraint |
-| `[ENV VAR NOT SET]` / `[ENV VAR SET]` | `env_vars` / `env_vars_not_set` |
-| `[NO DISPLAY]` | `display_required = true`, no `$DISPLAY` |
-| `[<sub> submodule not initialized]` | `required_submodule` |
-| `[no <prog>]` | `requires` not on PATH |
-| `[Max Fails Exceeded]` | Past `--max-fails` (this is FAIL, not SKIP) |
+| Caveat | Cause | Fix / override |
+|---|---|---|
+| `[Need petsc>=3.18]` etc. | `capabilities = '...'` check failed (text mirrors the expression) | Update build, or `--ignore-capability petsc` for one run |
+| `[mesh_mode!=DISTRIBUTED]` | Spec restricts mesh mode | `--distributed-mesh` |
+| `[HEAVY]` | `heavy = true` and `--heavy` not passed | `--heavy` |
+| `[NO RECOVER]` / `[NO RESTEP]` | Spec opts out + that mode is active | Drop the mode flag |
+| `[max_cpus=N]` / `[min_cpus=N]` | Parallel constraint | Adjust `-p` |
+| `[ENV VAR NOT SET]` / `[ENV VAR SET]` | `env_vars` / `env_vars_not_set` | Set/unset the var |
+| `[NO DISPLAY]` | `display_required = true`, no `$DISPLAY` | |
+| `[<sub> submodule not initialized]` | `required_submodule` | `git submodule update --init` |
+| `[no <prog>]` | `requires` not on PATH | Install / activate env |
+| `[Max Fails Exceeded]` | Past `--max-fails` (this is FAIL, not SKIP) | |
 
-Override: `--ignore` (drops all), `--ignore-capability NAME` (drops one, repeatable).
+`--ignore` drops all caveats; `--ignore-capability NAME` drops one (repeatable). Investigation aids, not permanent fixes.
 
-## Gold regeneration — manual workflow
+## Gold regeneration
 
-**No automation.** No `--copy-gold`, no `--update-golds`. Manual `cp`:
-
-```bash
-cd <app>/test/tests/<area>/<feature>
-./run_tests --re=<name> -v --no-color -j 1     # inspect diff; is new behavior correct?
-cp <feature>_out.e gold/<feature>_out.e        # repeat for every file in spec's exodiff='...'
-./run_tests --re=<name> -v --no-color -j 1     # confirm OK
-git add gold/ && git commit                    # separate commit, explain physics change
-```
-
-- `Outputs/file_base=foo` → gold is `gold/foo.<ext>` (no `_out`).
-- `RunException`/`RunApp` have no gold — edit `expect_err`/`expect_out`/`absent_out` instead.
-- Reproduce exodiff manually: `<MOOSE_DIR>/framework/contrib/exodiff/exodiff -m -F <abs_zero> -t <rel_err> gold/<f>.e <f>.e`.
+**No automation** — no `--copy-gold`, no `--update-golds`. Golds are copied by hand; end-to-end workflow in **moose-test-workflows**.
 
 ## Capability gating
 
@@ -119,25 +105,13 @@ INL's CI at `civet.inl.gov`. **No in-tree `.civet.yml` / `run_cmd.sh`** — reci
 
 CIVET → MooseDocs integration lives in `moose/python/MooseDocs/extensions/civet.py`, `moose/python/mooseutils/civet_results.py`, `moose/python/TestHarness/resultsstore/civetstore.py`.
 
-## Debugging common failures
-
-| Failure | Cause | Fix |
-|---|---|---|
-| Unknown `type =` | Tester unregistered / binary not built / wrong `app_name` | `make -j`; `--yaml` to list registered |
-| Tiny numeric DIFF | FP drift, parallel non-determinism | Re-run `-j 1`; if persistent, raise `rel_err`/`abs_zero` (column-scoped if possible) |
-| Large DIFF | Real algorithm change | Regenerate gold (workflow above) |
-| Parallel-only failure | Ghosting / race | `--pedantic-checks` to detect; reproduce with `-p N -v` |
-| `UNKNOWN/INVALID CAPABILITIES` | Stale binary post-pull | `make -j` (capability registry baked in) |
-| `Failed to import hit` | `$PYTHONPATH` interference, wrong env | `unset PYTHONPATH; conda activate moose` |
-
-For deeper diagnostics (DIFF triage, valgrind, recover-only failures, race detection, CIVET-only reproductions, gdb/lldb), see **moose-test-workflows**.
-
 ## Environment variables
 
 | Var | Effect |
 |---|---|
 | `MOOSE_DIR` | Roots the harness; auto-derived if unset |
 | `METHOD` | Default app suffix |
+| `MOOSE_TEST_MAX_TIME` | Override default 300s per-test timeout |
 | `MOOSE_TERM_FORMAT` | Output field codes (default `njcstm`; codes: `n`/`N` name, `j` dots, `c` caveats, `s` status, `p` padded pre-status, `t` time, `m` memory) |
 | `MOOSE_TERM_COLS` | Terminal width |
 | `MOOSE_MAX_MEMORY_PER_SLOT` | MB cap |

@@ -6,9 +6,7 @@ user-invocable: false
 
 # MOOSE Regression Test Standards
 
-Reference for authoring tests in `moose`, `moose/modules/<m>`, `blackbear`, `isopod`. Covers the `tests` HIT spec, the `.i` input, `gold/` outputs, and SQA traceability.
-
-For *running* tests, debugging, or regenerating golds: see **moose-run-tests**.
+Reference for authoring tests in `moose`, `moose/modules/<m>`, `blackbear`, `isopod`: the `tests` HIT spec, the `.i` input, `gold/` outputs, and SQA traceability. For running, debugging, or regenerating golds see **moose-run-tests** (flags) and **moose-test-workflows** (procedures).
 
 ## File layout
 
@@ -69,11 +67,15 @@ Optional: `detail` (sub-req text), `collections` (one of `FUNCTIONAL`/`USABILITY
 [ad]
   requirement = 'The system shall support Neumann BCs using AD'
   [test]
-    type = 'Exodiff'; input = '1d.i'; exodiff = '1d_out.e'
+    type = 'Exodiff'
+    input = '1d.i'
+    exodiff = '1d_out.e'
     detail = 'using a generated mesh.'
   []
   [from_cubit]
-    type = 'Exodiff'; input = 'cubit.i'; exodiff = 'cubit_out.e'
+    type = 'Exodiff'
+    input = 'cubit.i'
+    exodiff = 'cubit_out.e'
     detail = 'using an imported mesh.'
   []
 []
@@ -98,7 +100,7 @@ Children of a requirement-grouping parent must use `detail`, NOT their own `requ
 | `capabilities` | Boolean expr on build caps (`'petsc>=3.18 & vtk'`, `'method=opt'`). **Use this — NOT legacy `petsc_version`/`method`/`mumps`/`slepc_version`.** |
 | `allow_test_objects = true` | Required for test-only objects on module/app binaries. |
 | `working_directory` | chdir before running. |
-| `max_time` | Wall seconds (default 300). |
+| `max_time` | Wall seconds (default 300). Raise it (or set `heavy = true`) for long tests. |
 
 `RunApp`-derived also: `expect_out`/`absent_out`/`match_literal`/`errors`/`allow_warnings`/`allow_unused`/`allow_deprecated`. `FileTester`-derived (Exodiff/CSVDiff/CheckFiles/ImageDiff/AnalyzeJacobian): `gold_dir` (default `gold`), `abs_zero` (1e-10), `rel_err` (5.5e-6).
 
@@ -122,7 +124,7 @@ Children of a requirement-grouping parent must use `detail`, NOT their own `requ
 | `CSVValidationTester` | CSV vs measured data | `mean_limit`, `std_limit` |
 | `SignalTester` | Signal mid-run | `signal = 'SIGUSR1'` |
 
-**No `should_crash` on Exodiff** — that's `RunException`.
+**No `should_crash` on Exodiff** — expected failures are `RunException`.
 
 ## Gold conventions
 
@@ -186,29 +188,10 @@ Module tests cannot use `MooseTestApp` test objects — only those from their ow
 | `RunException` | `moose/test/tests/controls/time_periods/error/tests` |
 | `PythonUnitTest`/`MMSTest` | `moose/test/tests/linearfvkernels/advection/tests` |
 
-## Anti-patterns
+## Anti-patterns beyond the rules above
 
-- Missing `requirement`/`design`/`issues`, or `issues = '#000'`, or vague passive `requirement`.
-- Per-leaf `requirement` when parent + N `detail` children would do.
-- Child of grouping parent with its own `requirement`/`design`/`issues` (use `detail`).
-- `design` pointing at deleted/renamed `.md`; grep specs when renaming docs.
-- `detail` on top-level leaf (no parent requirement).
-- `deprecated = true` paired with any other SQA field.
-- Custom `collections` value outside the five standard ones.
-- Duplicate `requirement` text across specs.
-- Legacy `petsc_version`/`method`/`mumps` — use `capabilities`.
-- Re-stating `design`/`issues` on children when `[Tests]` already inherits.
-- Missing `recover = false` + `restep = false` on first leg of manual checkpoint chain.
-- Fabricated `input` paths or uncommitted gold files.
-- `should_crash` on Exodiff — use `RunException`.
-- Default `max_time` (300s) on a long test — raise it or set `heavy = true`.
-- Missing `allow_test_objects = true` for test-only objects on module/app binaries.
-- Mismatched gold naming after `Outputs/file_base=` override (`<file_base>.<ext>`, not `_out`).
-
-## Quick recipe
-
-```
-cd <app>/test
-./run_tests --re=<my_test> -v --no-color -j 1   # verbose single test
-./run_tests --check-input --re=<my_test>        # syntax-only
-```
+- Per-leaf `requirement` when a parent + N `detail` children would do; `detail` on a top-level leaf with no parent requirement.
+- Duplicate `requirement` text across specs; re-stating `design`/`issues` on children the `[Tests]` block already covers.
+- Vague, passive `requirement` wording.
+- `design` pointing at a deleted/renamed `.md` — grep specs whenever renaming doc pages.
+- Fabricated `input` paths.

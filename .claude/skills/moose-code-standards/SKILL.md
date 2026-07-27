@@ -1,17 +1,13 @@
 ---
 name: moose-code-standards
-description: MOOSE coding standards (C++ and Python) for moose, blackbear, isopod. Preloaded into the moose-implementer agent.
+description: MOOSE coding standards (C++ and Python). Auto-loads when writing or editing C++/Python source in moose, blackbear, or isopod. Preloaded into the moose-implementer, moose-code-reviewer, and moose-unit-test-writer agents.
 user-invocable: true
 ---
 
 # MOOSE Code Standards
 
-This skill provides coding standards for the MOOSE stack (`moose`, `blackbear`, `isopod` — same standards apply to all three).
-
-The standards live in the `moose` submodule and are kept up to date upstream. Always read the canonical file directly:
+One canonical source, maintained upstream and shared by all three repos — read it directly rather than working from remembered standards:
 
 **`moose/framework/doc/content/sqa/framework_scs.md`** (relative to the meta-repo root)
 
-Read it in full before writing or editing code, and apply every item.
-
-If the file is missing (e.g. submodule not checked out), report this and stop — do not fall back to remembered standards.
+If the file is missing (submodule not checked out), report that and stop — do not substitute remembered standards.

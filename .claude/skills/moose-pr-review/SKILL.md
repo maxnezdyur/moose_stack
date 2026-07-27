@@ -6,7 +6,7 @@ user-invocable: true
 
 # MOOSE PR Review (pre-flight + nested orchestrator)
 
-Review a moose PR with three sonnet reviewers in parallel — but keep all the orchestration glue out of the main conversation. This skill is thin: it does only the parts that need the user (pre-flight checks), then spawns ONE `moose-pr-reviewer` agent that owns the heavy work.
+Thin main-thread skill: it does only the parts that need the user (pre-flight), then spawns ONE `moose-pr-reviewer` agent that owns checkout, file classification, the parallel reviewer fan-out, JSON merge, 422 retry handling, and the PENDING POST. The diff, file lists, and per-reviewer JSON never enter this conversation — only the orchestrator's summary block returns.
 
 ```
 main thread (this skill)        →  parse + dirty-tree guard + PR-state check
@@ -16,37 +16,18 @@ main thread (this skill)        →  parse + dirty-tree guard + PR-state check
        └─ moose-doc-reviewer    →  .md + prose  (preloads moose-doc-standards)
 ```
 
-The orchestrator and the three reviewers each own their own context. The diff, file lists, and per-reviewer JSON never reach this conversation — only the orchestrator's final summary block does.
+Target repo: `idaholab/moose` only — refuse anything else with `This skill only reviews idaholab/moose PRs.` Accept a bare number, `idaholab/moose#N`, or a PR URL; if no argument, ask once for one.
 
-## Scope
+## Pre-flight (main thread — needs the user)
 
-Target repo: `idaholab/moose` only. Refuse non-moose URLs with a one-line message.
+1. Extract the PR number.
+2. From the meta-repo root, `cd moose`; `git status --porcelain` — any output → STOP and tell the user to commit or stash. Never auto-stash or force-checkout: the orchestrator will `gh pr checkout` and would clobber local work.
+3. `gh pr view <PR#> --json number,title,author,baseRefName,headRefName,headRepository,state,url` — confirm `state == "OPEN"` and the head repo is a fork of `idaholab/moose`. If closed/merged, ask once whether to proceed anyway.
+4. Save the JSON to `/tmp/moose-pr-<PR#>-meta.json` — the orchestrator reads it and forwards it into each reviewer.
 
-## Arguments
+## Hand off
 
-Free-text identifying the PR. Accept any of:
-
-- `30123`
-- `idaholab/moose#30123`
-- `https://github.com/idaholab/moose/pull/30123`
-
-If no argument, ask once for a PR number/URL, then proceed.
-
-## Workflow
-
-### 1. Parse and pre-flight (main thread — this needs the user)
-
-- Extract the PR number. If the input names a non-moose repo, stop with: `This skill only reviews idaholab/moose PRs.`
-- From the meta-repo root, `cd moose`.
-- `git status --porcelain` — if any output, **STOP** and tell the user to commit or stash. Never auto-stash, never `git checkout -f`.
-- `gh pr view <PR#> --json number,title,author,baseRefName,headRefName,headRepository,state,url` — confirm `state == "OPEN"` and the head repo is a fork of `idaholab/moose`. If closed/merged, ask the user once whether to proceed anyway.
-- Save the JSON to `/tmp/moose-pr-<PR#>-meta.json` (the orchestrator reads it and forwards it into each reviewer).
-
-These are the only steps that talk to the user. Everything past this point is non-interactive and runs in the orchestrator agent.
-
-### 2. Hand off to the orchestrator
-
-Spawn the `moose-pr-reviewer` agent **once** via `Agent` (`subagent_type: "moose-pr-reviewer"`, foreground). Prompt:
+Spawn exactly one `moose-pr-reviewer` via `Agent` (`subagent_type: "moose-pr-reviewer"`, foreground) — never the three reviewers directly, which would pull their routing back into main context, the thing this design removes. Prompt:
 
 ```
 Orchestrate the review of moose PR #<PR#>.
@@ -60,24 +41,13 @@ spawn the three reviewers as nested children in parallel, merge their JSON,
 post a PENDING review (no event field), and return your summary block.
 ```
 
-The orchestrator does the checkout, bucketing, parallel reviewer fan-out, JSON merge, 422 retry handling, and the PENDING POST. It cannot ask the user, so it resolves partial-reviewer-failures autonomously and notes them in its summary.
+The orchestrator can't reach the user; it resolves partial reviewer failures autonomously and notes them in its summary. A reviewer producing zero findings is a valid result. Physics/numerics correctness audits are out of scope — the reviewers enforce this.
 
-### 3. Relay the summary and stop
+## Relay and stop
 
-Print the orchestrator's returned summary block verbatim, then end the turn.
+Print the orchestrator's summary block verbatim, then end the turn. The PENDING review is the deliverable: neither you nor the orchestrator ever submits — no `event` field on the POST, no `gh pr review --approve|--comment|--request-changes` — and don't ask whether to submit or offer follow-ups about review state. The user submits from the GitHub UI.
 
-**Do NOT ask whether to submit.** **Do NOT call `gh pr review --approve|--comment|--request-changes`.** **Do NOT offer follow-ups about review state.**
-
-## Hard rules
-
-- Pending review is the deliverable. The orchestrator never sets `event` on the POST and never calls `gh pr review` with a submit flag. Neither do you.
-- Pre-flight refuses on a dirty tree. No auto-stash, no force-checkout.
-- Spawn exactly ONE `moose-pr-reviewer`; it spawns the three reviewers as its own children. Do not spawn the reviewers from here — that would pull their routing back into main context, which is the thing this design removes.
-- The orchestrator and reviewers own all heavy reads (standards, full file contents, full diff) and the POST. This skill only handles pre-flight and relays the summary.
-- A reviewer producing zero findings is a valid result — it appears in the summary with zero counts.
-- Out of scope: physics/numerics correctness audits. The reviewers already enforce this.
-
-## Canonical references
+## References
 
 - `.claude/agents/moose-pr-reviewer.md` — the orchestrator: checkout, classify, fan-out, merge, post. Trust its workflow.
 - `.claude/agents/moose-{code,test,doc}-reviewer.md` — the three nested reviewers (restricted tools, no `Agent`, so the tree bottoms out at depth 2).

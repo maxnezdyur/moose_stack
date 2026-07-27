@@ -6,16 +6,14 @@ user-invocable: false
 
 # MOOSE Unit Test Standards
 
-Reference for authoring gtest-based unit tests in `moose/unit/`, `moose/modules/<m>/unit/`, `blackbear/unit/`, and `isopod/unit/`. Apply whenever editing a `*Test.C`/`*Test.h` file under any `unit/` directory.
-
-For *regression* tests (`tests` HIT specs + `.i` inputs + gold), see **moose-test-standards**. For running anything, see **moose-run-tests**.
+Reference for authoring gtest-based unit tests in `moose/unit/`, `moose/modules/<m>/unit/`, `blackbear/unit/`, and `isopod/unit/`. For *regression* tests (`tests` HIT specs + `.i` inputs + gold), see **moose-test-standards**. For running anything, see **moose-run-tests**.
 
 ## Layout
 
 ```
 <repo>/unit/
   Makefile         # builds <name>-unit-opt
-  run_tests        # 30-line shell wrapper around the binary
+  run_tests        # shell wrapper around the binary
   src/             # *.C — one file per logical unit
     main.C
     base/<Name>UnitApp.C
@@ -32,11 +30,11 @@ Module unit tests follow the same shape under `moose/modules/<m>/unit/` and prod
 
 - One source file per class/area: `<ThingUnderTest>Test.C`. e.g. `LinearInterpolationTest.C`, `MathUtilsTest.C`.
 - Fixture class lives in matching `.h` (e.g. `ParsedFunctionTest.h` declares `class ParsedFunctionTest : public MooseObjectUnitTest`).
-- `TEST(<ThingUnderTest>Test, <action>)` — first arg is conventionally the same `<ThingUnderTest>Test` string.
+- `TEST(<ThingUnderTest>Test, <action>)` — first arg matches the file base (mismatches make `--gtest_filter` confusing).
 
 ## Build system
 
-`moose/unit/Makefile` differs from a regular MOOSE app Makefile in three ways:
+`moose/unit/Makefile` differs from a regular MOOSE app Makefile:
 
 - Adds `-DMOOSE_UNIT_TEST` to `ADDITIONAL_CPPFLAGS`.
 - Adds `gtest` to `ADDITIONAL_INCLUDES` and links against `framework/contrib/gtest/libgtest.la`.
@@ -60,7 +58,7 @@ Meta-app Makefiles (`blackbear/unit/Makefile`) flag-flip every module they depen
     ./moose-unit-opt --gtest_filter=MooseUtils.*    # direct gtest call
     METHOD=dbg ./run_tests                          # use dbg binary
 
-`unit/run_tests` is a 30-line shell wrapper that just `exec`s the binary. There is **no** `tests` HIT spec file in `unit/` — gtest discovers tests at runtime.
+`unit/run_tests` is a tiny shell wrapper that just `exec`s the binary — it is NOT the TestHarness Python `run_tests`, and there is no `tests` HIT spec in `unit/`; gtest discovers tests at runtime.
 
 ## `main.C` — every unit binary has one
 
@@ -78,7 +76,7 @@ GTEST_API_ int main(int argc, char ** argv)
 
 The two flag flips are load-bearing: they turn `mooseError` and `mooseWarning` into exceptions (`MooseRuntimeError`) so `EXPECT_THROW`/`EXPECT_MOOSEERROR_MSG_CONTAINS` work. Without them, `mooseError` would `abort()` the process.
 
-`mooseAssert` is **not** affected by these flags — it's debug-only and aborts. You cannot test an `mooseAssert`-protected path with `EXPECT_THROW`.
+`mooseAssert` is **not** affected by these flags — it's debug-only and aborts, so an `mooseAssert`-protected path can't be tested with `EXPECT_THROW`. Use `EXPECT_DEATH` (rare in MOOSE) or skip the negative-path test.
 
 ## Fixtures — two of them, no others
 
@@ -96,7 +94,7 @@ public:
 };
 ```
 
-Pass the registered MOOSE app name to the base ctor (`"MooseUnitApp"`, `"FluidPropertiesApp"`, `"HeatTransferApp"`, ...).
+Pass the registered MOOSE app name to the base ctor (`"MooseUnitApp"`, `"FluidPropertiesApp"`, `"HeatTransferApp"`, ...) — a typo is a runtime error, not a compile error.
 
 ### `MFEMObjectUnitTest`
 
@@ -141,11 +139,10 @@ _fe_problem->addFunction("ParsedFunction", "test0", params);
 auto & f = _fe_problem->getFunction("test0");
 ```
 
-Steps: `getValidParams(type)` from the factory → mutate → `_fe_problem->addX(type, name, params)` → fetch via `getX<T>(name)`.
+Steps: `getValidParams(type)` from the factory → mutate → `_fe_problem->addX(type, name, params)` → fetch via `getX<T>(name)`. Same shape for `addUserObject`/`getUserObject<T>`, and for kernels via `addObject<T>`.
 
-Same shape for `addUserObject`/`getUserObject<T>`, and for kernels via `addObject<T>`.
-
-**Don't `new MooseObject(...)` directly.** Registration and lifecycle break.
+- The `_fe_problem`/`_fe_problem_base` private params are load-bearing: many classes (parsed functions, etc.) read them from `InputParameters`, and omitting them null-derefs at runtime instead of erroring cleanly.
+- **Don't `new MooseObject(...)` directly** — the warehouse owns the object; direct construction breaks registration and lifecycle.
 
 ## Reference unit tests — read one before authoring
 
@@ -162,15 +159,9 @@ Same shape for `addUserObject`/`getUserObject<T>`, and for kernels via `addObjec
 
 ## Pitfalls
 
-1. **`mooseAssert` ≠ throwable.** It aborts even with `_throw_on_error = true`. You can't test it with `EXPECT_THROW`. Either use `EXPECT_DEATH` (rare in MOOSE) or skip the negative-path test.
-2. **Forgetting `_fe_problem`/`_fe_problem_base` private params.** Many classes (parsed functions, etc.) read these from `InputParameters`. Forgetting them causes a null-deref at runtime instead of a clean error.
-3. **Memory ownership.** Always go through `_fe_problem->addX(...)` or `_factory.create...`. The warehouse owns the object. `new MooseObject(...)` directly breaks lifecycle.
-4. **`SetUp()` spelling.** gtest looks for `void SetUp() override;`. `setUp` (camelCase) silently disables the hook. Always include `override`.
-5. **Tests that mutate global state.** `Registry`, `AppFactory`, `CapabilityRegistry`, `Moose::_throw_on_error`/`_throw_on_warning` outlive any single test. Tests that flip them must restore (or use `Moose::ScopedThrowOnError`).
-6. **Module unit binary scope.** A test in `heat_transfer/unit/` cannot include solid_mechanics types unless the module Makefile enables them. Check the Makefile's module flags before adding cross-module dependencies.
-7. **`run_tests` (this dir, gtest wrapper) ≠ `run_tests` (TestHarness Python).** They're different scripts. Unit `run_tests` is a tiny shell file with no spec parsing.
-8. **App name typo in fixture ctor.** `MooseObjectUnitTest("MooseUnitApp")` — must match a registered app. A typo gives a runtime error, not a compile error.
-9. **`TEST` first arg should match the file base.** Convention: `TEST(LinearInterpolationTest, sample)` lives in `LinearInterpolationTest.C`. Mismatches make `--gtest_filter` confusing.
+1. **`SetUp()` spelling.** gtest looks for `void SetUp() override;`. `setUp` (camelCase) silently disables the hook. Always include `override`.
+2. **Tests that mutate global state.** `Registry`, `AppFactory`, `CapabilityRegistry`, `Moose::_throw_on_error`/`_throw_on_warning` outlive any single test. Tests that flip them must restore (or use `Moose::ScopedThrowOnError`).
+3. **Module unit binary scope.** A test in `heat_transfer/unit/` cannot include solid_mechanics types unless the module Makefile enables them. Check the Makefile's module flags before adding cross-module dependencies.
 
 ## Unit vs regression — when to write which
 

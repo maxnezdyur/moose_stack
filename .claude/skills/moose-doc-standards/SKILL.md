@@ -6,7 +6,7 @@ user-invocable: false
 
 # MOOSE Documentation Standards
 
-Reference and pitfalls for authoring `.md` pages under `<repo>/doc/content/` in moose, blackbear, and isopod. Apply these whenever editing or creating a doc page.
+Reference and pitfalls for authoring `.md` pages under `<repo>/doc/content/` in moose, blackbear, and isopod.
 
 ## File location
 
@@ -33,10 +33,10 @@ Reference and pitfalls for authoring `.md` pages under `<repo>/doc/content/` in 
     !syntax inputs /<Base>/ClassName
     !syntax children /<Base>/ClassName
 
-- **H1 matches the C++ class name exactly.** AD/non-AD pair → `# Class / ADClass` on one page.
-- `!syntax description` pulls `addClassDescription` from C++. Missing → renders red; fix C++.
+- **H1 matches the C++ class name exactly** — every `!syntax` call on the page breaks otherwise. AD/non-AD pair → `# Class / ADClass` on one page, never two pages.
+- `!syntax description` pulls `addClassDescription` from C++. Missing → renders red; fix the C++.
 - `!syntax parameters/inputs/children` trailer is standard. Don't omit.
-- Inline param refs: `[!param](/Kernels/ClassName/variable)`. Typos trigger Levenshtein suggestions.
+- Inline param refs: `[!param](/Kernels/ClassName/variable)`. Typos trigger Levenshtein suggestions in the build log.
 
 ## Math
 
@@ -54,20 +54,20 @@ Reference and pitfalls for authoring `.md` pages under `<repo>/doc/content/` in 
 | `!listing path/file.py end=ft` | End at first match |
 | `!listing path/file.C re=... re-flags=re.M\|re.S\|re.U` | Regex extraction |
 
-**`block=` is `.i`/`.hit` only.** For `.C`/`.py` use `start=`/`end=`/`re=`.
+**`block=` is `.i`/`.hit` only** — on other file types it is silently ignored; use `start=`/`end=`/`re=`.
 
-**Always use `!listing` for real test inputs — never paste them as inline fenced code blocks.** A fenced HIT snippet copied into the doc is a static fork of the input that drifts the moment the test changes (params renamed, blocks restructured, defaults updated). `!listing` re-extracts on every build, so the page stays correct. If the snippet you want isn't a discrete sub-block, slice it with `start=`/`end=` rather than pasting. The only time inline fenced HIT is acceptable is a tiny illustrative fragment that has no corresponding test input — and per pitfall #13 you should usually drop that to prose instead.
+Always reference real test inputs with `!listing`, never inline fenced HIT: a pasted snippet is a static fork that drifts silently when the test changes, while `!listing` re-extracts on every build. Slice with `start=`/`end=` if the piece isn't a discrete block. Inline fenced HIT is acceptable only for a tiny illustrative fragment with no corresponding test input — and if no real test input exists, omit the example (or write the test first) rather than fabricate one.
 
 ## Citations
 
-- `[!cite](key)` narrative; `[!citep](k1, k2)` parenthetical; `[!citet](key)` textual.
-- `!bibtex bibliography` controls placement. Without it the extension auto-appends `## References`.
+- `[!cite](key)` narrative; `[!citep](k1, k2)` parenthetical; `[!citet](key)` textual. Typos render red.
+- `!bibtex bibliography` controls placement. Without it the extension auto-appends `## References` — possibly in the wrong spot.
 - Bibs auto-discovered tree-wide. Dup keys warn unless allowlisted in `config.yml` `bibtex.duplicates`.
 
 ## Cross-references
 
 - Sibling: `[Class.md]` (autolink).
-- Absolute virtual path: `[/Kernels/index.md]` — use when bare names collide.
+- Absolute virtual path: `[/Kernels/index.md]` — use when bare names collide across content roots.
 - Section anchor: `## Heading id=foo` → `[#foo]` / `[Page.md#foo]`.
 - Shortcut alias: `[Kernels]` (resolves via `framework/doc/globals.yml`).
 - Optional: `[help/contact_us.md optional=True]`.
@@ -81,7 +81,7 @@ Cross-ref via `[!ref](fig-foo)`.
 
 ## Alerts
 
-`!alert <brand>` — `error`, `warning`, `note`, `tip`. Block: `!alert! note title=Foo` … `!alert-end!`. **`construction` is reserved for auto-stubs — don't use manually.**
+`!alert <brand>` — `error`, `warning`, `note`, `tip`. Block: `!alert! note title=Foo` … `!alert-end!`. **`construction` is reserved for auto-stubs — never use it manually.**
 
 ## Module landing pages
 
@@ -94,23 +94,13 @@ Cross-ref via `[!ref](fig-foo)`.
 
 Theory-heavy pages: end with `!syntax complete groups=YourApp level=3`.
 
-## SQA test specs
+## Doc ↔ test coupling
 
-Every test block needs:
-
-    [./mytest]
-      type = ...
-      input = ...
-      requirement = 'The system shall <do something>'
-      design = 'MyClass.md'
-      issues = '#13736'
-    [../]
-
-"shall" wording is conventional. `design` must point to a real page. `issues = '#000'` only when no issue exists.
+Tests specs point at doc pages via `design = 'MyClass.md'` (suffix-matched). Renaming or moving a page silently breaks SQA traceability — grep the tests specs when you rename. Full spec standards: **moose-test-standards**.
 
 ## Templates
 
-- **Stubs** at `framework/doc/content/templates/stubs/` — written by `./moosedocs.py generate <App>`. The `!alert construction title=Undocumented Class` block marks them; replace it.
+- **Stubs** at `framework/doc/content/templates/stubs/` — written by `./moosedocs.py generate <App>`. The `!alert construction title=Undocumented Class` block marks them; replace it (`moosedocs.py check` flags unreplaced stubs).
 - **SQA templates** at `framework/doc/content/templates/sqa/` — `!template load file=sqa/srs.md.template ...` then `!template! item key=...`.
 
 ## Reference pages — read one before authoring
@@ -130,7 +120,9 @@ Every test block needs:
 
 ## ASCII only — no smart quotes, em dashes, NBSP
 
-Every byte in a `.md` page must be 7-bit ASCII. AI output, web-copy, and "smart" editor autocorrect inject lookalikes that render fine but later trip grep, regex slicing in `!listing re=...`, citation key matching, CIVET tooling, and string compares. They're invisible in most editors. Treat any non-ASCII byte as a defect.
+Every byte in a `.md` page must be 7-bit ASCII (`.bib` files are exempt — author diacritics are legitimate). Non-ASCII lookalikes render fine and are invisible in most editors, but later break grep, `!listing re=...` slicing, citation key matching, CIVET tooling, and string compares. They arrive via paste (PDFs, web pages, AI prose) and editor Smart Quotes/Dashes autocorrect — disable those for `.md`, and scan touched files before commit (from repo root):
+
+    grep -rnP '[^\x00-\x7F]' --include='*.md' doc/
 
 | Banned char | U+ | Replace with |
 |---|---|---|
@@ -144,35 +136,11 @@ Every byte in a `.md` page must be 7-bit ASCII. AI output, web-copy, and "smart"
 | zero-width space | 200B | delete |
 | byte-order mark | FEFF | delete |
 
-Detect before commit (run from repo root):
+## Build pitfalls
 
-    grep -rnP '[^\x00-\x7F]' --include='*.md' doc/
-
-Most common entry vectors: pasting from a paper PDF, AI-generated prose (em dashes, smart quotes), macOS "Smart Quotes" / "Smart Dashes" autocorrect, copy from rendered web pages.
-
-When **authoring** a page (not just editing): type ASCII deliberately. Don't trust your editor to leave `"` and `'` as ASCII — disable Smart Quotes / Smart Dashes for `.md` files. When **pasting** anything from outside the repo, run the grep above on the touched files immediately, before any other edits, so the diff localises offenders.
-
-(Bibtex `.bib` files are exempt — author diacritics are legitimate. The rule is `.md` only.)
-
-## Pitfalls — common ways pages break
-
-1. **Missing `addClassDescription`** → `!syntax description` red. Fix C++.
-2. **Stub never replaced** — `!alert construction title=Undocumented Class` blocks flagged by `check`. Replace.
-3. **`block=` on non-`.i`** silently ignored. Use `start=`/`end=`/`re=`.
-4. **Citation typos** render red. Dup keys warn unless allowlisted.
-5. **No `!bibtex bibliography`** auto-appends `## References` — placement may be wrong.
-6. **Bare-filename autolink ambiguity** when two roots share a filename → use `/Absolute/Path.md`.
-7. **`[!param]` typos** trigger Levenshtein suggestions. Fix them.
-8. **Stale binary breaks site-wide.** `appsyntax` runs `<exe> --json --allow-test-objects`. Rebuild first.
-9. **Extension order:** `appsyntax` must come *after* `katex` in `config.yml`.
-10. **`--fast` disables `appsyntax`** — `!syntax` blocks won't render. Drop `--fast` for final preview.
-11. **H1 ≠ C++ class name** breaks every `!syntax` call on the page.
-12. **AD pair split across two pages** — wrong. Use `# Class / ADClass`.
-13. **No real test input** — don't fabricate. Omit the example or write a test first.
-14. **SQA fields missing** fail `check`. `issues = '#000'` only as last resort.
-15. **Manual `!alert construction`** — reserved for auto-stubs.
-16. **Inlined HIT instead of `!listing`** — pasting fenced HIT from a real test input forks the snippet from its source; it goes stale silently. Reference the test input with `!listing ... block=...` (or `start=`/`end=`) so rebuilds re-extract.
-17. **Non-ASCII bytes** — smart quotes, em/en dashes, NBSP, zero-width space leak in via copy-paste or AI output. They render fine but break grep, `!listing re=...`, citation matching, and string compares later. See "ASCII only" above; scan with `grep -rnP '[^\x00-\x7F]' --include='*.md' doc/` before commit.
+- **Stale binary breaks the site.** `appsyntax` runs `<exe> --json --allow-test-objects` — rebuild the app before building docs.
+- **Extension order:** `appsyntax` must come *after* `katex` in `config.yml`.
+- **`--fast` disables `appsyntax`** — `!syntax` blocks won't render. Drop `--fast` for the final preview.
 
 ## Build / preview
 

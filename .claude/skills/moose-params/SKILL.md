@@ -14,25 +14,23 @@ model: haiku
 
 # moose-params
 
-Look up the YAML node for an exact MOOSE object type name. The user has already provided arguments as `$ARGUMENTS` — do **not** ask them for clarification.
+Look up the YAML node for an exact MOOSE object type name. Arguments arrive as `$ARGUMENTS` — never ask the user for clarification (this runs in a forked context).
 
-## Step 1 — parse `$ARGUMENTS`
+## Parse `$ARGUMENTS`
 
-Split `$ARGUMENTS` on whitespace. The first token is always the type name. The second token, if present, picks the mode:
+Split on whitespace. First token is the type name; the second, if present, picks the mode:
 
-| Tokens                            | Mode      | Notes                                       |
-|-----------------------------------|-----------|---------------------------------------------|
-| `<TypeName>`                      | `lean`    | one token only                              |
-| `<TypeName> --full`               | `full`    | exact flag `--full`                         |
-| `<TypeName> <ParamName>`          | `param`   | second token is the parameter name; must not start with `--` |
+| Tokens                   | Mode    | Notes                                                        |
+|--------------------------|---------|--------------------------------------------------------------|
+| `<TypeName>`             | `lean`  | one token only                                               |
+| `<TypeName> --full`      | `full`  | exact flag `--full`                                          |
+| `<TypeName> <ParamName>` | `param` | second token is the parameter name; must not start with `--` |
 
-If `$ARGUMENTS` is empty, output exactly `ERROR: usage is /moose-params <TypeName> [<ParamName> | --full]` and stop.
+Empty `$ARGUMENTS`, three or more tokens, or a `--` flag other than `--full` → output exactly `ERROR: usage is /moose-params <TypeName> [<ParamName> | --full]` and stop.
 
-Three or more tokens, or a second token that starts with `--` but isn't `--full` → error with the same usage line.
+## Run exactly one command
 
-## Step 2 — run the matching command
-
-Run **exactly one** of the three commands below — pick by mode. Substitute `$TYPE` with the type name from step 1, and (in param mode) `$PARAM` with the parameter name (the second token).
+Substitute `$TYPE` (and `$PARAM` in param mode).
 
 ### Mode `lean` (default)
 
@@ -83,22 +81,15 @@ yq -y --arg name "$TYPE" --arg param "$PARAM" '
 ' /Users/maxnezdyur/projects/moose_stack/.claude/cache/syntax.yaml
 ```
 
-## Step 3 — emit
+## Emit
 
-Print stdout in a fenced ```yaml block, verbatim. No summary, no commentary, no HIT block synthesis.
+Print stdout verbatim in a fenced ```yaml block — no summary, no HIT block synthesis. On non-zero exit, print stderr verbatim and stop: no retry, no fallback to substring search. Exact-match-only is the contract; fuzzy results would let callers "verify" types that don't exist.
 
-If the command exits non-zero, print stderr verbatim and stop. Do not retry, do not fall back to substring search, do not ask clarifying questions.
-
-If the cache file does not exist (yq complains about missing file), tell the user once:
+If the cache file is missing (yq complains), tell the user once:
 
 ```
 Cache missing. Run:
   bash /Users/maxnezdyur/projects/moose_stack/.claude/skills/moose-params/refresh.sh <path-to-app-opt-binary>
 ```
 
-## Out of scope
-
-- Choosing *which* object to pick — search the C++ source with codegraph (`codegraph_explore`).
-- Substring/fuzzy match.
-- Auto-regenerating the cache.
-- Caring which binary produced the cache.
+Out of scope: choosing *which* object to pick (that's codegraph over the C++ source), auto-regenerating the cache, caring which binary produced it.
