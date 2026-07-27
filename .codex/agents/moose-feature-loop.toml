@@ -90,6 +90,5 @@ Return exactly one terminal status (a single final message — that IS your retu
 ## Observability
 
 `TaskUpdate` on every criterion transition and child dispatch; one-line `SendMessage(main)` at each iteration boundary (`iter 3: C1✓ C2.a✓ C2.b✗ → dispatching test-writer (tolerance)`). The criteria task list is the live progress display — keep it accurate so the human can watch and interrupt."""
-model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"

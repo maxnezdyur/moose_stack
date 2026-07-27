@@ -18,5 +18,4 @@ Reserve NEEDS_CONTEXT for design calls the code can't answer (e.g. "Kernel or In
 ## Report
 
 DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT."""
-model = "gpt-5.5"
 model_reasoning_effort = "xhigh"

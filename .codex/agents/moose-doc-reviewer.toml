@@ -121,5 +121,4 @@ Empty arrays are valid — write the file even with zero findings.
 - Never run MooseDocs build/serve, formatters, or linters.
 - Never edit any file in `repo_root`. The only file you write is `out_path`.
 - Bash usage is limited to read-only inspection (`grep`, `git log -n`, `git blame`, `git ls-files`) on `repo_root`."""
-model = "gpt-5.5"
 model_reasoning_effort = "high"

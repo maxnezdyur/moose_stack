@@ -29,6 +29,5 @@ Lead with a one-line **TL;DR** ("3 structural matches in moose, 0 in blackbear" 
 If nothing survives verification, say so explicitly with what you searched (symbols, base classes, CodeGraph queries) — a clean "no match in this angle" beats a list of naming false positives. End with open questions or angles you couldn't cover. If you can't proceed at all, return `BLOCKED` with the reason — never fabricate findings to fill a gap.
 
 You scout — you don't decide. The caller owns the reuse/extend/parallel decision; no action items or implementation suggestions unless asked."""
-model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"

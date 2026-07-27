@@ -49,5 +49,4 @@ Loop, cap 3 doc-side rounds:
 ## Doc recon (spawn `moose-scout`)
 
 When harvesting C++ facts is non-trivial (unfamiliar class, behavior split across base + derived, exact registered `/Base/Class` path), spawn `moose-scout` one-shot, read-only, and use its cited findings for the Description, `!syntax`, and `!listing`. Give it the class and scope and what would NOT count as a match; use only its `file_path:line` cites. It surfaces facts; you write the page and own scope/verbosity. If the spawn fails, report `NEEDS_CONTEXT` and the caller runs it."""
-model = "gpt-5.5"
 model_reasoning_effort = "high"

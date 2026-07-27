@@ -53,5 +53,4 @@ When the test uses a diff-style Tester (Exodiff/CSVDiff/JSONDiff/XMLDiff/ImageDi
 > ```
 
 Adjust paths and extensions to the actual spec."""
-model = "gpt-5.5"
 model_reasoning_effort = "high"

@@ -22,8 +22,10 @@ npx --yes claude-to-codex --dry-run --json > /tmp/c2c-plan.json
 jq '.plan.summary' /tmp/c2c-plan.json
 jq '.plan.operations | map(select(.type != "skip")) | .[] | {type, relativePath}' /tmp/c2c-plan.json
 
-# Apply.
+# Apply, then re-apply model overrides (the tool regenerates the TOMLs with its
+# built-in tier mapping every time).
 npx --yes claude-to-codex --write --emit-report
+python3 .codex/scripts/apply-models.py
 ```
 
 If the meta-repo is dirty with unrelated changes, the tool will refuse. Either commit/stash first, or add `--dangerous-allow-dirty-git` (uses git as the rollback backstop).
@@ -34,7 +36,7 @@ If the meta-repo is dirty with unrelated changes, the tool will refuse. Either c
 
 2. **`skills:` frontmatter is dropped** from agent `.md` files when generating `.codex/agents/*.toml`. Codex agents don't support skill preload. The agent's prompt text still says "invoke skill X" so behavior is preserved, but the auto-warm is gone — first action per agent re-loads the skill.
 
-3. **Model is hardcoded** to `gpt-5.5` with `model_reasoning_effort = "high"` in every generated `.codex/agents/*.toml`. If you want a different Codex model, edit the TOMLs after running — but note the next `--write` will overwrite them. (If you need a persistent model override, patch the source `.claude/agents/*.md` frontmatter and check whether the tool picks it up.)
+3. **Model mapping.** The tool pins every generated TOML to `gpt-5.5` (from the Claude frontmatter tier, which also sets effort: `opus`→xhigh, `sonnet`→high, `haiku`→medium). We don't want the pin: `.codex/model-map.json` ships with `"default_model": null`, and `python3 .codex/scripts/apply-models.py` strips the `model` lines so every agent inherits the Codex-configured default model (tier-derived efforts are kept). Run the script after every `--write`, since the tool regenerates the TOMLs. Per-agent pins go in the map's `agents` section; never hand-edit model lines in the TOMLs directly.
 
 4. **moose submodule writes.** The tool wants to replace `moose/CLAUDE.md` (symlink → `moose/AGENTS.md`) with a concrete file, and create `moose/petsc/AGENTS.md`. These land *inside* the `moose/` and `moose/petsc/` submodules — they don't belong in the meta-repo commit. Decide per-submodule whether to commit, revert, or ignore.
 

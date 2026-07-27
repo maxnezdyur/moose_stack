@@ -7,6 +7,7 @@ When you add or edit anything under `.claude/agents/` or `.claude/skills/`, the 
 ```bash
 npx --yes claude-to-codex --dry-run --json > /tmp/c2c-plan.json && jq '.plan.summary' /tmp/c2c-plan.json
 npx --yes claude-to-codex --write --emit-report
+python3 .codex/scripts/apply-models.py   # re-apply .codex/model-map.json model overrides
 ```
 
 Full instructions, gotchas (hardlinks, dropped `skills:` preload, hardcoded model, moose submodule writes), and rollback steps live in `.codex/README.md`.

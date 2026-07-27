@@ -38,5 +38,4 @@ Always include the log path `/tmp/moose-docs-<scope>-smoke.log` (the skill write
 - Conda env not active / `MooseDocs` import fails → `BLOCKED` with the skill's hint; the user activates the env. Env problems are `BLOCKED`, not `FAIL` — a hint-less `FAIL` would send the parent into doc-fix rounds against a broken env.
 - `moose_test-opt` / `blackbear-opt` / `isopod-opt` missing → `FAIL`, cause hint `cpp-side`, include the exact `make -C ... -j` command from the skill's output; the parent escalates the build.
 - Smoke timeout (default 600s) → `BLOCKED` with the partial log; suggest `SMOKE_TIMEOUT=<N>`. Don't retry on your own."""
-model = "gpt-5.5"
 model_reasoning_effort = "medium"

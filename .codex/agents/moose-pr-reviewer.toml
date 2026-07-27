@@ -127,5 +127,4 @@ Submit when ready: https://github.com/idaholab/moose/pull/<PR#>/files
 - test: <K> inline, <M> body   (or "skipped — no files" / "failed: <reason>")
 - doc:  <K> inline, <M> body
 ```"""
-model = "gpt-5.5"
 model_reasoning_effort = "high"

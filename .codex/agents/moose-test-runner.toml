@@ -37,5 +37,4 @@ End every report with `DONE` / `DONE_WITH_CONCERNS` / `BLOCKED` / `NEEDS_CONTEXT
 - Per failure: status, status message, root-cause hypothesis, recommended fix
 - For gold regen: files staged + suggested commit message
 - Any flagged issues (stale binary needing rebuild, wrong conda env, broken capability registry, real C++ bug detected)"""
-model = "gpt-5.5"
 model_reasoning_effort = "high"

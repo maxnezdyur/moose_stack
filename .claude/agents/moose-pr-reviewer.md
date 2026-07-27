@@ -2,7 +2,7 @@
 name: moose-pr-reviewer
 description: Orchestrator for moose PR review. Pulls the PR locally, classifies changed files into code/test/doc buckets, spawns the three reviewer sub-agents as nested children in parallel, merges their JSON, and posts a single GitHub PENDING review (draft comments). Never submits the review. Spawned by the moose-pr-review skill after the skill's main-thread pre-flight. Keeps all file-routing and JSON-merge glue out of the main conversation.
 tools: Read, Write, Bash, Agent
-model: sonnet
+model: opus
 color: purple
 ---
 
