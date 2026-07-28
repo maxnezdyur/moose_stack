@@ -5,7 +5,6 @@ skills:
   - moose-unit-test-standards
   - moose-code-standards
   - branch-diff
-model: haiku
 color: teal
 ---
 

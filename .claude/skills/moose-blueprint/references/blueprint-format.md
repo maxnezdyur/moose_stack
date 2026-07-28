@@ -17,11 +17,14 @@ defines how to fill it.
 - **Self-contained.** All CSS inline; **no external `http(s)` stylesheet/script links**. Math is
   rendered offline by `inline-katex.js` (see below) — never add a CDN `<script>`.
 - **Preserve every `file:line` citation verbatim** from the Reuse decisions.
-- **Status markers stay `[]`.** The build has not run at design time.
+- **Status markers stay `[]` and status chips stay `idle`.** The build has not run at design time.
+- **Standing gates are render-only.** The `#work-plan` gate strips copy `/moose-build`'s
+  "Standing gates" text verbatim and never appear in the JSON island — a blueprint cannot add,
+  remove, or alter a gate.
 
 ## Contract blocks (the machine interface)
 
-`/moose-build` parses six blocks, each identified by an exact `id` attribute. Attach each `id`
+`/moose-build` parses seven blocks, each identified by an exact `id` attribute. Attach each `id`
 to the template container that carries that content — placement in the visual layout is free,
 and content may additionally appear elsewhere (e.g. per-phase Testing Strategy), but the block
 carrying the `id` is the authoritative, complete copy. If the template layout has no natural
@@ -35,6 +38,7 @@ home for a block, add a `Notes` subsection for it.
 | `#test-plan` | one entry per test: name, Tester kind (`Exodiff` / `CSVDiff` / `RunException` / … — or `gtest` for unit tests under `unit/`), asserted behavior (an observable consequence, not "runs without error"), mutation rationale (if `<line of new code>` were no-op'd, this test fails because …) | a consolidated test table in `Notes` or the `Validation Commands` area |
 | `#doc-plan` | **Needed:** yes / no; page path (`<repo>/doc/content/source/<area>/<NewClass>.md`); public surface (which params/behaviors are documented API) | the Docs phase, or `Notes` |
 | `#out-of-scope` | explicit non-goals, one per line | `Notes` → "Out of scope" |
+| `#work-plan` | work units + dependency edges + JSON island `#work-plan-data`, per [`work-plan-format.md`](work-plan-format.md) — units/waves/chips/read-only standing-gate strips | its own section, directly after `#summary` |
 
 ## Template slot mapping
 
@@ -105,18 +109,14 @@ Graceful degrade: if KaTeX isn't found, LaTeX is left as plain text (still a val
 - `back refs` = —
 - `forward refs` = —
 
-## Implementation Phases (derived, forward-looking BUILD checklist)
+## Work plan (replaces the v1 "Implementation Phases" checklist)
 
-Author the phases from **Predicted files** + **Test plan** as the plan the eventual
-`/moose-build` will follow. Include only the phases the feature needs:
-
-1. **Implementation** — one task per source file (`.C` / `.h` / `.py`).
-2. **Regression tests** — one task per `tests` spec / `.i` / gold file.
-3. **Unit tests** — one task per gtest suite (only if the test plan has `gtest` entries).
-4. **Docs** — one task per doc page (only if Doc plan `Needed: yes`).
-
-Each phase's `Testing Strategy` = the relevant entries from the Test plan (Tester kind +
-asserted behavior + mutation rationale). All markers stay `[]`.
+The `#work-plan` block IS the build plan — author it per
+[`work-plan-format.md`](work-plan-format.md): implement units from the grill plan's *Work
+units*, test units from `#test-plan`, a doc unit when `#doc-plan` is `Needed: yes`; edges only
+for hard dependencies; waves computed; chips `idle`; gate strips read-only. Do **not** also
+author the template's per-phase task checklists — the unit cards (plus their optional `notes`)
+replace them; drop the template's `#phases` section or leave it out entirely.
 
 ## Global Validation Commands
 

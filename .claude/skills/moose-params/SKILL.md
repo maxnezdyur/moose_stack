@@ -7,14 +7,11 @@ allowed-tools:
   - Bash(stat *)
   - Bash(test *)
   - Read
-context: fork
-agent: general-purpose
-model: haiku
 ---
 
 # moose-params
 
-Look up the YAML node for an exact MOOSE object type name. Arguments arrive as `$ARGUMENTS` — never ask the user for clarification (this runs in a forked context).
+Look up the YAML node for an exact MOOSE object type name. Arguments arrive as `$ARGUMENTS` — never ask the user for clarification; on bad input emit the usage error below and stop.
 
 ## Parse `$ARGUMENTS`
 

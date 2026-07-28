@@ -1,12 +1,12 @@
 ---
 name: moose-build
-description: Drive a MOOSE feature from a structured specs/blueprint.html to a green tree, then gate its docs — by handing the implement↔verify loop to the goal-driven moose-feature-loop agent and the docs to the moose-docs-writer loop. Runs unattended (gold is regenerated and staged for post-hoc review); surfaces only at genuine decision points.
+description: Drive a MOOSE feature from a structured specs/blueprint.html to a green tree, docs gated, standing gates enforced. v2 blueprints (with a #work-plan) execute as parallel waves compiled from the plan's dependency DAG; v1 blueprints and small features run the goal-driven moose-feature-loop. Runs unattended (gold is regenerated and staged for post-hoc review); surfaces only at genuine decision points.
 disable-model-invocation: true
 ---
 
 # /moose-build
 
-Take a blueprint (`specs/blueprint.html`, from `/moose-blueprint`) to build clean + new regression tests green, then run the docs gate. This skill is deliberately thin: compile the goal, spawn the autonomous `moose-feature-loop`, run the docs gate, report. Don't route implement/test/run failures yourself — that logic lives inside `moose-feature-loop`; you react only to its terminal status.
+Take a blueprint (`specs/blueprint.html`, from `/moose-blueprint`) to build clean + new regression tests green + standing gates passed, then report. Two execution modes share one goal ledger and one set of standing gates: **wave mode** (v2 blueprints with a parallelizable `#work-plan` — deterministic fan-out for creation) and **loop mode** (everything else — the autonomous `moose-feature-loop`). Repair is always model-driven: failures route through the feature loop, never re-planned here.
 
 ## Usage
 
@@ -15,68 +15,116 @@ Take a blueprint (`specs/blueprint.html`, from `/moose-blueprint`) to build clea
 ```
 
 - Blueprint defaults to `<worktree-root>/specs/blueprint.html` (accept a legacy `specs/spec.md` or `<worktree-root>/spec.md` from pre-rename worktrees). Missing → refuse: *"No blueprint found. Run `/moose-blueprint` first."*
-- Structured blueprint = the six `/moose-blueprint` contract blocks (`#summary` / `#physics` / `#reuse-decisions` / `#test-plan` / `#doc-plan` / `#out-of-scope` element ids) → parse directly. Freeform HTML or legacy spec.md → infer, then confirm `{repo, kind, files, unit-tests, docs}` with one `AskUserQuestion`.
-- `--core` = slim mode: skip the docs gate entirely (for features adding no registered syntax and no doc page). Refuse `--core` when the blueprint's `#doc-plan` says `Needed: yes` — no silent demotion; the user picked the wrong flag.
+- v2 blueprint = the seven contract blocks including `#work-plan` with a parseable `#work-plan-data` JSON island. v1 = the six blocks without it → loop mode, unchanged behavior. Freeform HTML or legacy spec.md → infer, then confirm `{repo, kind, files, unit-tests, docs}` with one `AskUserQuestion`.
+- `--core` = slim mode: skip the docs gate (for features adding no registered syntax and no doc page); standing gates still run in full. Refuse `--core` when `#doc-plan` says `Needed: yes`.
 - Requires a `/new-feature` worktree: walk up for a `.git` **file** beside a `moose/`+`blackbear/`+`isopod/` layout; refuse otherwise.
 
-## How it's wired
+## The goal ledger
+
+Compiled once, before any execution. Two sources, **additive-only** — a blueprint can add criteria, never remove or weaken a standing one:
 
 ```
-/moose-build (this skill, main thread — owns the human touchpoints)
-  └─ moose-feature-loop (agent)         goal-driven: build clean + tests green, unattended
-       ├─ moose-implementer             C++/Python
-       ├─ moose-test-writer / unit      regression specs + .i / gtest
-       ├─ moose-test-runner             build + run + diagnose + autonomous gold regen
-       └─ moose-scout                   one-shot recon on NEEDS_CONTEXT
-  └─ moose-docs-writer (agent)          docs gate, only after GOAL_MET (docs on)
-       └─ moose-docs-builder            nested smoke gate
+STANDING (every run, unconditionally):
+  C1  build clean in <scope>                     (make exits 0)
+  C4  reuse decisions honored, no out-of-scope edits  (diff audit)
+  C5  specs SQA-complete                         (requirement/design/issues on every new/modified spec block)
+  C6  diff ASCII-clean                           (no non-ASCII bytes added; .bib diacritics exempt)
+  DG  docs gate                                  (unless --core)
+BLUEPRINT-DERIVED:
+  C2.<name>  test exists AND passes              (one per #test-plan row)
+  C3  unit tests exist AND pass                  (only if gtest entries / unit/ paths)
 ```
 
-## 1. Compile the goal slice
+Slice fields (both modes): `repo`, `object_kind`, `files_to_touch`, `scope` (top-level submodule; `moose/modules/<m>` → `moose`), `summary` + `physics` verbatim, `reuse_decisions[]`, `test_plan[]`, `out_of_scope[]`, `unit_on`, `reuse_only`, `blueprint_path`. v2 adds `units[]` + `deps` from the JSON island — validate it (parses, deps resolve, acyclic, same-file units share an edge; violations → refuse with the reason, the user fixes the blueprint). If KaTeX is rendered, recover TeX from `<annotation encoding="application/x-tex">` nodes; Grep by block id rather than whole-file-Read the font-bloated HTML.
 
-Extract from the blueprint: `repo`, `object_kind`, `files_to_touch`, `scope` (the top-level submodule of `repo`; `moose/modules/<m>` → `moose`), `summary` + `physics` (verbatim text of the `#summary`/`#physics` blocks — the iter-1 implementer payload; if KaTeX is already rendered, recover TeX from the `<annotation encoding="application/x-tex">` nodes, and Grep by block id rather than whole-file-Read the font-bloated HTML), `reuse_decisions[]`, `test_plan[]` (Tester kind + asserted behavior + mutation rationale, verbatim), `out_of_scope[]`, `unit_on` (any `gtest` test-plan entry or `unit/` path in files), `reuse_only` (`reuse_decisions[]` is non-empty AND every decision is `Reuse` — a negative-search record alone is NOT reuse-only), `blueprint_path`.
+## Standing gates — not negotiable, not blueprint-editable
 
-Mode: docs on unless `--core` or `#doc-plan`'s `Needed:` field is `no`. Caps: `impl_iters` = 5 (`--core`) or 10 (full), `no_progress` = 2. `run_label` = `moose-<feature>` (worktree dir name).
+The gates below are owned by this skill. Blueprints render them read-only and cannot add, remove, reorder, or alter them; the work-plan DAG governs creation only. Every gate check maps to a ledger criterion; a gate is passed when its checks are green.
 
-## 2. Run the feature loop (unattended)
+**Gate A — after the last implement wave (wave mode) / inside the loop's normal flow (loop mode):**
 
-Spawn one `moose-feature-loop` (`Agent`, `subagent_type: "moose-feature-loop"`, always background) with the spec slice + caps + `run_label`. Briefly tell the user the goal, the criteria it will burn down, and the §Caveats — then let it run. Act on its terminal return:
+1. **Consistency sweep** (wave mode only, ≥2 implement units): one-shot reviewer agent (`general-purpose`) that reads every new/changed source file *together* against `moose/framework/doc/content/sqa/framework_scs.md` — naming drift, param-style drift, duplicated helpers across units. Findings route to the owning unit's implementer before the build.
+2. **Build clean** (C1): one-shot `moose-test-runner`, build-only — *"You are authorized to build: `cd <scope> && make -j 6`. Report compile errors verbatim with owning files."*
+
+**Gate B — after the test/doc wave (wave mode) / after `GOAL_MET` (loop mode):**
+
+1. **Suites green + gold staged** (C2, C3): `moose-test-runner` on the registered test names (`--re=<names>`); gold per § Gold policy.
+2. **Reuse / out-of-scope audit** (C4): diff vs the blueprint's `reuse_decisions[]` + `out_of_scope[]`.
+3. **SQA** (C5): grep audit of in-diff spec files for `requirement`/`design`/`issues` (parent-block declarations cover children), then authoritative `cd <doc-dir> && ./moosedocs.py check` (doc dir: `moose/modules/doc` | `blackbear/doc` | `isopod/doc`), errors filtered to the branch diff — pre-existing SQA debt is reported, not fixed. Env failure → surface the conda hint, note the grep audit still ran.
+4. **ASCII** (C6): `git -C <scope> diff devel...HEAD -- . ':(exclude)*gold*' | perl -ne 'print if /^\+/ and /[^\x00-\x7F]/'` — any hit fixed in place on the main thread (smart quotes → `'`/`"`, dashes → `--`, NBSP → space, unicode math → LaTeX in docs / ASCII in source), re-run until clean.
+5. **Docs smoke** (DG): via the docs gate (§ Docs) — `moose-docs-writer`'s nested gate when docs are on, direct `moose-docs-builder` when off.
+
+When you get burned by CIVET on something new: add it here as a standing check once, and every future run inherits it.
+
+## Mode selection
+
+**Wave mode** when the blueprint is v2 AND any computed wave has ≥3 units. **Loop mode** otherwise (v1, freeform, single-class v2, `reuse_only`). Caps both modes: `impl_iters` = 5 (`--core`) or 10 (full), `no_progress` = 2, `run_label` = worktree dir name.
+
+## Loop mode
+
+Spawn one `moose-feature-loop` (`Agent`, `subagent_type: "moose-feature-loop"`, always background) with the spec slice + caps + `run_label`. Briefly tell the user the goal + criteria + § Caveats, then let it run. It owns C1–C6 internally (its criteria mirror the ledger); on `GOAL_MET`, run Gate B items 2–4 yourself as the authoritative re-check, then the docs gate. Terminal handling: § Terminal statuses.
+
+## Wave mode
+
+Compute waves = topological levels of `units[]`. Then:
+
+1. **Per implement wave, in order.** Mark the wave's chips `running`. Fan out — all spawns in one message: ≥3 units → one `Workflow` call (this skill's instruction is the orchestration opt-in), one `agent()` per unit with `agentType` from the unit, `phase: "Wave <n>"`; 2 units → two parallel `Agent` calls; 1 → single call. **Unit prompt = its JSON payload + the verbatim `#physics` content its `physics_ref` anchors + `reuse_decisions[]` + `out_of_scope[]` + its `notes`** — self-contained, no blueprint reads. No worktree isolation: edge-free units own disjoint files by construction (validated at parse). Chip `done`/`failed` as each report lands; any failure → finish the wave, then § Repair before proceeding.
+
+   ```js
+   // Workflow sketch (units passed via args; meta phases = ["Wave <n>"])
+   const results = await parallel(args.units.map(u => () =>
+     agent(u.prompt, { agentType: u.agent, label: u.id, phase: args.wave })))
+   return results
+   ```
+
+2. **Gate A.** Consistency sweep → route findings → build. Chips on the gate rows. Build errors → § Repair.
+
+3. **Test/doc wave.** Same fan-out for `test` units (`moose-test-writer` / `moose-unit-test-writer`, one per unit, prompt = its `#test-plan` row + `out_of_scope[]`) and the `doc` unit (§ Docs). Use the test names the writers report registering.
+
+4. **Gate B.** Runner first (C2/C3 + gold), then audits 2–4, docs smoke last. Chips per row. Failures → § Repair, then re-run only the failed checks.
+
+## Repair (both modes' failure path)
+
+Never route individual fixes yourself. Collect the failure evidence (compiler output / runner verdict / gate findings, with owning units) and spawn `moose-feature-loop` in **repair mode**: slice + caps + `repair: true` + ledger state (criteria already met, evidence) + the failures. It routes internally and returns a terminal status. On `GOAL_MET` resume the interrupted wave/gate. Don't ping-pong: one repair spawn per gate failure, woken via `SendMessage` for subsequent failures in the same run.
+
+## Gold policy
+
+`MISSING GOLD` / structural DIFF on newly authored tests is first-time capture, not baseline overwrite — regenerate without pausing: runner regenerates, confirms `OK`, stages (`git add`), **never commits**. Keep every gold file + observed values for the final report. A runner-flagged *possible real regression* routes to repair instead.
+
+## Terminal statuses (from the loop, either mode)
 
 | Loop returns | Action |
 |---|---|
-| `GOAL_MET` | → docs gate. Carry its report (files, commands, test counts, **staged gold + observed values**) forward. |
-| `NEEDS_DESIGN(reason)` | Stop. Tell the user: *"The blueprint needs a design change: `<reason>`. Re-run `/moose-blueprint` to revise, then `/moose-build` again."* |
-| `BLOCKED(reason)` | Stop. Surface the blocker + the exact fix command (usually env: conda / missing `*-opt`). Don't auto-fix. |
-| `STALLED(state)` | Surface the unmet criteria + what was tried each round. `AskUserQuestion`: extend the cap (by how much) / simplify the spec / abandon. On extend, re-spawn the loop with a higher `impl_iters` and its prior state. |
+| `GOAL_MET` | → remaining gates / resume wave. Carry files, commands, test counts, **staged gold + observed values**. |
+| `NEEDS_DESIGN(reason)` | Stop. *"The blueprint needs a design change: `<reason>`. Re-run `/moose-blueprint`, then `/moose-build`."* |
+| `BLOCKED(reason)` | Stop. Surface blocker + exact fix command (usually env: conda / missing `*-opt`). Don't auto-fix. |
+| `STALLED(state)` | Surface unmet criteria + what was tried. `AskUserQuestion`: extend cap / simplify spec / abandon. On extend, re-spawn with higher `impl_iters` + prior state. |
 
-## 3. Docs gate (after `GOAL_MET`; skipped by `--core`)
+## Docs (DG; skipped by `--core`)
 
-**Docs ON** — wake/spawn `moose-docs-writer` with `scope`, base branch (`devel`), public surface, and final doc paths. It owns the gate: authors pages and runs its nested write→smoke→fix loop (cap 3).
+**Docs ON** — spawn/wake `moose-docs-writer` with `scope`, base branch (`devel`), public surface, doc paths (wave mode: this is the `doc` unit). It authors and runs its nested write→smoke→fix loop (cap 3):
 
-| `docs-writer` returns | Action |
+| Returns | Action |
 |---|---|
-| `DOCS_GREEN` (`PASS` / `PASS_WITH_WARNINGS`) | → report; carry warnings. |
-| `NEEDS_CPP_CHANGE` | One C++ hop, no ping-pong: spawn a one-shot `moose-implementer` for exactly the named fix (`addClassDescription` / renamed `!syntax`), then a one-shot `moose-test-runner` (authorized to build: `cd <scope> && make -j 6`) to confirm the suite still passes, then wake `docs-writer` to re-run its gate. |
-| `DONE_WITH_CONCERNS` (still red after 3 doc-side rounds) | `AskUserQuestion`: extend doc budget / escalate to implementer / ship with `DONE_WITH_CONCERNS`. |
+| `DOCS_GREEN` | → report; carry warnings. |
+| `NEEDS_CPP_CHANGE` | One C++ hop, no ping-pong: one-shot `moose-implementer` for exactly the named fix, one-shot `moose-test-runner` to confirm the suite, wake `docs-writer` to re-gate. |
+| `DONE_WITH_CONCERNS` | `AskUserQuestion`: extend doc budget / escalate to implementer / ship as-is. |
 | `BLOCKED` | Surface — likely env. Don't auto-fix. |
 
-**Docs OFF (full mode, no pages authored)** — C++ renames can still break `!syntax` in untouched pages, so spawn `moose-docs-builder` directly with `scope` + base branch (`devel`):
+**Docs OFF (full mode, no pages authored)** — C++ renames can still break `!syntax` in untouched pages: spawn `moose-docs-builder` with `scope` + `devel`. `PASS`/`PASS_WITH_WARNINGS` → report. `FAIL` (`cpp-side`) → one-shot implementer for the `!syntax` regression + one-shot runner re-check + re-smoke. `FAIL` (`doc-side`) → surface (needs manual fix or a docs-on re-run). `BLOCKED` → surface.
 
-| `docs-builder` report | Action |
-|---|---|
-| `PASS` / `PASS_WITH_WARNINGS` | → report; carry warnings. |
-| `FAIL` (`cpp-side`) | One-shot `moose-implementer` for the named `!syntax` regression, then one-shot `moose-test-runner` (*"Run tests in `<scope>` `--re=<new-test-names>`. You are authorized to build: `cd <scope> && make -j 6`."*), then re-smoke. The late edit is a doc-driven `!syntax`/`addClassDescription` fix with no logic change, so the regression re-run is sufficient re-verification. |
-| `FAIL` (`doc-side`) | Surface: a `.md` in the branch diff is broken (shortcode / `!listing` / citation / `!syntax` path) but docs were off, so no `docs-writer` ran — needs a manual fix or a re-run with docs on. |
-| `BLOCKED` | Surface. Don't auto-fix. |
+## Status chips (v2 blueprints)
 
-## 4. Final report
+You own the blueprint's chips — the browser-side twin of the task list. `Edit` the chip span beside the unit's uid / at the gate row's start on every transition: dispatch → `<span class="chip wip">running</span>`, report → `chip done`/`chip failed` (`done`/`failed` text). Edit only chip spans, nothing else. Loop mode on a v2 blueprint: update chips as the loop's iteration `SendMessage`s arrive, and reconcile all chips at terminal. v1 blueprints keep their `[]` markers, same transitions.
 
-Files created/modified per child; exact `test-runner` commands + final counts (pass/fail/skip); **gold files regenerated + their observed values**, flagged for the user to sanity-check the physics; docs result (smoke PASS / warnings / log path, or "docs skipped (`--core`)"); any `DONE_WITH_CONCERNS`; a suggested commit message.
+## Final report
+
+Files created/modified per unit/child; exact runner commands + final counts (pass/fail/skip); **gold regenerated + observed values** flagged for physics sanity-check; standing-gate results (what was fixed in place, anything surfaced from `moosedocs.py check`); docs result (smoke PASS / warnings / log path, or "docs skipped (`--core`)"); any `DONE_WITH_CONCERNS`; wave-mode wall-clock per wave; a suggested commit message.
 
 ## Caveats + boundaries
 
-- **Never commit or push** — the run ends at the suggested commit message. Gold is regenerated and **staged**, never committed; the user reviews it in the final diff.
-- **Never run `clang-format`/`black`** — the pre-commit hook owns style; it isn't gate-checked here.
-- Worktrees, branches, and conda envs are `/new-feature`'s job — don't create or destroy them.
-- Docs *build* is gated (smoke build, errors filtered to the branch diff); doc *quality* isn't — warnings surface for manual review. Smoke is slow: ~5–10 min/round, up to 3 fix rounds inside `docs-writer`.
-- Interruptible anytime: the loop narrates to the task list so the user can watch and stop it.
+- **Never commit or push** — the run ends at the suggested commit message. Gold is staged, never committed.
+- **Never run `clang-format`/`black`** — the pre-commit hook owns style.
+- Worktrees, branches, conda envs are `/new-feature`'s job.
+- Docs *build* is gated; doc *quality* isn't — warnings surface for manual review. Smoke is slow (~5–10 min/round).
+- Interruptible anytime: waves, gates, and the loop all narrate to the task list (and v2 chips) so the user can watch and stop.

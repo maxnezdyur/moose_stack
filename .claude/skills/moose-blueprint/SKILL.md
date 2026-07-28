@@ -24,7 +24,7 @@ If `<worktree-root>/specs/blueprint.html` already exists, `AskUserQuestion`: **R
 
 ## 2. Grill — delegate to `/moose-grill`
 
-Invoke `Skill(moose-grill)` with the user's idea. It explores MOOSE's class hierarchy with codegraph and returns a structured plan: `Repo`, `Base class`, `Reference subclass(es)`, `Required overrides`, `validParams shape`, `Coupling`, `Residual / contribution math`, `Pitfalls considered`, `Predicted files to touch`. Consume that plan directly — don't re-grill those axes, and don't ask the user things the codebase can answer. If it returns `Base class: undetermined`, fall back to a three-axis grill (object kind + base class, inputs/outputs, physics/math) for that round only.
+Invoke `Skill(moose-grill)` with the user's idea. It explores MOOSE's class hierarchy with codegraph and returns a structured plan: `Repo`, `Base class`, `Reference subclass(es)`, `Required overrides`, `validParams shape`, `Coupling`, `Residual / contribution math`, `Pitfalls considered`, `Predicted files to touch`, and — for multi-class features — `Work units` (one per class, with hard dependency edges; these seed `#work-plan`). Consume that plan directly — don't re-grill those axes, and don't ask the user things the codebase can answer. If it returns `Base class: undetermined`, fall back to a three-axis grill (object kind + base class, inputs/outputs, physics/math) for that round only.
 
 ## 3. Scout — parallel moose-scouts
 
@@ -50,7 +50,7 @@ Scout findings are advisory — the user owns reuse decisions, recorded in the b
 
 ## 5. Loop until converged
 
-Repeat grill→scout→halt with progressively tighter questions. Re-invoke `moose-grill` only if a scout finding contradicts the plan (e.g. reuse-halt found a better `IntegratedBC` base than the picked `Kernel`); otherwise carry the plan forward and grill the math/inputs gaps directly. Ready = every one of the six contract blocks (below) can be filled with at least one specific fact — if a block would be a placeholder, keep grilling.
+Repeat grill→scout→halt with progressively tighter questions. Re-invoke `moose-grill` only if a scout finding contradicts the plan (e.g. reuse-halt found a better `IntegratedBC` base than the picked `Kernel`); otherwise carry the plan forward and grill the math/inputs gaps directly. Ready = every one of the seven contract blocks (below) can be filled with at least one specific fact — if a block would be a placeholder, keep grilling.
 
 Then present a draft summary via `AskUserQuestion`: **Looks good — write it** / **Keep grilling about X** (user names the section) / **Cancel** (nothing written; tell the user "No blueprint saved. Re-run when ready.").
 
@@ -58,7 +58,7 @@ Then present a draft summary via `AskUserQuestion`: **Looks good — write it** 
 
 `mkdir -p <worktree-root>/specs`. The blueprint is the single deliverable — a self-contained HTML page that is both the human review artifact and the machine input to `/moose-build`.
 
-**Machine contract** — `/moose-build` parses six blocks, each an element with this exact `id` (placement in the visual layout is free; the ids are what's load-bearing):
+**Machine contract** — `/moose-build` parses seven blocks, each an element with this exact `id` (placement in the visual layout is free; the ids are what's load-bearing):
 
 | id | Content |
 | --- | --- |
@@ -68,12 +68,13 @@ Then present a draft summary via `AskUserQuestion`: **Looks good — write it** 
 | `#test-plan` | per test: name, Tester kind, asserted behavior, mutation rationale |
 | `#doc-plan` | **Needed:** yes/no, page path, public surface |
 | `#out-of-scope` | explicit non-goals |
+| `#work-plan` | work units + dep edges, rendered as computed waves with status chips + read-only standing-gate strips, plus the machine JSON island `#work-plan-data` — full spec in [`references/work-plan-format.md`](references/work-plan-format.md) |
 
 Authoring — a pure formatter over the grill plan, scout findings, and user decisions; **never re-explores the codebase** (codegraph already ran via grill + scout; the blueprint skill's generic Explore/Design/Build workflows would bypass it):
 
-1. Read the HTML skeleton from this skill's own [`references/plan-template.html`](references/plan-template.html) — a pinned copy of the global blueprint template; no cross-skill reads at authoring time. If it's missing, warn and author a plain self-contained HTML page instead — the six contract blocks are the deliverable; the template is only the visual identity.
-2. Fill it per [`references/blueprint-format.md`](references/blueprint-format.md) — the authoritative contract-block schema, template slot mapping, `.physics-pair` code↔math pairing, metadata header, and offline KaTeX rendering (`node <this skill's dir>/references/inline-katex.js <worktree-root>/specs/blueprint.html`; uses MOOSE's vendored KaTeX, degrades gracefully to plain-text LaTeX).
-3. Save to `<worktree-root>/specs/blueprint.html`. Self-check: all six contract `id`s present and non-placeholder, no `{{` outside image-slot comments, no external `http(s)` stylesheet/script links, every `file:line` citation verbatim.
+1. Read the HTML skeleton from this skill's own [`references/plan-template.html`](references/plan-template.html) — a pinned copy of the global blueprint template; no cross-skill reads at authoring time. If it's missing, warn and author a plain self-contained HTML page instead — the seven contract blocks are the deliverable; the template is only the visual identity.
+2. Fill it per [`references/blueprint-format.md`](references/blueprint-format.md) — the authoritative contract-block schema, template slot mapping, `.physics-pair` code↔math pairing, metadata header, and offline KaTeX rendering (`node <this skill's dir>/references/inline-katex.js <worktree-root>/specs/blueprint.html`; uses MOOSE's vendored KaTeX, degrades gracefully to plain-text LaTeX). The `#work-plan` block follows [`references/work-plan-format.md`](references/work-plan-format.md): implement units from the grill's Work units, test units from `#test-plan`, doc unit from `#doc-plan`; edges only for hard dependencies; it **replaces** the template's per-phase task checklists.
+3. Save to `<worktree-root>/specs/blueprint.html`. Self-check: all seven contract `id`s present and non-placeholder, no `{{` outside image-slot comments, no external `http(s)` stylesheet/script links, every `file:line` citation verbatim, plus the work-plan checks from `work-plan-format.md` (JSON parses, deps resolve + acyclic, same-file units share an edge, chips all `idle`, gate strips verbatim and absent from the JSON).
 
 ## 7. Stop
 

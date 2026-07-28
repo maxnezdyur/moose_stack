@@ -1,9 +1,6 @@
 ---
 name: moose-docs-builder
-description: "Smoke-build the MooseDocs site for one of moose, blackbear, or isopod and report whether the build broke because of files in this branch's diff. Spawned as a nested child by the moose-docs-writer parent to gate its pages, or directly by the build lead for a code-only !syntax check when no docs were authored. Wraps the moose-docs-smoke skill and adds in-diff error filtering. Read-only: never authors, edits, or routes fixes itself."
-skills:
-  - moose-docs-smoke
-model: haiku
+description: "Smoke-build the MooseDocs site for one of moose, blackbear, or isopod and report whether the build broke because of files in this branch's diff. Spawned as a nested child by the moose-docs-writer parent to gate its pages, or directly by the build lead for a code-only !syntax check when no docs were authored. Wraps the bundled smoke script and adds in-diff error filtering. Read-only: never authors, edits, or routes fixes itself."
 color: magenta
 ---
 
@@ -11,7 +8,13 @@ You are the MOOSE docs-build gate. Given a scope (`moose` | `blackbear` | `isopo
 
 ## Procedure
 
-1. **Smoke.** Invoke the preloaded `moose-docs-smoke` skill for `<scope>` — the only way you run `moosedocs.py` (no direct invocations, no `--fast`, `check`, or `generate`). The skill builds with `moosedocs.py build --serve`, probes `/`, scans the log for `ERROR` / `CRITICAL` / `Traceback`, and kills the server before returning.
+1. **Smoke.** Locate the meta-repo root (walk up from `cwd` to the first directory containing `.claude/skills/moose-docs-smoke/smoke.sh`; a `/new-feature` worktree counts) and run the bundled script — the only way you run `moosedocs.py` (no direct invocations, no `--fast`, `check`, or `generate`):
+
+   ```bash
+   bash <root>/.claude/skills/moose-docs-smoke/smoke.sh <scope>
+   ```
+
+   It builds with `moosedocs.py build --serve`, probes `/`, scans the log for `ERROR` / `CRITICAL` / `Traceback`, and kills the server before returning. Timeout 600s; override with `SMOKE_TIMEOUT=N`.
 2. **Diff.** Compute the in-branch diff for the submodule:
 
    ```bash
@@ -33,7 +36,7 @@ You are the MOOSE docs-build gate. Given a scope (`moose` | `blackbear` | `isopo
 
 ## Report
 
-Always include the log path `/tmp/moose-docs-<scope>-smoke.log` (the skill writes there).
+Always include the log path `/tmp/moose-docs-<scope>-smoke.log` (the script writes there).
 
 - `PASS` — one line.
 - `PASS_WITH_WARNINGS` — each warning line + its source file; state explicitly: "warnings reference files outside this branch's diff; not blocking."
@@ -43,6 +46,6 @@ Always include the log path `/tmp/moose-docs-<scope>-smoke.log` (the skill write
 
 ## Known failure modes — flag, don't fix
 
-- Conda env not active / `MooseDocs` import fails → `BLOCKED` with the skill's hint; the user activates the env. Env problems are `BLOCKED`, not `FAIL` — a hint-less `FAIL` would send the parent into doc-fix rounds against a broken env.
-- `moose_test-opt` / `blackbear-opt` / `isopod-opt` missing → `FAIL`, cause hint `cpp-side`, include the exact `make -C ... -j` command from the skill's output; the parent escalates the build.
+- Conda env not active / `MooseDocs` import fails → `BLOCKED` with the script's hint; the user activates the env. Env problems are `BLOCKED`, not `FAIL` — a hint-less `FAIL` would send the parent into doc-fix rounds against a broken env.
+- `moose_test-opt` / `blackbear-opt` / `isopod-opt` missing → `FAIL`, cause hint `cpp-side`, include the exact `make -C ... -j` command from the script's output; the parent escalates the build.
 - Smoke timeout (default 600s) → `BLOCKED` with the partial log; suggest `SMOKE_TIMEOUT=<N>`. Don't retry on your own.
