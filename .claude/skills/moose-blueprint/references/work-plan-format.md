@@ -20,9 +20,11 @@ this file is the contract).
   waves; the blueprint renders them read-only (below) so the reviewer sees the whole run. A
   blueprint can never add, remove, reorder, or edit a gate.
 
-Derivation: `implement` units from the grill plan's *Work units* (single-class features get
-one unit, `U1`); `test` units from `#test-plan` rows (dep = the implement unit(s) whose code
-the test exercises); one `doc` unit when `#doc-plan` is `Needed: yes`.
+Derivation (owned by `/moose-blueprint`): `implement` units from the grill plan's predicted
+files, one per class (single-class features get one unit, `U1`), with edges drawn by the
+blueprint skill and ambiguous ones confirmed with the user; `test` units from `#test-plan`
+rows (dep = the implement unit(s) whose code the test exercises); one `doc` unit when
+`#doc-plan` is `Needed: yes`.
 
 ## Machine copy — the JSON island
 

@@ -117,9 +117,26 @@ Never route individual fixes yourself. Collect the failure evidence (compiler ou
 
 You own the blueprint's chips — the browser-side twin of the task list. `Edit` the chip span beside the unit's uid / at the gate row's start on every transition: dispatch → `<span class="chip wip">running</span>`, report → `chip done`/`chip failed` (`done`/`failed` text). Edit only chip spans, nothing else. Loop mode on a v2 blueprint: update chips as the loop's iteration `SendMessage`s arrive, and reconcile all chips at terminal. v1 blueprints keep their `[]` markers, same transitions.
 
+## Clean-context review (final step, both modes)
+
+After every standing gate and the docs gate are green — the feature is otherwise done — spawn ONE fresh `moose-pr-reviewer` (`subagent_type: "moose-pr-reviewer"`, foreground) in **local mode**. Fresh spawn is the point: it has seen none of this build's context, so it reviews the diff the way a cold PR reviewer will.
+
+```
+Run a LOCAL review (mode: local) of this branch.
+  repo_root: <absolute path to the scope submodule in this worktree>
+  base_branch: devel
+  label: <run_label>
+Follow your local-mode workflow: snapshot the diff, classify into
+code/test/doc buckets, spawn the three reviewers as nested children in
+parallel, merge, write the findings file. No PR exists — never call gh.
+Return your local summary block including the merged findings.
+```
+
+**Report-only.** Findings go into the final report verbatim (counts + the findings list + `/tmp/moose-review-<label>.md`); do not auto-route fixes — the user decides what to apply before committing. Offer once: apply the mechanical findings now, or leave them. An errored reviewer is noted, not retried more than once; zero findings is a valid (and reportable) result.
+
 ## Final report
 
-Files created/modified per unit/child; exact runner commands + final counts (pass/fail/skip); **gold regenerated + observed values** flagged for physics sanity-check; standing-gate results (what was fixed in place, anything surfaced from `moosedocs.py check`); docs result (smoke PASS / warnings / log path, or "docs skipped (`--core`)"); any `DONE_WITH_CONCERNS`; wave-mode wall-clock per wave; a suggested commit message.
+Files created/modified per unit/child; exact runner commands + final counts (pass/fail/skip); **gold regenerated + observed values** flagged for physics sanity-check; standing-gate results (what was fixed in place, anything surfaced from `moosedocs.py check`); docs result (smoke PASS / warnings / log path, or "docs skipped (`--core`)"); **clean-context review findings** (verbatim, + findings file path); any `DONE_WITH_CONCERNS`; wave-mode wall-clock per wave; a suggested commit message.
 
 ## Caveats + boundaries
 

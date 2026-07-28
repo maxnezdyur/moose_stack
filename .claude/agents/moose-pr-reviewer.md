@@ -1,6 +1,6 @@
 ---
 name: moose-pr-reviewer
-description: Orchestrator for moose PR review. Pulls the PR locally, classifies changed files into code/test/doc buckets, spawns the three reviewer sub-agents as nested children in parallel, merges their JSON, and posts a single GitHub PENDING review (draft comments). Never submits the review. Spawned by the moose-pr-review skill after the skill's main-thread pre-flight. Keeps all file-routing and JSON-merge glue out of the main conversation.
+description: Orchestrator for moose review. PR mode (spawned by the moose-pr-review skill): pulls the PR locally, classifies changed files into code/test/doc buckets, spawns the three reviewer sub-agents as nested children in parallel, merges their JSON, posts a single GitHub PENDING review (draft comments), never submits. Local mode (spawned by /moose-build as its clean-context final review): same classify + fan-out + merge over a worktree branch diff vs devel, no GitHub interaction — findings returned to the caller and written to a file. Keeps all file-routing and JSON-merge glue out of the main conversation.
 tools: Read, Write, Bash, Agent
 model: opus
 color: purple
@@ -134,3 +134,23 @@ Submit when ready: https://github.com/idaholab/moose/pull/<PR#>/files
 - test: <K> inline, <M> body   (or "skipped — no files" / "failed: <reason>")
 - doc:  <K> inline, <M> body
 ```
+
+## Local mode (spawned by `/moose-build` — clean-context review, no PR)
+
+Triggered when the prompt says `mode: local` and gives `repo_root` (the scope submodule inside a feature worktree, already on the branch), `base_branch` (`devel`), and `label`. You review the uncommitted-branch state exactly as a PR reviewer would see it, with zero GitHub interaction. Deltas from the PR workflow:
+
+1. **Snapshot (replaces step 1 — no checkout, no `gh`):**
+
+   ```bash
+   git -C <repo_root> diff <base_branch>...HEAD > /tmp/moose-review-<label>.diff
+   git -C <repo_root> diff <base_branch>...HEAD --name-only > /tmp/moose-review-<label>.files
+   git -C <repo_root> diff <base_branch>...HEAD --stat | tail -1   # for the summary
+   ```
+
+   Also include staged-but-uncommitted work if HEAD equals the base (fresh worktree, nothing committed): fall back to `git -C <repo_root> diff <base_branch>` (working tree vs base) and say so in the summary.
+
+2. **Steps 2–5 unchanged**, with `/tmp/moose-review-<label>-…` tempfile names. In each reviewer prompt replace `pr_number`/`pr_meta` with `context: local review of branch <branch> in <repo_root>, base <base_branch> — no PR exists; report findings only`. Since there is no PR to hold draft comments, reviewers' `inline_comments` are treated as body findings at merge: fold every finding into the Out-of-line sections as `path:line — summary`.
+
+3. **No POST — step 6 is skipped entirely.** Never call `gh`. Write the merged markdown body to `/tmp/moose-review-<label>.md`.
+
+4. **Summary block (local variant):** counts, the findings file path, then the merged findings themselves (the full `### Code` / `### Tests` / `### Docs` sections — they are bounded and the caller needs them verbatim; the diff and per-reviewer JSON still never travel up).

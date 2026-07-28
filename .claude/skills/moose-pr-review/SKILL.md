@@ -49,5 +49,5 @@ Print the orchestrator's summary block verbatim, then end the turn. The PENDING 
 
 ## References
 
-- The `moose-pr-reviewer` agent definition — the orchestrator: checkout, classify, fan-out, merge, post. Trust its workflow.
+- The `moose-pr-reviewer` agent definition — the orchestrator: checkout, classify, fan-out, merge, post. Trust its workflow. (It also has a local mode used by `/moose-build`'s clean-context review — no PR, no GitHub; this skill never triggers it.)
 - The `moose-code-reviewer` / `moose-test-reviewer` / `moose-doc-reviewer` agent definitions — the three nested reviewers (restricted tools, no `Agent`, so the tree bottoms out at depth 2).
