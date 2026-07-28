@@ -1,6 +1,6 @@
 ---
 name: moose-build
-description: Drive a MOOSE feature from a structured specs/blueprint.html to a green tree, docs gated, standing gates enforced. v2 blueprints (with a #work-plan) execute as parallel waves compiled from the plan's dependency DAG; v1 blueprints and small features run the goal-driven moose-feature-loop. Runs unattended (gold is regenerated and staged for post-hoc review); surfaces only at genuine decision points.
+description: Drive a MOOSE feature from a structured specs/blueprint.html to a green tree, docs gated, standing gates enforced. v2 blueprints (with a work-plan block) execute as parallel waves compiled from the plan's dependency DAG; v1 blueprints and small features run the goal-driven moose-feature-loop. Runs unattended (gold is regenerated and staged for post-hoc review); surfaces only at genuine decision points.
 disable-model-invocation: true
 ---
 

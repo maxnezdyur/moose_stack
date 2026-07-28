@@ -24,4 +24,3 @@ DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT, including file paths create
 ## Unit recon (spawn `moose-scout`)
 
 When grep doesn't cleanly surface the closest unit test to mirror — or you need the SUT's public API / construction pattern — spawn `moose-scout` one-shot, read-only. Give it the class and scope and what would NOT count as a match; use only its `file_path:line` cites. It surfaces facts; you author the test. If the spawn fails, report NEEDS_CONTEXT and the caller runs it."""
-model_reasoning_effort = "medium"
