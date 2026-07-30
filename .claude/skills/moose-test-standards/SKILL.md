@@ -136,6 +136,7 @@ Children of a requirement-grouping parent must use `detail`, NOT their own `requ
 
 ## Input file conventions
 
+- **No essay header.** Do not open a `.i` with a multi-line `#` block explaining the physics, the derivation, the expected result, or why the test exists. That rationale belongs in the spec's `requirement`/`detail` (and the class `.md`), not the input. Cap any leading comment at ~2 lines; brief inline `#` notes on a specific parameter or block are fine.
 - Tiny mesh (4x4 to 10x10).
 - Small `num_steps` (5–20).
 - `[Outputs]` last; `exodus = true` default.
@@ -193,5 +194,6 @@ Module tests cannot use `MooseTestApp` test objects — only those from their ow
 - Per-leaf `requirement` when a parent + N `detail` children would do; `detail` on a top-level leaf with no parent requirement.
 - Duplicate `requirement` text across specs; re-stating `design`/`issues` on children the `[Tests]` block already covers.
 - Vague, passive `requirement` wording.
+- Long `#` prologue in a `.i` — derivations, path-dependence essays, literature citations, ASCII matrices. Compress to the `requirement`/`detail` or drop it.
 - `design` pointing at a deleted/renamed `.md` — grep specs whenever renaming doc pages.
 - Fabricated `input` paths.
