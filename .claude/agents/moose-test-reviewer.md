@@ -50,10 +50,11 @@ ALWAYS flag:
 - `cli_args = 'Outputs/file_base=foo'` with gold named `foo_out.<ext>` — gold naming should be `foo.<ext>`.
 - Missing `recover = false` + `restep = false` on the first leg of a manual checkpoint chain.
 - Legacy capability gating (`petsc_version`, `method`, `mumps`, `slepc_version`) instead of `capabilities = '...'`.
+- Legacy block delimiters `[./name]` / `[../]` on an **added** line in the diff — new blocks use `[name]` / `[]`. Applies to renames too. Judge the added lines only: a legacy block that merely appears in the diff context of an old file is not a finding, and never ask for a whole-file conversion.
 - Missing `allow_test_objects = true` on a test using test-only objects on a module/app binary.
 
 NEVER flag:
-- HIT formatting (column alignment, whitespace inside blocks).
+- HIT formatting (column alignment, whitespace inside blocks). Legacy `[./]` / `[../]` delimiters are NOT formatting — see the ALWAYS-flag list.
 - Quality of gold files that weren't changed in this PR.
 - Tests that pass in CI today but feel "fragile" — not actionable.
 - Style of `detail` strings beyond clarity (don't bikeshed wording).

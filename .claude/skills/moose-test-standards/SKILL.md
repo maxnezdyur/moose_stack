@@ -44,10 +44,21 @@ Module tests run on the production `<m>-opt` binary. `<Module>TestApp.C` is a cl
 []
 ```
 
-- `[]` closes blocks (same as `[../]`; use `[]` in new tests).
+- **Block delimiters: `[name]` opens, `[]` closes. Never `[./name]` / `[../]` in new tests.** The `./` and `../` tokens are vestigial HIT path navigation; they parse identically but are legacy. ~800 framework/module specs still carry them — see below.
 - Strings: single or double quotes; adjacent quoted fragments concatenate.
 - Lists: space-separated tokens in one quoted string.
 - Six SQA params on `[Tests]` propagate to leaves: `design`, `issues`, `verification`, `validation`, `deprecated`, `collections`. **Tester params do NOT inherit** (no `[GlobalParams]` analog).
+
+### Editing a legacy spec
+
+Many existing specs are entirely `[./name]` / `[../]`. When you add a block to one:
+
+- Write the **new** block in modern syntax. Do **not** pattern-match the legacy siblings.
+- Leave the existing legacy blocks alone. Converting the whole file inflates the diff with unrelated churn and destroys blame.
+
+Mixed-syntax files are the expected outcome and are fine — `modules/chemical_reactions/test/tests/aqueous_equilibrium/tests` is the canonical example (original blocks legacy, later additions modern). This is the same opportunistic migration upstream MOOSE follows; there is no bulk-reformat commit.
+
+Renames count as new blocks: re-typing `[./old]` as `[./new]` re-introduces the legacy form. Use `[new]` / `[]`.
 
 ## SQA traceability
 
@@ -197,3 +208,4 @@ Module tests cannot use `MooseTestApp` test objects — only those from their ow
 - Long `#` prologue in a `.i` — derivations, path-dependence essays, literature citations, ASCII matrices. Compress to the `requirement`/`detail` or drop it.
 - `design` pointing at a deleted/renamed `.md` — grep specs whenever renaming doc pages.
 - Fabricated `input` paths.
+- `[./name]` / `[../]` in a newly added or renamed block — use `[name]` / `[]`. See "Editing a legacy spec" above.
