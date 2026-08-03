@@ -4,7 +4,6 @@ description: Orchestrator for moose review. PR mode (spawned by the moose-pr-rev
 skills:
   - moose-review-protocol
 tools: Read, Write, Bash, Agent
-model: opus
 color: purple
 ---
 
