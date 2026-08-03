@@ -68,7 +68,7 @@ Required (or inherited):
 |---|---|
 | `requirement` | One unambiguous "shall" sentence of observable behavior: `'The <system\|app> shall <verb> <object> [<condition>].'` Error tests: `'shall report an error when <condition>'`. Never "will"/"should". Canonical guidance: `moose/framework/doc/content/sqa/what_is_a_requirement.md`. |
 | `design` | Space-separated `.md` filenames; suffix-matched against `git ls-files`. |
-| `issues` | `#NNNN`, `repo#NNNN`, or 6+ hex SHA. **`#000` is anti-pattern.** |
+| `issues` | `#NNNN`, `repo#NNNN`, or 6+ hex SHA. **`#000` is anti-pattern.** A NEW test must cite the issue that motivated it (the PR's issue). Multiple citations are fine — append the new issue to any existing list (`'#7840 #33415'`), never replace. Inheriting an older file-level `issues` alone is NOT sufficient for a new test: give the leaf its own `issues` line that includes the motivating issue. |
 
 Optional: `detail` (sub-req text), `collections` (one of `FUNCTIONAL`/`USABILITY`/`PERFORMANCE`/`SYSTEM`/`FAILURE_ANALYSIS`), `verification`/`validation` (`.md`), `deprecated = true` (cannot coexist with other SQA fields).
 
