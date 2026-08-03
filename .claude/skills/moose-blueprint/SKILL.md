@@ -45,6 +45,7 @@ When scouts report:
   - **Abandon idea** — feature already exists, no work needed
 - **Close but not direct** → record it; next round asks "extend X or write fresh?"
 - **No match** → record the negative result ("searched for X, Y, Z — nothing found") so the blueprint proves the search happened.
+- **Counterpart on the other side of an AD/non-AD pair** → if the plan restructures only one side, record the divergence, the unification follow-up, and the existing users that follow-up would migrate.
 
 Scout findings are advisory — the user owns reuse decisions, recorded in the blueprint. If a scout returns BLOCKED or empty, continue without it that round and note "Scout failed: <reason>" under Reuse decisions; don't fabricate findings.
 
@@ -66,7 +67,7 @@ Then present a draft summary via `AskUserQuestion`: **Looks good — write it** 
 | `#physics` | equation with symbols defined + **validParams shape** + **residual / contribution form** |
 | `#reuse-decisions` | per scout finding: `file:line` — class, what it does, Decision (Reuse / Extend / Parallel), why — or the negative-search record |
 | `#test-plan` | per test: name, Tester kind, asserted behavior, mutation rationale |
-| `#doc-plan` | **Needed:** yes/no, page path, public surface |
+| `#doc-plan` | **Needed:** yes/no, page path, public surface + **Existing coverage:** every page already documenting the feature and the placement/consolidation the user chose |
 | `#out-of-scope` | explicit non-goals |
 | `#work-plan` | work units + dep edges, rendered as computed waves with status chips + read-only standing-gate strips, plus the machine JSON island `#work-plan-data` — full spec in [`references/work-plan-format.md`](references/work-plan-format.md) |
 

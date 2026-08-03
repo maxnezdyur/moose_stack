@@ -66,7 +66,7 @@ Required (or inherited):
 
 | Field | Convention |
 |---|---|
-| `requirement` | Active voice + "shall". `'The system shall <verb> <object>.'` |
+| `requirement` | One unambiguous "shall" sentence of observable behavior: `'The <system\|app> shall <verb> <object> [<condition>].'` Error tests: `'shall report an error when <condition>'`. Never "will"/"should". Canonical guidance: `moose/framework/doc/content/sqa/what_is_a_requirement.md`. |
 | `design` | Space-separated `.md` filenames; suffix-matched against `git ls-files`. |
 | `issues` | `#NNNN`, `repo#NNNN`, or 6+ hex SHA. **`#000` is anti-pattern.** |
 
@@ -208,4 +208,5 @@ Module tests cannot use `MooseTestApp` test objects — only those from their ow
 - Long `#` prologue in a `.i` — derivations, path-dependence essays, literature citations, ASCII matrices. Compress to the `requirement`/`detail` or drop it.
 - `design` pointing at a deleted/renamed `.md` — grep specs whenever renaming doc pages.
 - Fabricated `input` paths.
+- A `RunException` test cementing a restriction a small code change would remove — fix the code instead of testing the limitation as intended behavior.
 - `[./name]` / `[../]` in a newly added or renamed block — use `[name]` / `[]`. See "Editing a legacy spec" above.

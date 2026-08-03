@@ -6,7 +6,7 @@ user-invocable: false
 
 # MOOSE Documentation Standards
 
-Reference and pitfalls for authoring `.md` pages under `<repo>/doc/content/` in moose, blackbear, and isopod.
+Reference and pitfalls for authoring `.md` pages under `<repo>/doc/content/` in moose, blackbear, and isopod. Upstream canonical standards: `moose/python/doc/content/python/MooseDocs/standards.md` — this skill adds the house rules and pitfalls it doesn't cover.
 
 ## File location
 
@@ -14,6 +14,13 @@ Reference and pitfalls for authoring `.md` pages under `<repo>/doc/content/` in 
 - **Free-form / theory pages** live anywhere under `<repo>/doc/content/`.
 - **Module landing** is wired via `menu:` in `config.yml`. The content-tree `index.md` is often a one-line redirect: `[modules/heat_transfer/index.md]`.
 - **SQA pages** live under `<repo>/doc/content/sqa/` or per-module `.../sqa/`.
+
+## Syntax pages vs source pages
+
+- `syntax/<block path>/index.md` documents the input-file block; `source/<dir>/<Class>.md` documents the C++ class. Both are derived mechanically and required by the checker (`moose/python/moosesqa/check_syntax.py`) — an Action registered at N syntax paths needs one class page and N index pages.
+- Commands are node-typed: `!syntax list` renders only on an index page; `!syntax description`/`inputs`/`children` only on a class page; `!syntax parameters` on an index page aggregates all child actions. Put each fact on the page its command belongs to.
+- Render a given parameter table on one page only — for a single-action block, the class page. Class page owns the class description, constructed objects, and class-level preconditions; index page owns block semantics, sub-block usage, example inputs, and the `!syntax list` trailer.
+- A deprecated-syntax mirror page (forced by `registerDeprecatedSyntax`) is a deprecation `!alert` plus `!include` of the live page — never a hand-copied fork. Alternative: drop the path from docs via `remove.yml` referenced in both `config.yml` and `sqa_reports.yml`.
 
 ## Standard MooseObject page skeleton
 
@@ -33,16 +40,26 @@ Reference and pitfalls for authoring `.md` pages under `<repo>/doc/content/` in 
     !syntax inputs /<Base>/ClassName
     !syntax children /<Base>/ClassName
 
-- **H1 matches the C++ class name exactly** — every `!syntax` call on the page breaks otherwise. AD/non-AD pair → `# Class / ADClass` on one page, never two pages.
+- **H1 names the class** — exact or prose-spaced (`!syntax` commands resolve from their positional path, not the H1). The joint `# Class / ADClass` heading is only for a single page documenting both registered variants; a page for one variant names only that class.
 - `!syntax description` pulls `addClassDescription` from C++. Missing → renders red; fix the C++.
 - `!syntax parameters/inputs/children` trailer is standard. Don't omit.
-- Inline param refs: `[!param](/Kernels/ClassName/variable)`. Typos trigger Levenshtein suggestions in the build log.
+- Inline param refs: `[!param](/Kernels/ClassName/variable)` — prefer one over plain code formatting whenever prose names a parameter. Typos trigger Levenshtein suggestions in the build log.
+
+## Prose
+
+- Never label a maintained implementation legacy, deprecated, or superseded — AD vs non-AD is a capability axis, not a lifecycle axis; distinguish variants by capability only. Use deprecation language only where the codebase already carries it (a deprecation banner, a `Legacy*` name, a deprecated registration).
+- Cut filler qualifiers and abstract path/mode narration — keep only words that carry information the user needs.
+- State meaning directly ("<subject> does X because Y") — cut conversational scaffolding ("What happens is...", "Note that...", "need to make sure") but keep the rationale, restated declaratively.
+- Document the operating envelope, not just the mechanism: the frame/configuration results are reported in, the assumptions the math makes, and the limitations — read them off the C++ guards and the tests, never guess from the class name. Upstream: § End-User Focused in the standards page above.
+- In worked-example prose, state the general requirement and mark the input's concrete values as instances ("$\Delta t = 4$ in this case"), anchored to the parameter name.
+- When a change adds or alters a parameter whose behavior the page prose describes, revise that prose (naming the parameter via `[!param]`); never restate defaults, types, or required/optional status — the `!syntax parameters` trailer generates those. See `moose/framework/doc/content/framework/documenting.md` (modifying a class obliges updating its page).
 
 ## Math
 
 - Default to bare `\begin{equation}...\end{equation}` (katex picks them up).
 - `!equation id=foo` only when you need cross-refs (`[!eqref](foo)` or `[foo]`).
 - Inline: `$...$`.
+- State which residual the object contributes to (and which it does not), and define every symbol and sign convention in a shown equation, naming what supplies each symbol — a `[!param]` link, material property, coupled variable, or companion object. Upstream: § Equations Standards in the standards page above.
 
 ## Listings
 
@@ -55,6 +72,8 @@ Reference and pitfalls for authoring `.md` pages under `<repo>/doc/content/` in 
 | `!listing path/file.C re=... re-flags=re.M\|re.S\|re.U` | Regex extraction |
 
 **`block=` is `.i`/`.hit` only** — on other file types it is silently ignored; use `start=`/`end=`/`re=`.
+
+**Point `!listing` at the input file itself, scoped by `block=`** — never a `tests` spec, and never a variant whose behavior comes only from `cli_args`.
 
 Always reference real test inputs with `!listing`, never inline fenced HIT: a pasted snippet is a static fork that drifts silently when the test changes, while `!listing` re-extracts on every build. Slice with `start=`/`end=` if the piece isn't a discrete block. Inline fenced HIT is acceptable only for a tiny illustrative fragment with no corresponding test input — and if no real test input exists, omit the example (or write the test first) rather than fabricate one.
 
@@ -71,6 +90,13 @@ Always reference real test inputs with `!listing`, never inline fenced HIT: a pa
 - Section anchor: `## Heading id=foo` → `[#foo]` / `[Page.md#foo]`.
 - Shortcut alias: `[Kernels]` (resolves via `framework/doc/globals.yml`).
 - Optional: `[help/contact_us.md optional=True]`.
+- Name and link the specific object or action — never a generic noun phrase in its place.
+- One canonical page per topic — cross-link to it instead of restating it, and keep concept and theory prose off object and action reference pages.
+
+## Sibling and variant pages
+
+- Apply a page fix to every sibling page of the same kind in the same change — read each page in full first, never paste text across pages blindly.
+- Keep AD/non-AD counterpart pages near-identical. Factor a duplicated prose block into `<module>/doc/content/modules/<module>/common/` and `!include` it — with separate AD and non-AD snippets so cross-links resolve to the right variant.
 
 ## Media
 
