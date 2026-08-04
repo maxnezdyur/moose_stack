@@ -31,7 +31,7 @@ On failure at any step, stop and report — do not partially tear down; the user
 
 1. Validate:
    - Name is kebab-case.
-   - `~/projects/<feature>/` does not exist; `conda env list` has no `moose-<feature>`.
+   - `~/projects/moose-worktrees/<feature>/` does not exist; `conda env list` has no `moose-<feature>`.
    - Branch `<feature>` exists on none of the four repos:
      ```bash
      for r in moose_stack moose_stack/moose moose_stack/blackbear moose_stack/isopod; do
@@ -40,31 +40,32 @@ On failure at any step, stop and report — do not partially tear down; the user
      ```
 2. Meta-repo worktree + specs home:
    ```bash
-   git -C ~/projects/moose_stack worktree add ~/projects/<feature> -b <feature>
-   mkdir -p ~/projects/<feature>/specs   # home for blueprint.html (see /moose-blueprint)
-   cp ~/projects/<feature>/moose_stack.code-workspace ~/projects/<feature>/<feature>.code-workspace
+   mkdir -p ~/projects/moose-worktrees   # shared home for all feature worktrees
+   git -C ~/projects/moose_stack worktree add ~/projects/moose-worktrees/<feature> -b <feature>
+   mkdir -p ~/projects/moose-worktrees/<feature>/specs   # home for blueprint.html (see /moose-blueprint)
+   cp ~/projects/moose-worktrees/<feature>/moose_stack.code-workspace ~/projects/moose-worktrees/<feature>/<feature>.code-workspace
    ```
    The workspace copy gives each worktree a distinguishable VS Code window title. It is gitignored (`*.code-workspace` except the tracked original); never `mv` the tracked `moose_stack.code-workspace` — that dirties the feature branch.
    Submodule paths are left as empty directories (gitlinks only). Do NOT run `git submodule update --init` in this worktree — the submodule worktrees created next are the source of truth, and `update --init` would try to clone into those paths and conflict.
 3. Submodule worktrees, for each of `moose`, `blackbear`, `isopod`:
    ```bash
-   rmdir ~/projects/<feature>/<sub>   # empty dir left by step 2, if present
-   git -C ~/projects/moose_stack/<sub> worktree add ~/projects/<feature>/<sub> -b <feature>
+   rmdir ~/projects/moose-worktrees/<feature>/<sub>   # empty dir left by step 2, if present
+   git -C ~/projects/moose_stack/<sub> worktree add ~/projects/moose-worktrees/<feature>/<sub> -b <feature>
    ```
    Apps locate MOOSE via `../moose` (Makefile fallback) — the paired MOOSE worktree satisfies this.
 4. CodeGraph index: always **copy + sync**, never `codegraph init` — the ~1 GB DB stores relative paths, so cloning the meta-repo's DB and syncing the branch diff takes ~50s vs a multi-minute full rebuild. Skip (and note it) if `~/projects/moose_stack/.codegraph/codegraph.db` is absent.
    ```bash
    # Flush main's WAL so a single-file copy is consistent, then APFS-clone the DB (instant, same volume)
    sqlite3 ~/projects/moose_stack/.codegraph/codegraph.db "PRAGMA wal_checkpoint(TRUNCATE);"
-   mkdir -p ~/projects/<feature>/.codegraph
-   cp -c ~/projects/moose_stack/.codegraph/codegraph.db ~/projects/<feature>/.codegraph/codegraph.db
-   cp    ~/projects/moose_stack/.codegraph/.gitignore   ~/projects/<feature>/.codegraph/.gitignore
-   ( cd ~/projects/<feature> && codegraph sync . )   # re-parses only changed files; prunes files absent from the worktree
+   mkdir -p ~/projects/moose-worktrees/<feature>/.codegraph
+   cp -c ~/projects/moose_stack/.codegraph/codegraph.db ~/projects/moose-worktrees/<feature>/.codegraph/codegraph.db
+   cp    ~/projects/moose_stack/.codegraph/.gitignore   ~/projects/moose-worktrees/<feature>/.codegraph/.gitignore
+   ( cd ~/projects/moose-worktrees/<feature> && codegraph sync . )   # re-parses only changed files; prunes files absent from the worktree
    ```
    Copy only `codegraph.db` + `.gitignore` — never `daemon.sock`/`daemon.pid`/`*-wal`/`*-shm`; the new worktree spawns its own daemon on first `sync`. The DB stays gitignored and machine-local (it exceeds GitHub's 100 MB limit and goes stale immediately). This step is independent of the conda env — safe to run concurrently with it.
 5. Conda env — fresh, pinned to the moose-dev version this checkout needs (never clone, never mutate the base `moose` env). Read the version from the feature worktree's own moose — the same source the MOOSE install docs' `!versioner!` shortcode substitutes into `conda create -n moose moose-dev=<version>`:
    ```bash
-   yq -r '.packages."moose-dev".version' ~/projects/<feature>/moose/scripts/versioner.yaml   # e.g. 2026.05.08
+   yq -r '.packages."moose-dev".version' ~/projects/moose-worktrees/<feature>/moose/scripts/versioner.yaml   # e.g. 2026.05.08
    conda create -n moose-<feature> moose-dev=<version> -c https://conda.software.inl.gov/public -y
    ```
    MOOSE and its conda packages move in lockstep: if the branch later bumps `moose` to a commit whose `versioner.yaml` reports a different version, recreate the env with the new pin.

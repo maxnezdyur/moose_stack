@@ -34,12 +34,12 @@ Create a sibling worktree of the meta-repo outside `moose_stack` so the baseline
 
 ```bash
 # meta-repo worktree on a new feature branch (submodule paths are empty gitlinks)
-git -C ~/projects/moose_stack worktree add ~/projects/<feature> -b <feature>
+git -C ~/projects/moose_stack worktree add ~/projects/moose-worktrees/<feature> -b <feature>
 
 # for each submodule: remove the empty gitlink dir, then add a worktree on a matching branch
 for sub in moose blackbear isopod; do
-  rmdir ~/projects/<feature>/$sub
-  git -C ~/projects/moose_stack/$sub worktree add ~/projects/<feature>/$sub -b <feature>
+  rmdir ~/projects/moose-worktrees/<feature>/$sub
+  git -C ~/projects/moose_stack/$sub worktree add ~/projects/moose-worktrees/<feature>/$sub -b <feature>
 done
 ```
 
@@ -47,14 +47,14 @@ Then set up the env for this worktree — see [`docs/local.md`](docs/local.md) (
 
 Do NOT run `git submodule update --init` inside the meta-repo worktree — the per-submodule worktrees above are the source of truth. All four branches are local-only at create time; push happens when you open a PR.
 
-Inside `~/projects/<feature>/blackbear`, `../moose` resolves to the paired MOOSE worktree — no `MOOSE_DIR` env juggling.
+Inside `~/projects/moose-worktrees/<feature>/blackbear`, `../moose` resolves to the paired MOOSE worktree — no `MOOSE_DIR` env juggling.
 
 ## Opening a PR
 
 Target idaholab via `--head maxnezdyur:`:
 
 ```bash
-cd ~/projects/<feature>/<app>
+cd ~/projects/moose-worktrees/<feature>/<app>
 git push -u origin <feature>
 gh pr create --repo idaholab/<app> --base next --head maxnezdyur:<feature> --draft
 ```
@@ -76,9 +76,9 @@ Remove submodule worktrees first, then the meta-repo worktree. Then tear down th
 
 ```bash
 for sub in moose blackbear isopod; do
-  git -C ~/projects/moose_stack/$sub worktree remove ~/projects/<feature>/$sub
+  git -C ~/projects/moose_stack/$sub worktree remove ~/projects/moose-worktrees/<feature>/$sub
 done
-git -C ~/projects/moose_stack worktree remove ~/projects/<feature>
+git -C ~/projects/moose_stack worktree remove ~/projects/moose-worktrees/<feature>
 
 # optional: drop the local branches if unused
 for r in moose_stack moose_stack/moose moose_stack/blackbear moose_stack/isopod; do

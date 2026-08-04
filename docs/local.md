@@ -15,7 +15,7 @@ This is the shared base for day-to-day work in the meta-repo. Never modify it di
 After creating the feature worktrees per `../README.md`, create a fresh env pinned to the moose-dev version the checkout needs (read from the worktree's own moose — the same source MOOSE's install docs use):
 
 ```bash
-yq -r '.packages."moose-dev".version' ~/projects/<feature>/moose/scripts/versioner.yaml
+yq -r '.packages."moose-dev".version' ~/projects/moose-worktrees/<feature>/moose/scripts/versioner.yaml
 conda create -n moose-<feature> moose-dev=<version> -c https://conda.software.inl.gov/public
 conda activate moose-<feature>
 ```
@@ -27,7 +27,7 @@ A fresh pinned env matches the checkout exactly and isolates any `update_and_reb
 From your app's worktree with the env active:
 
 ```bash
-cd ~/projects/<feature>/blackbear   # or isopod
+cd ~/projects/moose-worktrees/<feature>/blackbear   # or isopod
 make -j N
 ./run_tests -j N
 ```
