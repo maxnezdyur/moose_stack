@@ -18,6 +18,14 @@ Meta-repo pinning three forks as submodules: `moose/`, `blackbear/`, `isopod/`. 
 - `blackbear`, `isopod` → `devel`
 - This meta-repo → `main`
 
+## Pull requests — target `next`, never `devel`
+
+- Every PR to `idaholab/<app>` (moose, blackbear, isopod) must set the base branch to `next`. CIVET's precheck rejects PRs against `devel`.
+- Always create PRs as drafts (`--draft`). I convert them to ready in the GitHub UI — never mark a PR ready yourself.
+- `gh pr create --repo idaholab/<app> --base next --head maxnezdyur:<feature> --draft`
+- `next` is only the PR target. Branch from `devel` and diff against `devel` as usual.
+- If an open PR has base `devel`, fix it: `gh pr edit <PR#> --base next`.
+
 ## Git context — skills target the submodule, not the meta-repo
 
 When I invoke a git-oriented skill — `branch-diff`, `commit`, and the like — I almost always mean the **submodule I'm working in** (`moose/`, `blackbear/`, or `isopod/`), not the meta-repo root. The meta-repo only pins submodule tips; the real changes live inside a submodule. Default the skill's working directory to that inner repo (detect it from `cwd`, or ask which submodule if it's ambiguous)

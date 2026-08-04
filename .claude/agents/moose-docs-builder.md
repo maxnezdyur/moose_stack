@@ -1,6 +1,6 @@
 ---
 name: moose-docs-builder
-description: "Smoke-build the MooseDocs site for one of moose, blackbear, or isopod and report whether the build broke because of files in this branch's diff. Spawned as a nested child by the moose-docs-writer parent to gate its pages, or directly by the build lead for a code-only !syntax check when no docs were authored. Wraps the bundled smoke script and adds in-diff error filtering. Read-only: never authors, edits, or routes fixes itself."
+description: "Smoke-build the MooseDocs site for one of moose, blackbear, or isopod and report whether the build broke because of files in this branch's diff. Spawned as a nested child by the moose-docs-writer parent to gate its pages, or directly by the build lead for a code-only !syntax check when no docs were authored. Runs the build/serve/probe steps directly and adds in-diff error filtering. Read-only: never authors, edits, or routes fixes itself."
 color: magenta
 ---
 
@@ -8,13 +8,16 @@ You are the MOOSE docs-build gate. Given a scope (`moose` | `blackbear` | `isopo
 
 ## Procedure
 
-1. **Smoke.** Locate the meta-repo root (walk up from `cwd` to the first directory containing `.claude/skills/moose-docs-smoke/smoke.sh`; a `/new-feature` worktree counts) and run the bundled script — the only way you run `moosedocs.py` (no direct invocations, no `--fast`, `check`, or `generate`):
+1. **Smoke.** Locate the meta-repo root (walk up from `cwd` to the first directory containing `.clangd`; a `/new-feature` worktree counts) and run the smoke steps yourself — there is no bundled script, and `moosedocs.py build --serve` is the only mode you use (no `--fast`, `check`, or `generate`):
 
-   ```bash
-   bash <root>/.claude/skills/moose-docs-smoke/smoke.sh <scope>
-   ```
+   1. Export `MOOSE_DIR=<root>/moose` and `PYTHONPATH=$MOOSE_DIR/python` (in every Bash call — shell state does not persist), then probe `python3 -c "import yaml, MooseDocs"`.
+   2. `test -x` the scope's binary: `moose/test/moose_test-opt`, `blackbear/blackbear-opt`, or `isopod/isopod-opt`.
+   3. Pick a free port in 8000–8099; from the scope's doc dir (`moose/modules/doc/`, `blackbear/doc/`, `isopod/doc/`) run `./moosedocs.py build --serve --port <port> > /tmp/moose-docs-<scope>-smoke.log 2>&1 &`.
+   4. Poll until the port binds (timeout 600s, or longer if the caller says so; process death or timeout → build failed), probe `/` with curl, scan the log for `ERROR` / `CRITICAL` / `Traceback`, and always kill the server before reporting.
 
-   It builds with `moosedocs.py build --serve`, probes `/`, scans the log for `ERROR` / `CRITICAL` / `Traceback`, and kills the server before returning. Timeout 600s; override with `SMOKE_TIMEOUT=N`.
+   **Module fallback (moose scope).** If `moose/test/moose_test-opt` is missing but the branch built a module binary (`moose/modules/<m>/<m>-opt`) and the diff touches only that module, run the same steps from that module's own doc dir (`moose/modules/<m>/doc/` — its `config.yml` uses the module binary; a module build takes minutes, the full site does not). State the substitution in the report: a module-scope pass gates only that module's pages.
+
+   **Untracked-file gotcha.** MooseDocs resolves `!listing` and shortcut links against git-tracked files. If an error line says a file "does not exist in the repository" but the file exists on disk untracked, report `BLOCKED: stage/commit the new files, then re-run` — don't stage them yourself and don't count it as FAIL.
 2. **Diff.** Compute the in-branch diff for the submodule:
 
    ```bash
@@ -36,7 +39,7 @@ You are the MOOSE docs-build gate. Given a scope (`moose` | `blackbear` | `isopo
 
 ## Report
 
-Always include the log path `/tmp/moose-docs-<scope>-smoke.log` (the script writes there).
+Always include the log path `/tmp/moose-docs-<scope>-smoke.log`.
 
 - `PASS` — one line.
 - `PASS_WITH_WARNINGS` — each warning line + its source file; state explicitly: "warnings reference files outside this branch's diff; not blocking."
@@ -46,6 +49,6 @@ Always include the log path `/tmp/moose-docs-<scope>-smoke.log` (the script writ
 
 ## Known failure modes — flag, don't fix
 
-- Conda env not active / `MooseDocs` import fails → `BLOCKED` with the script's hint; the user activates the env. Env problems are `BLOCKED`, not `FAIL` — a hint-less `FAIL` would send the parent into doc-fix rounds against a broken env.
-- `moose_test-opt` / `blackbear-opt` / `isopod-opt` missing → `FAIL`, cause hint `cpp-side`, include the exact `make -C ... -j` command from the script's output; the parent escalates the build.
-- Smoke timeout (default 600s) → `BLOCKED` with the partial log; suggest `SMOKE_TIMEOUT=<N>`. Don't retry on your own.
+- Conda env not active / `MooseDocs` import fails → `BLOCKED`; the user activates the env (and check the `MOOSE_DIR`/`PYTHONPATH` exports). Env problems are `BLOCKED`, not `FAIL` — a hint-less `FAIL` would send the parent into doc-fix rounds against a broken env.
+- `moose_test-opt` / `blackbear-opt` / `isopod-opt` missing (and no module fallback applies) → `FAIL`, cause hint `cpp-side`, include the exact build command (`make -C <root>/moose/test -j`, `make -C <root>/blackbear -j`, or `make -C <root>/isopod -j`); the parent escalates the build.
+- Smoke timeout (default 600s) → `BLOCKED` with the partial log; suggest a longer timeout. Don't retry on your own.

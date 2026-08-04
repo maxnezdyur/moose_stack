@@ -47,7 +47,7 @@ Numeric placeholders (material constants, dt, output frequency, mesh resolution,
 
 ## Write
 
-Minimal style: clean HIT, no comments, no header, no separator lines — the file should look like one a human would commit. Complete and runnable: `[Mesh]`, `[Variables]`, kernels/physics, `[Materials]`, `[BCs]`, `[Executioner]`, `[Outputs]`, plus `[ICs]`/`[Postprocessors]` where warranted; no empty blocks. AD-named classes (`ADDirichletBC`, not `DirichletBC`) unless the user opted out. In modify mode, touch only the blocks the change requires.
+Minimal style: clean HIT, no header, no separator lines, nearly commentless — never a comment on the first lines, at most one `#` line in the whole file, prefer zero. The file should look like one a human would commit. Complete and runnable: `[Mesh]`, `[Variables]`, kernels/physics, `[Materials]`, `[BCs]`, `[Executioner]`, `[Outputs]`, plus `[ICs]`/`[Postprocessors]` where warranted; no empty blocks. AD-named classes (`ADDirichletBC`, not `DirichletBC`) unless the user opted out. In modify mode, touch only the blocks the change requires.
 
 ## Validate
 

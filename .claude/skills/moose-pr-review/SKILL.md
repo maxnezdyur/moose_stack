@@ -22,7 +22,7 @@ Target repo: `idaholab/moose` only — refuse anything else with `This skill onl
 
 1. Extract the PR number.
 2. From the meta-repo root, `cd moose`; `git status --porcelain` — any output → STOP and tell the user to commit or stash. Never auto-stash or force-checkout: the orchestrator will `gh pr checkout` and would clobber local work.
-3. `gh pr view <PR#> --json number,title,author,baseRefName,headRefName,headRepository,state,url` — confirm `state == "OPEN"` and the head repo is a fork of `idaholab/moose`. If closed/merged, ask once whether to proceed anyway.
+3. `gh pr view <PR#> --json number,title,author,baseRefName,headRefName,headRepository,state,url` — confirm `state == "OPEN"` and the head repo is a fork of `idaholab/moose`. If closed/merged, ask once whether to proceed anyway. If `baseRefName` is `devel`, warn the user: idaholab PRs must target `next` (CIVET's precheck rejects `devel`) — suggest `gh pr edit <PR#> --base next`.
 4. Save the JSON to `/tmp/moose-pr-<PR#>-meta.json` — the orchestrator reads it and forwards it into each reviewer.
 
 ## Hand off

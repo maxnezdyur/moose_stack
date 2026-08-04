@@ -147,7 +147,7 @@ Children of a requirement-grouping parent must use `detail`, NOT their own `requ
 
 ## Input file conventions
 
-- **No essay header.** Do not open a `.i` with a multi-line `#` block explaining the physics, the derivation, the expected result, or why the test exists. That rationale belongs in the spec's `requirement`/`detail` (and the class `.md`), not the input. Cap any leading comment at ~2 lines; brief inline `#` notes on a specific parameter or block are fine.
+- **Nearly commentless.** No comments on the first lines of a `.i` — no header block of any size. At most 1 `#` comment line in the whole file, and prefer zero. Rationale (physics, derivation, expected result, why the test exists) belongs in the spec's `requirement`/`detail` (and the class `.md`), not the input; a non-obvious tolerance or mutation guard is explained in the `tests` spec next to the parameter it justifies.
 - Tiny mesh (4x4 to 10x10).
 - Small `num_steps` (5–20).
 - `[Outputs]` last; `exodus = true` default.
@@ -205,7 +205,7 @@ Module tests cannot use `MooseTestApp` test objects — only those from their ow
 - Per-leaf `requirement` when a parent + N `detail` children would do; `detail` on a top-level leaf with no parent requirement.
 - Duplicate `requirement` text across specs; re-stating `design`/`issues` on children the `[Tests]` block already covers.
 - Vague, passive `requirement` wording.
-- Long `#` prologue in a `.i` — derivations, path-dependence essays, literature citations, ASCII matrices. Compress to the `requirement`/`detail` or drop it.
+- Any leading `#` comment in a `.i`, or more than one `#` line total — derivations, path-dependence essays, literature citations, ASCII matrices. Move to the `requirement`/`detail` or drop it.
 - `design` pointing at a deleted/renamed `.md` — grep specs whenever renaming doc pages.
 - Fabricated `input` paths.
 - A `RunException` test cementing a restriction a small code change would remove — fix the code instead of testing the limitation as intended behavior.
