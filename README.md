@@ -56,7 +56,7 @@ Target idaholab via `--head maxnezdyur:`:
 ```bash
 cd ~/projects/<feature>/<app>
 git push -u origin <feature>
-gh pr create --repo idaholab/<app> --base devel --head maxnezdyur:<feature>
+gh pr create --repo idaholab/<app> --base next --head maxnezdyur:<feature>
 ```
 
 ## Updating submodule pointers
