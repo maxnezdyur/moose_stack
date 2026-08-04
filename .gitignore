@@ -8,5 +8,7 @@ compile_commands.json
 .cache/
 !.claude/settings.local.json
 codex-migration-report.json
+*.code-workspace
+!moose_stack.code-workspace
 *.err
 *.out

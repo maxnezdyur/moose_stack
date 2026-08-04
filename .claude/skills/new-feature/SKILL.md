@@ -42,7 +42,9 @@ On failure at any step, stop and report — do not partially tear down; the user
    ```bash
    git -C ~/projects/moose_stack worktree add ~/projects/<feature> -b <feature>
    mkdir -p ~/projects/<feature>/specs   # home for blueprint.html (see /moose-blueprint)
+   cp ~/projects/<feature>/moose_stack.code-workspace ~/projects/<feature>/<feature>.code-workspace
    ```
+   The workspace copy gives each worktree a distinguishable VS Code window title. It is gitignored (`*.code-workspace` except the tracked original); never `mv` the tracked `moose_stack.code-workspace` — that dirties the feature branch.
    Submodule paths are left as empty directories (gitlinks only). Do NOT run `git submodule update --init` in this worktree — the submodule worktrees created next are the source of truth, and `update --init` would try to clone into those paths and conflict.
 3. Submodule worktrees, for each of `moose`, `blackbear`, `isopod`:
    ```bash
@@ -66,7 +68,7 @@ On failure at any step, stop and report — do not partially tear down; the user
    conda create -n moose-<feature> moose-dev=<version> -c https://conda.software.inl.gov/public -y
    ```
    MOOSE and its conda packages move in lockstep: if the branch later bumps `moose` to a commit whose `versioner.yaml` reports a different version, recreate the env with the new pin.
-6. Report: workspace path, env name, the four branches created, CodeGraph status (or skipped), and remind the user to `conda activate moose-<feature>`.
+6. Report: workspace path, the `<feature>.code-workspace` file to open in VS Code, env name, the four branches created, CodeGraph status (or skipped), and remind the user to `conda activate moose-<feature>`.
 
 ## Notes
 
