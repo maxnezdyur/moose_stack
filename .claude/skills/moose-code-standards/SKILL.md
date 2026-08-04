@@ -56,6 +56,7 @@ Every byte you write — C++, Python, `tests` specs, `.i` inputs — must be 7-b
 ## Comments
 
 - Method-level documentation (purpose, contract, `@param`/`@return`) goes on the header declaration, not free comments above the `.C` definition; comments in the body carry implementation rationale only.
+- A body comment is a one- or two-line statement of fact — the constraint or rationale the code cannot show. A comment can be too long: paragraph-length explanation moves to the header Doxygen or the doc page, and narration of what the next line does is deleted, not shortened.
 - A commit that renames a symbol or changes semantics updates the comments describing it in the same commit; before rewording any comment, verify its claim is still true of the code.
 
 ## User-facing text
