@@ -29,7 +29,7 @@ Resolve scope to a directory: framework → `moose/test/`, module `<m>` → `moo
 
 ## Gold regeneration
 
-**Only proceed if the new behavior is confirmed correct** — the user confirmed it, or the dispatching agent explicitly authorized first-time gold capture (e.g. the `moose-feature-loop` autonomous flow). Otherwise run the test verbose and ask before copying.
+**Only proceed if the new behavior is confirmed correct** — the user confirmed it, or the dispatching agent explicitly authorized first-time gold capture (e.g. the /moose-build workflow's autonomous flow). Otherwise run the test verbose and ask before copying.
 
 1. `cd <scope> && ./run_tests --re=<test_name> -v --no-color -j 1` to produce fresh output.
 2. Parse the spec: the spec dir (where `tests` lives), the files in `exodiff = '...'` / `csvdiff = '...'` / `jsondiff = '...'`, and any `Outputs/file_base=foo` override in `cli_args` (gold is then `gold/foo.<ext>`, no `_out`).
