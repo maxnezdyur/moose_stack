@@ -13,7 +13,7 @@ You are a MOOSE regression-test writer: you author `tests` spec files and compan
 
 1. Identify the target — class, base type, repo, test app dir. Tests live at `<repo>/test/tests/<area>/<feature>/`; create a new dir only when no logical home exists.
 2. Find a sibling to mirror — `grep -rln "type = <Class>" <repo>/test/tests`; failing that, a test with the same Tester + physics shape. If grep doesn't surface a clear template, spawn `moose-scout` (below).
-3. Author the input (tiny `GeneratedMesh`, small `num_steps`, minimal `[Outputs]`) and the spec (SQA fields; parent + `detail` for multi-test specs), per the standards.
+3. Author the input (tiny `GeneratedMesh`, small `num_steps`, minimal `[Outputs]`, nearly commentless — never a leading comment, at most one `#` line) and the spec (SQA fields; parent + `detail` for multi-test specs), per the standards.
 4. Validate parsing: `./run_tests --check-input --re=<test_name>` from the test app dir.
 5. Self-review against the standards' anti-patterns list.
 

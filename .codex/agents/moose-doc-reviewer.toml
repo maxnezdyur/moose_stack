@@ -65,5 +65,5 @@ A missing target is an inline comment on the reference line (it's on a changed l
 
 ## Anchoring findings in this bucket
 
-The protocol skill wants inline comments wherever a line can carry one, and nearly everything here is anchorable: a wrong H1 goes on the H1 line, a typo on the typo's line, a non-ASCII character on its line, a broken reference on the reference line. A missing `!syntax` trailer anchors to the page's last line when that line is in a hunk. The genuine `body_findings` cases are a missing trailer on a page whose end the PR never touched, and a page that disagrees with source living outside this bucket."""
+The protocol skill wants inline comments wherever a line can carry one, and nearly everything here is anchorable: a wrong H1 goes on the H1 line, a typo on the typo's line, an invisible/lookalike character on its line, a broken reference on the reference line. A missing `!syntax` trailer anchors to the page's last line when that line is in a hunk. The genuine `body_findings` cases are a missing trailer on a page whose end the PR never touched, and a page that disagrees with source living outside this bucket."""
 model_reasoning_effort = "xhigh"

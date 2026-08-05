@@ -31,10 +31,13 @@ SUCCESS CRITERIA (one task each — the durable ledger):
   C3  unit tests exist AND pass                    (only if unit_on)
   C4  reuse decisions honored, no out-of-scope edits   (diff audit)
   C5  specs SQA-complete                           (every new/modified tests spec block carries requirement, design, issues)
-  C6  diff ASCII-clean                             (no non-ASCII bytes in any file the branch touched; .bib author diacritics exempt)
+  C6  code ASCII-clean                             (source/specs/.i touched by the branch; .md and .bib exempt)
 ```
 
-C5 and C6 are always in the contract — CIVET rejects PRs for missing SQA fields and for stray unicode, so they gate `GOAL_MET` like any other criterion. You audit both yourself with `Read`/`Grep` over the files the children report touching: C5 = each spec block (or its parent block) has all three fields; C6 = `Grep` pattern `[^\\x00-\\x7F]` over every touched file returns nothing (smart quotes, em/en dashes, NBSP, unicode math are the usual offenders — they arrive via AI prose and paste).
+C5 and C6 are always in the contract — CIVET rejects PRs for missing SQA fields and for stray unicode in code, so they gate `GOAL_MET` like any other criterion. You audit both yourself with `Read`/`Grep` over the files the children report touching:
+
+- **C5** = each spec block (or its parent block) has all three fields.
+- **C6** = `Grep` pattern `[^\\x00-\\x7F]` returns nothing over every touched **code** file — `.C`, `.h`, `.py`, `tests` specs, `.i` (smart quotes, em/en dashes, NBSP, unicode math are the usual offenders; they arrive via AI prose and paste). **`.md` and `.bib` are exempt**: `idaholab/moose` scoped the ASCII rule to code comments in `c12859fc3f` (May 2026, refs #32497), and non-ASCII in docs is correct — it is how author names spell properly (Nédélec). For `.md`, check only the invisible subset that breaks tooling — `[\\x{2018}\\x{2019}\\x{201C}\\x{201D}\\x{00A0}\\x{202F}\\x{200B}\\x{FEFF}]` — and never route a fix for a diacritic or an em dash.
 
 Announce goal + criteria to `main` in one `SendMessage`, then begin. If `reuse_only`, C1 needs no `implementer` — satisfy it by building what's there. If `reuse_only` *and* `test_plan` is empty (nothing triggers a test build), dispatch `test-runner` once **build-only** (`cd <scope> && make -j 6`, no `--re`) to evidence C1.
 
@@ -57,7 +60,7 @@ No fixed order. Each iteration: **assess** every criterion against current evide
 | **MISSING GOLD / structural DIFF** | `test-runner` → **regenerate + confirm + stage** (§ Gold) |
 | out-of-scope edit, or a reuse decision violated (C4) | `implementer` ← "revert X / honor reuse decision Y" |
 | spec missing `requirement`/`design`/`issues` (C5) | `test-writer` ← the offending spec path + which fields are missing |
-| non-ASCII byte in a touched file (C6) | the child that owns the file (`implementer` for source, `test-writer` for specs/`.i`, `unit-test-writer` for `unit/`) ← file:line + the offending characters, "replace with ASCII" |
+| non-ASCII byte in a touched **code** file, or an invisible char in a `.md` (C6) | the child that owns the file (`implementer` for source, `test-writer` for specs/`.i`, `unit-test-writer` for `unit/`, `docs-writer` for `.md`) ← file:line + the offending characters, "replace with ASCII". Never route an em dash or a diacritic in a `.md` — those are legitimate. |
 | a child returns `NEEDS_CONTEXT` | one-shot `moose-scout`, forward its cited findings back to that child |
 | a child returns `BLOCKED` (env/dep, or a spec ambiguity it can't resolve) | stop → `BLOCKED(reason)`, forwarding the child's blocker verbatim |
 | a child returns `DONE_WITH_CONCERNS` flagging "C++ must change first" (or similar actionable signal) | route the change to `implementer`; if unsatisfiable, `NEEDS_DESIGN`; otherwise record it and carry it into the `GOAL_MET` payload |
