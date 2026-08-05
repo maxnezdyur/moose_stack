@@ -144,23 +144,24 @@ Tests specs point at doc pages via `design = 'MyClass.md'` (suffix-matched). Ren
 | SQA RTM | `moose/modules/heat_transfer/doc/content/modules/heat_transfer/sqa/heat_transfer_rtm.md` |
 | Stub template | `moose/framework/doc/content/templates/stubs/moose_object.md.template` |
 
-## ASCII only — no smart quotes, em dashes, NBSP
+## Invisible characters — not an ASCII ban
 
-Every byte in a `.md` page must be 7-bit ASCII (`.bib` files are exempt — author diacritics are legitimate). Non-ASCII lookalikes render fine and are invisible in most editors, but later break grep, `!listing re=...` slicing, citation key matching, CIVET tooling, and string compares. They arrive via paste (PDFs, web pages, AI prose) and editor Smart Quotes/Dashes autocorrect — disable those for `.md`, and scan touched files before commit (from repo root):
+**Docs are not ASCII-only.** `idaholab/moose` narrowed that rule to code comments in `c12859fc3f` (May 2026, refs #32497): the ASCII precheck runs on code, and non-ASCII in documentation is wanted — it is how author names spell correctly (Nédélec, Grüneisen). Em dashes, en dashes, accented letters, and unicode math in a `.md` page are all fine. Do not flag them, and never "fix" a name's diacritics.
 
-    grep -rnP '[^\x00-\x7F]' --include='*.md' doc/
+What still causes real damage is the subset that is **invisible or a lookalike**. These render identically to an ASCII character but break `grep`, `!listing re=...` slicing, citation key matching, and string compares — so a page looks right and the tooling silently misses it. They arrive via paste (PDFs, web pages, AI prose) and editor Smart Quotes/Dashes autocorrect; disable those for `.md`.
 
-| Banned char | U+ | Replace with |
-|---|---|---|
-| `'` `'` smart single quote | 2018 / 2019 | `'` |
-| `"` `"` smart double quote | 201C / 201D | `"` |
-| `–` en dash | 2013 | `-` |
-| `—` em dash | 2014 | `--` |
-| `…` horizontal ellipsis | 2026 | `...` |
-| non-breaking space | 00A0 | regular space |
-| narrow no-break space | 202F | regular space |
-| zero-width space | 200B | delete |
-| byte-order mark | FEFF | delete |
+| Fix these | U+ | Replace with | Why |
+|---|---|---|---|
+| `'` `'` smart single quote | 2018 / 2019 | `'` | lookalike — breaks string/key matching |
+| `"` `"` smart double quote | 201C / 201D | `"` | lookalike — breaks string/key matching |
+| non-breaking space | 00A0 | regular space | invisible — breaks `re=` slicing and grep |
+| narrow no-break space | 202F | regular space | invisible — same |
+| zero-width space | 200B | delete | invisible — silent match failure |
+| byte-order mark | FEFF | delete | invisible — corrupts first-line parsing |
+
+Deliberate typography and correct spelling are **not** on that list: `—`, `–`, `…`, `é`, `ü`, `×`, `°`, and Greek letters stay as written. Scan for the damaging set only (from repo root):
+
+    grep -rnP '[\x{2018}\x{2019}\x{201C}\x{201D}\x{00A0}\x{202F}\x{200B}\x{FEFF}]' --include='*.md' doc/
 
 ## Build pitfalls
 

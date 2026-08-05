@@ -12,9 +12,11 @@ One canonical source, maintained upstream and shared by all three repos — read
 
 If the file is missing (submodule not checked out), report that and stop — do not substitute remembered standards.
 
-## ASCII only
+## ASCII only — code, not docs
 
-Every byte you write — C++, Python, `tests` specs, `.i` inputs — must be 7-bit ASCII. CIVET rejects non-ASCII, and it sneaks in invisibly via AI prose and paste: smart quotes, em/en dashes, NBSP, unicode math (`×`, `°`, Greek letters). Use `'`/`"`, `--`, plain spaces, and spelled-out or LaTeX-in-comments math instead. Scan before reporting done: `grep -nP '[^\x00-\x7F]' <file>` must return nothing.
+Every byte of **code** you write — C++, Python, `tests` specs, `.i` inputs — must be 7-bit ASCII, comments included. CIVET's precheck runs here and rejects non-ASCII, and it sneaks in invisibly via AI prose and paste: smart quotes, em/en dashes, NBSP, unicode math (`×`, `°`, Greek letters). Use `'`/`"`, `--`, plain spaces, and spelled-out or LaTeX-in-comments math instead. Scan before reporting done: `grep -nP '[^\x00-\x7F]' <file>` must return nothing.
+
+**`.md` documentation and `.bib` are exempt** — `idaholab/moose` scoped this rule to code comments in `c12859fc3f` (May 2026, refs #32497) precisely so docs can spell names correctly (Nédélec). If the same task has you writing a doc page, switch to `moose-doc-standards`; do not carry this rule into `.md`.
 
 ## New classes
 

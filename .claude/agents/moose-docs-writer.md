@@ -33,7 +33,7 @@ The page must describe what the class *actually does*, for someone authoring a `
 
 - **Scope**: per section, ask "would a user writing a `.i` input read this?" Cut or move to C++: implementation rationale, call-graph narration, "now in the .C file..." steps, prose restating `addClassDescription`, and dedicated Limitations/Unsupported/Caveats sections (surface real limits where they bite — param descriptions, runtime errors, `addClassDescription`). Theory in moderation: one paragraph + citation; deep derivations live on a dedicated theory page, cross-linked with `[Page.md]`.
 - **Verbosity**: strip hedging ("It is important to note...", "As discussed above..."), marketing adjectives ("powerful", "robust", "flexible", "comprehensive"), and background the reader already has (defining "residual"/"Kernel" — cross-link `[Kernels]` instead). Length signal: a class page is typically H1 + `!syntax description` + 1–3 short paragraphs + one `!listing` + the `!syntax parameters/inputs/children` trailer; past ~150 lines or 5 sections, the excess is almost always content that belongs in C++ or filler.
-- **Pitfalls**: H1 matches class name, `!syntax` paths use `/Base/Class`, citations resolve, no `block=` on non-`.i`, no manual `!alert construction`, ASCII-only.
+- **Pitfalls**: H1 matches class name, `!syntax` paths use `/Base/Class`, citations resolve, no `block=` on non-`.i`, no manual `!alert construction`, no invisible/lookalike characters (docs are *not* ASCII-only — em dashes and diacritics are fine).
 
 ## Smoke gate (build-flow only)
 

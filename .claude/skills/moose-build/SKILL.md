@@ -28,7 +28,7 @@ STANDING (every run, unconditionally):
   C1  build clean in <scope>                     (make exits 0)
   C4  reuse decisions honored, no out-of-scope edits  (diff audit)
   C5  specs SQA-complete                         (requirement/design/issues on every new/modified spec block)
-  C6  diff ASCII-clean                           (no non-ASCII bytes added; .bib diacritics exempt)
+  C6  code ASCII-clean                           (source/specs/.i only; .md, .bib exempt)
   DG  docs gate                                  (unless --core)
 SPEC-DERIVED:
   C2.<name>  test exists AND passes              (one per #test-plan row)
@@ -51,7 +51,19 @@ The gates below are owned by this skill. Specs render them read-only and cannot 
 1. **Suites green + gold staged** (C2, C3): `moose-test-runner` on the registered test names (`--re=<names>`); gold per § Gold policy.
 2. **Reuse / out-of-scope audit** (C4): diff vs the spec's `reuse_decisions[]` + `out_of_scope[]`.
 3. **SQA** (C5): grep audit of in-diff spec files for `requirement`/`design`/`issues` (parent-block declarations cover children), then authoritative `cd <doc-dir> && ./moosedocs.py check` (doc dir: `moose/modules/doc` | `blackbear/doc` | `isopod/doc`), errors filtered to the branch diff — pre-existing SQA debt is reported, not fixed. Env failure → surface the conda hint, note the grep audit still ran.
-4. **ASCII** (C6): `git -C <scope> diff devel...HEAD -- . ':(exclude)*gold*' | perl -ne 'print if /^\+/ and /[^\x00-\x7F]/'` — any hit fixed in place on the main thread (smart quotes → `'`/`"`, dashes → `--`, NBSP → space, unicode math → LaTeX in docs / ASCII in source), re-run until clean.
+4. **ASCII** (C6): CIVET's precheck covers **code**, not documentation — `idaholab/moose` scoped the rule to code comments in `c12859fc3f` (May 2026, refs #32497), so `.md` and `.bib` are excluded from this gate and non-ASCII there (em dashes, `Nédélec`) is correct, not a defect. Never "fix" a name's diacritics.
+
+   ```bash
+   git -C <scope> diff devel...HEAD -- . ':(exclude)*gold*' ':(exclude)*.md' ':(exclude)*.bib' \
+     | perl -ne 'print if /^\+/ and /[^\x00-\x7F]/'
+   ```
+
+   The code scan needs no `-CSD` — `[^\x00-\x7F]` is a byte test. Any hit fixed in place on the main thread (smart quotes → `'`/`"`, dashes → `--`, NBSP → space, unicode math → spelled out or LaTeX in a comment), re-run until clean. Separately, scan added `.md` lines for the **invisible** subset only — `perl` here **must** carry `-CSD` or it compares undecoded bytes and silently misses smart quotes — smart quotes, NBSP/NNBSP, zero-width space, BOM — which break `grep`, `!listing re=` slicing, and citation matching; leave all other non-ASCII alone:
+
+   ```bash
+   git -C <scope> diff devel...HEAD -- '*.md' \
+     | perl -CSD -ne 'print if /^\+/ and /[\x{2018}\x{2019}\x{201C}\x{201D}\x{00A0}\x{202F}\x{200B}\x{FEFF}]/'
+   ```
 5. **Docs smoke** (DG): via the docs gate (§ Docs) — `moose-docs-writer`'s nested gate when docs are on, direct `moose-docs-builder` when off.
 
 When you get burned by CIVET on something new: add it here as a standing check once, and every future run inherits it.
