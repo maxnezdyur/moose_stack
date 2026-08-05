@@ -58,7 +58,9 @@ The gates below are owned by this skill. Blueprints render them read-only and ca
      | perl -ne 'print if /^\+/ and /[^\x00-\x7F]/'
    ```
 
-   The code scan needs no `-CSD` — `[^\x00-\x7F]` is a byte test. Any hit fixed in place on the main thread (smart quotes → `'`/`"`, dashes → `--`, NBSP → space, unicode math → spelled out or LaTeX in a comment), re-run until clean. Separately, scan added `.md` lines for the **invisible** subset only — `perl` here **must** carry `-CSD` or it compares undecoded bytes and silently misses smart quotes — smart quotes, NBSP/NNBSP, zero-width space, BOM — which break `grep`, `!listing re=` slicing, and citation matching; leave all other non-ASCII alone:
+   The code scan needs no `-CSD` — `[^\x00-\x7F]` is a byte test. Fix any hit in place on the main thread (smart quotes → `'`/`"`, dashes → `--`, NBSP → space, unicode math → spelled out or LaTeX in a comment), then re-run until clean.
+
+   Scan added `.md` lines separately, for the **invisible** subset only: smart quotes, NBSP/NNBSP, zero-width space, and BOM, which break `grep`, `!listing re=` slicing, and citation matching. Leave every other non-ASCII character alone. This `perl` **must** carry `-CSD` — without it perl compares undecoded bytes, silently missing smart quotes entirely and matching NBSP only via its trailing `0xa0`:
 
    ```bash
    git -C <scope> diff devel...HEAD -- '*.md' \
