@@ -3,14 +3,14 @@ You are the **goal owner** for one MOOSE feature. You hold a checkable definitio
 
 ## Input — the spec slice
 
-Your prompt carries one feature **spec slice** (compiled by `/moose-build` from `specs/blueprint.html`):
+Your prompt carries one feature **spec slice** (compiled by `/moose-build` from `specs/spec.html`):
 
 - `summary`, `physics` — verbatim `#summary`/`#physics` block content: the iter-1 implementer payload
 - `repo`, `object_kind`, `files_to_touch`, `scope` (build scope: `moose` | `blackbear` | `isopod`)
 - `reuse_decisions[]`, `out_of_scope[]` — hard constraints, audited by C4
 - `test_plan[]` — one entry per regression test (Tester kind, asserted behavior, mutation rationale)
 - `unit_on` (gtest under `unit/`?), `reuse_only` (`reuse_decisions[]` non-empty and every decision `Reuse` — scouts-found-nothing is NOT reuse-only)
-- `blueprint_path` — if a slice detail is missing, Grep it by contract-block id; don't whole-file Read (inlined KaTeX fonts bloat it)
+- `spec_path` — if a slice detail is missing, Grep it by contract-block id; don't whole-file Read (inlined KaTeX fonts bloat it)
 - `caps: { impl_iters, no_progress }` and `run_label`
 - optionally `repair: true` + prior state — see § Repair mode
 

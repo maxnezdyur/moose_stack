@@ -1,14 +1,14 @@
 # `#work-plan` format (v2 — seventh contract block)
 
-Authoritative spec for the work-plan block `/moose-blueprint` authors and `/moose-build` executes.
-A worked visual example: `specs/blueprint-v2-mockup.html` at the meta-repo root (synthetic content;
+Authoritative spec for the work-plan block `/moose-spec` authors and `/moose-build` executes.
+A worked visual example: `specs/spec-v2-mockup.html` at the meta-repo root (synthetic content;
 this file is the contract).
 
 ## Model
 
 - **Unit** — one dispatchable piece of work: `implement` (one class / coherent cluster),
   `test` (one test-plan entry), or `doc` (the doc-plan pages). Each unit carries a
-  **self-contained payload** so its agent never re-reads the whole blueprint.
+  **self-contained payload** so its agent never re-reads the whole spec.
 - **Edge** (`deps`) — a *hard* dependency only: derives-from a new class, consumes a
   property/API another new unit declares, or **touches the same file** (two units editing one
   file MUST share an edge — parallel units own disjoint files by construction). Style
@@ -17,12 +17,12 @@ this file is the contract).
   wave runs in parallel. Test/doc units additionally wait on standing gate A (implicit — do
   not encode gates as deps).
 - **Standing gates** — NOT part of the plan. `/moose-build` owns them and appends them between
-  waves; the blueprint renders them read-only (below) so the reviewer sees the whole run. A
-  blueprint can never add, remove, reorder, or edit a gate.
+  waves; the spec renders them read-only (below) so the reviewer sees the whole run. A
+  spec can never add, remove, reorder, or edit a gate.
 
-Derivation (owned by `/moose-blueprint`): `implement` units from the grill plan's predicted
+Derivation (owned by `/moose-spec`): `implement` units from the grill plan's predicted
 files, one per class (single-class features get one unit, `U1`), with edges drawn by the
-blueprint skill and ambiguous ones confirmed with the user; `test` units from `#test-plan`
+spec skill and ambiguous ones confirmed with the user; `test` units from `#test-plan`
 rows (dep = the implement unit(s) whose code the test exercises); one `doc` unit when
 `#doc-plan` is `Needed: yes`.
 
@@ -84,7 +84,7 @@ Card skeleton:
 
 Chips replace the v1 `[]`/`[wip]`/`[x]`/`[f]` markers for work-plan content and carry the same
 contract: **everything starts idle at design time**; `/moose-build` updates chips in place as it
-works, so the blueprint stays the live browser-side ledger.
+works, so the spec stays the live browser-side ledger.
 
 | State | Markup |
 | --- | --- |
@@ -129,7 +129,7 @@ define `--impl/--test/--doc/--gate/--gate-bg/--mock` variants if the template la
 .arrow { text-align:center; color:var(--muted); font-size:.85rem; line-height:1; }
 ```
 
-## Self-check (blueprint side)
+## Self-check (spec side)
 
 1. JSON island parses; every `deps` id exists; graph is acyclic.
 2. No two edge-free units list the same file.
