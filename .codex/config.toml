@@ -38,7 +38,7 @@ max_depth = 1
   config_file = "agents/moose-dry-reviewer.toml"
 
   [agents.moose-feature-loop]
-  description = "Goal-driven autonomous build loop for ONE MOOSE feature in moose, blackbear, or isopod. Given a feature spec slice, it compiles a definition-of-done (build clean + each planned test green), then works unattended toward it — spawning moose-implementer / moose-test-writer / moose-unit-test-writer / moose-test-runner (and moose-scout for context) as nested children, assessing the runner's verdict each round, and routing fixes internally until every success criterion holds. Regenerates and stages gold autonomously (no pause; reviewed post-hoc). Returns GOAL_MET / NEEDS_DESIGN / BLOCKED / STALLED. Spawned by the /moose-build skill — as the whole engine (loop mode) or as the repair engine after a wave/gate failure (repair mode); never commits, builds, or edits files itself."
+  description = "Goal-driven autonomous build loop for ONE MOOSE feature in moose, blackbear, or isopod. Given a feature spec slice, it compiles a definition-of-done (build clean + each planned test green), then works unattended toward it — spawning moose-implementer / moose-test-writer / moose-unit-test-writer / moose-test-runner (and moose-scout for context) as nested children, assessing the runner's verdict each round, and routing fixes internally until every success criterion holds. Regenerates and stages gold autonomously (no pause; reviewed post-hoc). Returns GOAL_MET / NEEDS_DESIGN / BLOCKED / STALLED. Spawned by the /moose-build skill as its whole execution engine, and woken again in repair mode when a standing gate fails; never commits, builds, or edits files itself."
   config_file = "agents/moose-feature-loop.toml"
 
   [agents.moose-implementer]
