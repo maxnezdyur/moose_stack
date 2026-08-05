@@ -1,11 +1,11 @@
 ---
 name: moose-grill
-description: Pre-coding grill for MOOSE C++ work that picks the base class by exploring MOOSE's class hierarchy with codegraph, challenges the pick, confirms the contract (overrides + validParams + coupling), and surfaces pitfalls before code is written. Use directly via /moose-grill or as the grill phase of /moose-spec.
+description: Pre-coding grill for MOOSE C++ work that picks the base class by exploring MOOSE's class hierarchy with codegraph, challenges the pick, confirms the contract (overrides + validParams + coupling), and surfaces pitfalls before code is written. Use directly via /moose-grill or as the grill phase of /moose-blueprint.
 ---
 
 # /moose-grill
 
-Stress-test a MOOSE C++ plan against MOOSE's **actual class hierarchy**, explored live with codegraph: pick the base class, confirm overrides + `validParams` + coupling, surface pitfalls — grounded in the real source rather than a static guide. Composes with `/moose-spec` (which delegates its base-class grilling here) or runs standalone.
+Stress-test a MOOSE C++ plan against MOOSE's **actual class hierarchy**, explored live with codegraph: pick the base class, confirm overrides + `validParams` + coupling, surface pitfalls — grounded in the real source rather than a static guide. Composes with `/moose-blueprint` (which delegates its base-class grilling here) or runs standalone.
 
 ## Usage
 
@@ -66,7 +66,7 @@ When all picks are clear, print this structured plan to terminal:
 - <repo>/src/<area>/<NewClass>.C
 ```
 
-Print only — never write files or code; folding the plan into `specs/spec.html` is `/moose-spec`'s job, and standalone users copy it where they need it. Reading the codebase (codegraph, or `Grep`/`Glob` fallback) is the only source interaction.
+Print only — never write files or code; folding the plan into `specs/blueprint.html` is `/moose-blueprint`'s job, and standalone users copy it where they need it. Reading the codebase (codegraph, or `Grep`/`Glob` fallback) is the only source interaction.
 
 ## Fallbacks
 

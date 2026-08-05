@@ -42,7 +42,7 @@ On failure at any step, stop and report — do not partially tear down; the user
    ```bash
    mkdir -p ~/projects/moose-worktrees   # shared home for all feature worktrees
    git -C ~/projects/moose_stack worktree add ~/projects/moose-worktrees/<feature> -b <feature>
-   mkdir -p ~/projects/moose-worktrees/<feature>/specs   # home for spec.html (see /moose-spec)
+   mkdir -p ~/projects/moose-worktrees/<feature>/specs   # home for blueprint.html (see /moose-blueprint)
    cp ~/projects/moose-worktrees/<feature>/moose_stack.code-workspace ~/projects/moose-worktrees/<feature>/<feature>.code-workspace
    ```
    The workspace copy gives each worktree a distinguishable VS Code window title. It is gitignored (`*.code-workspace` except the tracked original); never `mv` the tracked `moose_stack.code-workspace` — that dirties the feature branch.

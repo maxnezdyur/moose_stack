@@ -1,25 +1,25 @@
-# spec.html format
+# blueprint.html format
 
-Authoritative format for `/moose-spec` **step 6**. The inputs are the `moose-grill` plan,
+Authoritative format for `/moose-blueprint` **step 6**. The inputs are the `moose-grill` plan,
 the merged `moose-scout` findings, and the user's recorded decisions; the output is the single
-deliverable `specs/spec.html`. The HTML skeleton and CSS come from this skill's own
-`references/plan-template.html` (a pinned copy of the global spec template); this file
+deliverable `specs/blueprint.html`. The HTML skeleton and CSS come from this skill's own
+`references/plan-template.html` (a pinned copy of the global blueprint template); this file
 defines how to fill it.
 
 ## Hard rules (non-negotiable)
 
 - **Pure formatter — never re-explore.** Codegraph already ran (`moose-grill` + `moose-scout`)
   to produce the plan. Step 6 only formats it — read only the local template; never invoke the
-  generic spec skill's workflows (its Analyze / Explore / Design steps are generic grep,
+  generic blueprint skill's workflows (its Analyze / Explore / Design steps are generic grep,
   no codegraph, and its build workflow belongs to /moose-build's territory).
 - **Fill every `{{placeholder}}`.** The only `{{...}}` allowed to remain in the output are the
-  image-slot tokens *inside* `<!-- ... -->` comments (spec leaves these for manual fill).
+  image-slot tokens *inside* `<!-- ... -->` comments (blueprint leaves these for manual fill).
 - **Self-contained.** All CSS inline; **no external `http(s)` stylesheet/script links**. Math is
   rendered offline by `inline-katex.js` (see below) — never add a CDN `<script>`.
 - **Preserve every `file:line` citation verbatim** from the Reuse decisions.
 - **Status markers stay `[]` and status chips stay `idle`.** The build has not run at design time.
 - **Standing gates are render-only.** The `#work-plan` gate strips copy `/moose-build`'s
-  "Standing gates" text verbatim and never appear in the JSON island — a spec cannot add,
+  "Standing gates" text verbatim and never appear in the JSON island — a blueprint cannot add,
   remove, or alter a gate.
 
 ## Contract blocks (the machine interface)
@@ -42,7 +42,7 @@ home for a block, add a `Notes` subsection for it.
 
 ## Template slot mapping
 
-| Content | `spec` template target |
+| Content | `blueprint` template target |
 | --- | --- |
 | Feature name | `{{PLAN_TITLE}}` |
 | Summary prose | `Purpose` (one-line intent) + `Problem` (why needed / what's missing) + `Solution` (the object + approach) |
@@ -91,20 +91,20 @@ Write math as `$$…$$` (display) / `\(…\)` (inline) **in prose, never inside 
 authoring + saving the HTML, run:
 
 ```
-node <skill-dir>/references/inline-katex.js <worktree-root>/specs/spec.html
+node <skill-dir>/references/inline-katex.js <worktree-root>/specs/blueprint.html
 ```
 
 It `require()`s MOOSE's vendored KaTeX 0.13.5 (`<worktree>/moose/framework/doc/content/contrib/katex/`,
 no npm install), pre-renders each equation to static HTML, and base64-inlines the woff2 fonts —
 leaving one offline, self-contained file that renders even with JS disabled, matching the MOOSE docs.
-Graceful degrade: if KaTeX isn't found, LaTeX is left as plain text (still a valid spec).
+Graceful degrade: if KaTeX isn't found, LaTeX is left as plain text (still a valid blueprint).
 
 ## Metadata header
 
 - Every field except `created` is an append-only comma-separated list — append on resume, never overwrite
 - `created` = `date -u +%Y-%m-%dT%H:%M:%SZ` at generation time; `modified` = same (initial)
 - `commits` = — (none at design time)
-- `agent name` = e.g. `Claude via /moose-spec`
+- `agent name` = e.g. `Claude via /moose-blueprint`
 - `session id` = current session id
 - `back refs` = —
 - `forward refs` = —
@@ -126,5 +126,5 @@ From the Test plan: the run commands / Testers that prove the feature end-to-end
 ## Questionables
 
 Surface each explicit open question, deferred item, or "parked pending …" decision from the
-grill in the Questionables section. `QUESTIONABLE` defaults true in the spec skill, so
+grill in the Questionables section. `QUESTIONABLE` defaults true in the blueprint skill, so
 the section is included.

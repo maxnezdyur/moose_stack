@@ -1,6 +1,6 @@
 # moose-scout per-angle prompt template
 
-Consumed by `/moose-spec` step 3. Fill the bracketed pieces and send each angle as its
+Consumed by `/moose-blueprint` step 3. Fill the bracketed pieces and send each angle as its
 own `Agent` call (`subagent_type: "moose-scout"`, `run_in_background: true`), all in one message.
 
 The template has three jobs — every prompt must do all three:
