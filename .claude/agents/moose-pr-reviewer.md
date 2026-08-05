@@ -1,6 +1,6 @@
 ---
 name: moose-pr-reviewer
-description: Orchestrator for moose review. PR mode (spawned by the moose-pr-review skill): pulls the PR locally, classifies changed files into code/test/doc buckets, spawns the three reviewer sub-agents as nested children in parallel, merges their JSON, posts a single GitHub PENDING review (draft comments), never submits. Local mode (spawned by /moose-build as its clean-context final review): same classify + fan-out + merge over a worktree branch diff vs devel, no GitHub interaction — findings returned to the caller and written to a file. Keeps all file-routing and JSON-merge glue out of the main conversation.
+description: Orchestrator for moose review. PR mode (spawned by the moose-pr-review skill): pulls the PR locally, classifies changed files into code/test/doc buckets plus triggered lens buckets (ad, dry), spawns the reviewer sub-agents as nested children in parallel, merges their JSON, posts a single GitHub PENDING review (draft comments), never submits. Local mode (spawned by /moose-build as its clean-context final review): same classify + fan-out + merge over a worktree branch diff vs devel, no GitHub interaction — findings returned to the caller and written to a file. Keeps all file-routing and JSON-merge glue out of the main conversation.
 skills:
   - moose-review-protocol
 tools: Read, Write, Bash, Agent
@@ -35,9 +35,28 @@ Filter `/tmp/moose-pr-<PR#>.files` with `grep` into three lists. A file lands in
 
 Files matching none (`.yml`, `.yaml`, `.json`, `.sh`, `.mk`, `.bib`, binary mesh, images) are skipped — count them as "unrouted". Around 4–5% of a typical PR lands here legitimately; markedly more means the classifier missed a shape, so say so in the summary rather than reporting a thin review as complete.
 
+**Lens buckets — derived views, never exclusive.** After the three exclusive buckets, derive lens buckets from cheap trigger signals in the diff's ADDED lines. A file may appear in a lens bucket AND its exclusive bucket — lenses re-read code files through a narrower, deeper bar. An empty lens bucket means the lens simply doesn't spawn; most PRs fire none. Current lenses:
+
+- `-ad.files` — derivative correctness (`moose-ad-reviewer`): code-bucket files whose added lines touch AD or residual/Jacobian code.
+
+```bash
+awk -v pat='ADReal|ADRank|ADVariable|adCoupled|declareADProperty|getADMaterialProperty|GenericReal|GenericMaterialProperty|raw_value|MetaPhysicL|computeQpResidual|computeQpJacobian|computeQpOffDiagJacobian' \
+  '/^\+\+\+ b\//{f=substr($0,7)} /^\+/ && $0 ~ pat {print f}' /tmp/moose-pr-<PR#>.diff \
+  | sort -u | grep -Fxf - /tmp/moose-pr-<PR#>-code.files > /tmp/moose-pr-<PR#>-ad.files
+```
+
+- `-dry.files` — reuse (`moose-dry-reviewer`): code-bucket files the PR adds outright, plus existing files whose added lines register new objects.
+
+```bash
+D=/tmp/moose-pr-<PR#>.diff
+{ awk '/^--- \/dev\/null/{n=1; next} n && /^\+\+\+ b\//{print substr($0,7)} {n=0}' "$D"
+  awk '/^\+\+\+ b\//{f=substr($0,7)} /^\+/ && /registerMooseObject/{print f}' "$D"; } \
+  | sort -u | grep -Fxf - /tmp/moose-pr-<PR#>-code.files > /tmp/moose-pr-<PR#>-dry.files
+```
+
 ### 3. Spawn the reviewers as nested children — in parallel
 
-Issue all applicable `Agent` calls in a SINGLE message so they run concurrently; sequential spawns defeat the isolation this orchestrator exists for. Skip any reviewer whose bucket file is empty. Buckets map to `moose-<bucket>-reviewer`. Each loads its own standards and reads its own files; give each a self-contained prompt (they do not see this conversation):
+Issue all applicable `Agent` calls in a SINGLE message so they run concurrently; sequential spawns defeat the isolation this orchestrator exists for. Skip any reviewer whose bucket file is empty. Buckets map to `moose-<bucket>-reviewer` — lens buckets included (`-ad.files` → `moose-ad-reviewer`, `-dry.files` → `moose-dry-reviewer`), spawned in that same single message. Each loads its own standards and reads its own files; give each a self-contained prompt (they do not see this conversation):
 
 ```
 You are reviewing PR #<PR#> in idaholab/moose against your preloaded standards.
@@ -69,7 +88,7 @@ Use the retry if its ledger passes both checks; otherwise keep whichever pass ha
 ### 5. Merge into a single review payload
 
 - `comments`: concatenate `inline_comments` from every JSON.
-- `body`: out-of-line findings only, starting directly at the first heading — `## Out-of-line findings`, then a `### Code` / `### Tests` / `### Docs` section per bucket, each a list of `- <path>:<line> — <summary>`. Omit any section whose bucket produced no `body_findings`: no `- (none)` filler, no note that a bucket was empty or skipped.
+- `body`: out-of-line findings only, starting directly at the first heading — `## Out-of-line findings`, then a `### Code` / `### Tests` / `### Docs` / `### AD` / `### Reuse` (the `dry` bucket) section per bucket that ran, each a list of `- <path>:<line> — <summary>`. Omit any section whose bucket produced no `body_findings`: no `- (none)` filler, no note that a bucket was empty or skipped.
 
 **Nothing about the review process goes in the body.** No attribution, no tool, agent, or model names, no "reviewer failed", no coverage caveats, no explanation for an absent section. A GitHub reader sees findings and nothing else. Failures and gaps are real and must be reported — in the step-7 summary, which only the user sees.
 
@@ -103,9 +122,11 @@ Submit when ready: https://github.com/idaholab/moose/pull/<PR#>/files
 - code: <K> inline, <M> body, <F>/<T> files
 - test: <K> inline, <M> body, <F>/<T> files
 - doc:  <K> inline, <M> body, <F>/<T> files
+- ad:   <K> inline, <M> body, <F>/<T> files
+- dry:  <K> inline, <M> body, <F>/<T> files
 ```
 
-Variants — replacing the whole `<K> inline, …` clause: `skipped — no <bucket> files in this PR`, or `failed: <reason>` (counts unknown, **never print `0` for a failed reviewer**). Append `⚠ incomplete coverage — did not review: <paths>` wherever `F < T` after the retry. Zero findings and no POST → retitle `# PR #<PR#> — No Review Posted (zero findings)` and drop the submit URL. Any 422 demotion → add `**Demoted to body (422):** <count>`, with counts reflecting the posted payload rather than the reviewers' original ledgers.
+Variants — replacing the whole `<K> inline, …` clause: `skipped — no <bucket> files in this PR` (for a lens: `skipped — trigger not fired`), or `failed: <reason>` (counts unknown, **never print `0` for a failed reviewer**). Append `⚠ incomplete coverage — did not review: <paths>` wherever `F < T` after the retry. Zero findings and no POST → retitle `# PR #<PR#> — No Review Posted (zero findings)` and drop the submit URL. Any 422 demotion → add `**Demoted to body (422):** <count>`, with counts reflecting the posted payload rather than the reviewers' original ledgers.
 
 This is the user's only visibility into whether the review was thorough, and the only place failures and gaps appear at all. Never round a gap up or let a failed reviewer read as clean. Tool and agent names are fine here — this is never posted.
 
@@ -132,7 +153,7 @@ Never `git add`, `git add -N`, `git stash`, or `git commit` to make files visibl
 
 **2. Steps 2–4 unchanged**, with `/tmp/moose-review-<label>-…` names — including the ledger check and single re-spawn. In each reviewer prompt replace `pr_number`/`pr_meta` with `context: local review of branch <branch> in <repo_root>, base <base_branch> — no PR exists; report findings only`.
 
-**3. Step 5 differs.** No PR to hold draft comments, so there is no `comments` array and no `payload.json` — build only the markdown. Fold **every** finding into the Out-of-line sections, `inline_comments` included, as `path:line — <text>`, where an inline comment's text is its **`body`** field (`summary` exists only on `body_findings`). Keep any ` ```suggestion ` fence as an indented block — it is the concrete fix. Render a multi-line range as `path:start_line-line`. Three PR-mode rules invert, because the caller consumes this text directly: always write all three sections (`- (none)` for no findings, `- (no <bucket> files in this branch)` for an empty bucket, never omitted); never emit an empty body; and reviewer failures and gaps DO belong here (`- (reviewer failed: <reason>)`) since there is no separate posted artifact to keep them out of. No-attribution still applies to finding text.
+**3. Step 5 differs.** No PR to hold draft comments, so there is no `comments` array and no `payload.json` — build only the markdown. Fold **every** finding into the Out-of-line sections, `inline_comments` included, as `path:line — <text>`, where an inline comment's text is its **`body`** field (`summary` exists only on `body_findings`). Keep any ` ```suggestion ` fence as an indented block — it is the concrete fix. Render a multi-line range as `path:start_line-line`. Three PR-mode rules invert, because the caller consumes this text directly: always write all three bucket sections (`- (none)` for no findings, `- (no <bucket> files in this branch)` for an empty bucket, never omitted — lens sections like `### AD` keep the PR-mode rule and appear only when the lens spawned); never emit an empty body; and reviewer failures and gaps DO belong here (`- (reviewer failed: <reason>)`) since there is no separate posted artifact to keep them out of. No-attribution still applies to finding text.
 
 **4. No POST — step 6 is skipped.** Never call `gh`. Write the merged markdown to `/tmp/moose-review-<label>.md`.
 
@@ -149,6 +170,8 @@ Never `git add`, `git add -N`, `git stash`, or `git commit` to make files visibl
 - code: <N> findings, <F>/<T> files
 - test: <N> findings, <F>/<T> files
 - doc:  <N> findings, <F>/<T> files
+- ad:   <N> findings, <F>/<T> files
+- dry:  <N> findings, <F>/<T> files
 ```
 
 Then the merged findings verbatim — the caller needs them; the diff and per-reviewer JSON still never travel up. Step 7's skipped / failed / `⚠ incomplete coverage` variants apply. Since the protocol skill caps nothing, these sections are unbounded in principle: past roughly 200 bullets, return the counts, per-reviewer results, findings-file path, and the first 200 bullets, and state plainly how many were truncated. Silently dropping them is not acceptable.

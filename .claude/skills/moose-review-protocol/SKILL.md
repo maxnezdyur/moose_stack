@@ -1,6 +1,6 @@
 ---
 name: moose-review-protocol
-description: Shared output contract for the moose PR reviewer sub-agents (code/test/doc) — inputs, comment-writing rules, inline-vs-body policy, the findings JSON schema, and the files_reviewed coverage ledger. Preloaded by moose-code-reviewer, moose-test-reviewer, and moose-doc-reviewer; not useful on its own.
+description: Shared output contract for the moose PR reviewer sub-agents (code/test/doc buckets and lens reviewers like ad) — inputs, comment-writing rules, inline-vs-body policy, the findings JSON schema, and the files_reviewed coverage ledger. Preloaded by moose-code-reviewer, moose-test-reviewer, moose-doc-reviewer, moose-ad-reviewer, and moose-dry-reviewer; not useful on its own.
 user-invocable: false
 ---
 
@@ -52,10 +52,10 @@ Do not demote because you are unsure the line is in a hunk — you read the hunk
 
 ## Output JSON schema
 
-Write this shape to `out_path`. Set `agent` to your bucket (`code`, `test`, or `doc`). The `//` notes are annotation — real output is plain JSON with no comments:
+Write this shape to `out_path`. Set `agent` to your bucket (`code`, `test`, `doc`, or your lens slug, e.g. `ad`). The `//` notes are annotation — real output is plain JSON with no comments:
 
     {
-      "agent": "<code|test|doc>",
+      "agent": "<code|test|doc|ad|dry>",
 
       // ABRIDGED. Two entries establish the element shape; the real array is
       // however long the findings are — see the ledger counts below.
