@@ -69,7 +69,7 @@ Then present a draft summary via `AskUserQuestion`: **Looks good — write it** 
 | `#test-plan` | per test: name, Tester kind, asserted behavior, mutation rationale |
 | `#doc-plan` | **Needed:** yes/no, page path, public surface + **Existing coverage:** every page already documenting the feature and the placement/consolidation the user chose |
 | `#out-of-scope` | explicit non-goals |
-| `#work-plan` | work units + dep edges, rendered as computed waves with status chips + read-only standing-gate strips, plus the machine JSON island `#work-plan-data` — full spec in [`references/work-plan-format.md`](references/work-plan-format.md) |
+| `#work-plan` | work units + dep edges, rendered as grouped unit cards with status chips + read-only standing-gate strips, plus the machine JSON island `#work-plan-data` — full spec in [`references/work-plan-format.md`](references/work-plan-format.md) |
 
 Authoring is a **pure formatter** over the grill plan, scout findings, and user decisions. It **never re-explores the codebase** — codegraph already ran via grill + scout, and the generic blueprint skill's Explore/Design/Build workflows would bypass it. Follow [`references/blueprint-format.md`](references/blueprint-format.md) for the contract-block schema, template slot mapping, `.physics-pair` code↔math pairing, and metadata header.
 
@@ -95,7 +95,7 @@ Authoring is a **pure formatter** over the grill plan, scout findings, and user 
 | 6 | Test plan | `#test-plan` | the agreed tests |
 | 7 | Doc plan | `#doc-plan` | the agreed doc pages |
 | 8 | Out of scope | `#out-of-scope` | recorded non-goals |
-| 9 | Work plan — human view | `#work-plan` | waves, unit cards, gate strips, legend |
+| 9 | Work plan — human view | `#work-plan` | unit cards grouped by kind, gate strips, legend |
 | 10 | Work plan — machine copy | `#work-plan-data` | the JSON island |
 | 11 | Validation + Questionables | `#validation`, `#questionables` | test plan run commands; parked questions from the grill |
 
@@ -104,7 +104,7 @@ The order is load-bearing. `#physics` comes before the work plan so every `physi
 Rules for these passes:
 
 - One section per call. Never merge two sections into one `Edit`. Never re-`Write` the whole file after pass 1.
-- Split a large section further — one `Edit` per wave, per unit card, or per reuse finding, each inserted before the sentinel, with the sentinel removed last. More calls is always allowed; fewer is not.
+- Split a large section further — one `Edit` per unit group, per unit card, or per reuse finding, each inserted before the sentinel, with the sentinel removed last. More calls is always allowed; fewer is not.
 - Do not re-read the file to confirm an `Edit` landed. `Edit` fails loudly when it does not.
 - Reading the file back to check that a reference resolves is fine. That is reading your own output, not re-exploring the codebase.
 

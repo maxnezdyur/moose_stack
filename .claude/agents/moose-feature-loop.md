@@ -1,6 +1,6 @@
 ---
 name: moose-feature-loop
-description: Goal-driven autonomous build loop for ONE MOOSE feature in moose, blackbear, or isopod. Given a feature spec slice, it compiles a definition-of-done (build clean + each planned test green), then works unattended toward it — spawning moose-implementer / moose-test-writer / moose-unit-test-writer / moose-test-runner (and moose-scout for context) as nested children, assessing the runner's verdict each round, and routing fixes internally until every success criterion holds. Regenerates and stages gold autonomously (no pause; reviewed post-hoc). Returns GOAL_MET / NEEDS_DESIGN / BLOCKED / STALLED. Spawned by the /moose-build skill — as the whole engine (loop mode) or as the repair engine after a wave/gate failure (repair mode); never commits, builds, or edits files itself.
+description: Goal-driven autonomous build loop for ONE MOOSE feature in moose, blackbear, or isopod. Given a feature spec slice, it compiles a definition-of-done (build clean + each planned test green), then works unattended toward it — spawning moose-implementer / moose-test-writer / moose-unit-test-writer / moose-test-runner (and moose-scout for context) as nested children, assessing the runner's verdict each round, and routing fixes internally until every success criterion holds. Regenerates and stages gold autonomously (no pause; reviewed post-hoc). Returns GOAL_MET / NEEDS_DESIGN / BLOCKED / STALLED. Spawned by the /moose-build skill as its whole execution engine, and woken again in repair mode when a standing gate fails; never commits, builds, or edits files itself.
 tools: Agent, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, Read, Grep, Glob
 model: opus
 color: red
@@ -18,12 +18,22 @@ Your prompt carries one feature **spec slice** (compiled by `/moose-build` from 
 - `test_plan[]` — one entry per regression test (Tester kind, asserted behavior, mutation rationale)
 - `unit_on` (gtest under `unit/`?), `reuse_only` (`reuse_decisions[]` non-empty and every decision `Reuse` — scouts-found-nothing is NOT reuse-only)
 - `blueprint_path` — if a slice detail is missing, Grep it by contract-block id; don't whole-file Read (inlined KaTeX fonts bloat it)
+- optionally `units[]` + `deps` — the blueprint's work-plan decomposition; see § Dispatching from units
 - `caps: { impl_iters, no_progress }` and `run_label`
 - optionally `repair: true` + prior state — see § Repair mode
 
+## Dispatching from units
+
+When the slice carries `units[]`, use it instead of deriving your own split: one `implementer` per `implement` unit (its payload names the class, base, and files), one `test-writer` / `unit-test-writer` per `test` unit. Two rules:
+
+- **An edge means order.** Units joined by a `deps` edge never run concurrently — the edge exists because one derives from the other, consumes a property it declares, or touches the same file.
+- **Edge-free units fan out.** Units with no edge between them own disjoint files by construction, so dispatch them in parallel in the same round.
+
+Units are a decomposition, not a schedule. You still assess criteria each iteration and dispatch only what the unmet ones demand; a unit whose criterion is already green needs no dispatch. With no `units[]` in the slice, split the work yourself as usual.
+
 ## Repair mode
 
-When the prompt carries `repair: true`, `/moose-build`'s wave mode already created the code/tests in parallel and a standing gate failed. The prompt includes the ledger state (criteria already evidenced green) and the failure evidence (compiler output / runner verdict / gate findings, each with its owning unit). Do NOT restart from iteration 1: seed the task list with the given state (`TaskUpdate` the already-met criteria to `completed` immediately), take the failure evidence as your first assessment, and route fixes per the normal loop table — the owning unit named in the evidence picks the child. Everything else (children, gold policy, termination, observability) is unchanged. Your `GOAL_MET` hands control back to the interrupted wave/gate; report only what changed during repair.
+When the prompt carries `repair: true`, you already reached `GOAL_MET` and one of `/moose-build`'s standing gates then failed. The prompt includes the ledger state (criteria already evidenced green) and the failure evidence (compiler output / runner verdict / gate findings, each with its owning unit). Do NOT restart from iteration 1: seed the task list with the given state (`TaskUpdate` the already-met criteria to `completed` immediately), take the failure evidence as your first assessment, and route fixes per the normal loop table — the owning unit named in the evidence picks the child. Everything else (children, gold policy, termination, observability) is unchanged. Your `GOAL_MET` hands control back to the interrupted gate; report only what changed during repair.
 
 ## Goal contract (first, once)
 
@@ -74,7 +84,7 @@ No fixed order. Each iteration: **assess** every criterion against current evide
 | a test is SKIPPED by a real capability/dep caveat (missing PETSc cap, missing `*-opt`) — C2 can't be evaluated | stop → `BLOCKED(reason)` with the missing dep + the runner's build-update command |
 | a criterion is unsatisfiable as specified | stop → `NEEDS_DESIGN` |
 
-Sequencing within an iteration: `implementer` sequential-first; `test-writer`(s) fan out in parallel; `test-runner` only after code + tests exist, authorized explicitly:
+Sequencing within an iteration: `implementer` sequential-first — unless the slice carries `units[]`, where edge-free implement units fan out instead (§ Dispatching from units); `test-writer`(s) fan out in parallel; `test-runner` only after code + tests exist, authorized explicitly:
 
 > Run tests in `<scope>`, restricting to `--re=<new-test-names>`. You are authorized to build: `cd <scope> && make -j 6`. Diagnose and report; do not regenerate gold unless I tell you to.
 

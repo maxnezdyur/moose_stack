@@ -1,8 +1,10 @@
-# `#work-plan` format (v2 — seventh contract block)
+# `#work-plan` format (seventh contract block)
 
-Authoritative spec for the work-plan block `/moose-blueprint` authors and `/moose-build` executes.
-A worked visual example: `specs/blueprint-v2-mockup.html` at the meta-repo root (synthetic content;
-this file is the contract).
+Authoritative spec for the work-plan block `/moose-blueprint` authors and `/moose-build` consumes.
+
+The work plan is a **decomposition, not a schedule**. It names the units of work and the hard
+dependencies between them. `/moose-build` passes both to `moose-feature-loop`, which decides what
+to dispatch each iteration from the criteria still unmet. Nothing here orders the run.
 
 ## Model
 
@@ -11,14 +13,11 @@ this file is the contract).
   **self-contained payload** so its agent never re-reads the whole blueprint.
 - **Edge** (`deps`) — a *hard* dependency only: derives-from a new class, consumes a
   property/API another new unit declares, or **touches the same file** (two units editing one
-  file MUST share an edge — parallel units own disjoint files by construction). Style
-  preference, "feels related", or ordering habit are NOT edges.
-- **Wave** — computed, never authored: topological level of the dep graph. Everything in a
-  wave runs in parallel. Test/doc units additionally wait on standing gate A (implicit — do
-  not encode gates as deps).
-- **Standing gates** — NOT part of the plan. `/moose-build` owns them and appends them between
-  waves; the blueprint renders them read-only (below) so the reviewer sees the whole run. A
-  blueprint can never add, remove, reorder, or edit a gate.
+  file MUST share an edge — the loop runs edge-free units concurrently, so they have to own
+  disjoint files). Style preference, "feels related", or ordering habit are NOT edges.
+- **Standing gates** — NOT part of the plan. `/moose-build` owns them and runs them around the
+  loop; the blueprint renders them read-only (below) so the reviewer sees the whole run. A
+  blueprint can never add, remove, reorder, or edit a gate. Never encode a gate as a dep.
 
 Derivation (owned by `/moose-blueprint`): `implement` units from the grill plan's predicted
 files, one per class (single-class features get one unit, `U1`), with edges drawn by the
@@ -53,19 +52,21 @@ A real (non-displayed) script element inside the `#work-plan` section:
 - `agent` ∈ `moose-implementer` | `moose-test-writer` | `moose-unit-test-writer` | `moose-docs-writer`.
 - `physics_ref` points at an anchor `id` inside `#physics` (give each unit's physics paragraph
   an `id="physics-uN"`). `test_plan_ref` is the test's name in `#test-plan`, verbatim.
-- The JSON is **declarative only** — no status, no waves (both derived). It must `JSON.parse`.
+- The JSON is **declarative only** — no status, no ordering (both derived). It must `JSON.parse`.
 
-## Human view — waves + cards + gate strips
+## Human view — unit groups + cards + gate strips
 
 Render inside the same `#work-plan` section, above the island:
 
-- One `.wave` container per computed wave, labeled `Wave N — <k> units, parallel`, holding one
-  `.unit` card per unit: id, **status chip**, class/test name, agent, `deps:` line, and — only
-  when the JSON has `notes` — a collapsed `<details class="unote">`.
-- A `.gatebar` strip after the last implement wave (**gate A**) and after the test/doc wave
-  (**gate B**), each labeled `Standing gate <A|B> — appended by /moose-build, not editable here`,
-  listing that gate's checks verbatim from `/moose-build`'s "Standing gates" section (copy the
-  current text at authoring time — the build skill is the source of truth).
+- One `.group` container per unit kind, in this order: `Implementation — <k> units`, then
+  `Tests & docs — <k> units`. Each holds one `.unit` card per unit: id, **status chip**,
+  class/test name, agent, `deps:` line, and — only when the JSON has `notes` — a collapsed
+  `<details class="unote">`. Order the cards inside a group so a unit follows what it depends
+  on; the `deps:` line carries the real constraint.
+- A `.gatebar` strip after the implementation group (**gate A**) and after the tests & docs
+  group (**gate B**), each labeled `Standing gate <A|B> — appended by /moose-build, not editable
+  here`, listing that gate's checks verbatim from `/moose-build`'s "Standing gates" section (copy
+  the current text at authoring time — the build skill is the source of truth).
 - A legend line: unit-kind dots + the four chip states.
 
 Card skeleton:
@@ -80,9 +81,9 @@ Card skeleton:
 </div>
 ```
 
-## Status chips — the v2 status markers
+## Status chips
 
-Chips replace the v1 `[]`/`[wip]`/`[x]`/`[f]` markers for work-plan content and carry the same
+Chips replace the `[]`/`[wip]`/`[x]`/`[f]` markers for work-plan content and carry the same
 contract: **everything starts idle at design time**; `/moose-build` updates chips in place as it
 works, so the blueprint stays the live browser-side ledger.
 
@@ -104,9 +105,9 @@ define `--impl/--test/--doc/--gate/--gate-bg/--mock` variants if the template la
 ```css
 .legend { display:flex; flex-wrap:wrap; gap:.9rem; align-items:center; font-size:.78rem; color:var(--muted); margin:.6rem 0 1rem; }
 .dot { display:inline-block; width:.65em; height:.65em; border-radius:50%; margin-right:.35em; }
-.waves { display:flex; flex-direction:column; gap:.55rem; margin:1rem 0; }
-.wave { border:1px solid var(--line); border-radius:10px; padding:.7rem .9rem .85rem; }
-.wave-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); font-weight:700; margin-bottom:.55rem; }
+.groups { display:flex; flex-direction:column; gap:.55rem; margin:1rem 0; }
+.group { border:1px solid var(--line); border-radius:10px; padding:.7rem .9rem .85rem; }
+.group-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); font-weight:700; margin-bottom:.55rem; }
 .units { display:grid; grid-template-columns:repeat(auto-fill, minmax(12.5rem, 1fr)); gap:.55rem; }
 .unit { border-radius:8px; padding:.5rem .65rem .55rem; border:1px solid var(--line); border-left:3.5px solid var(--muted); background:var(--surface); }
 .uhead { display:flex; justify-content:space-between; align-items:center; gap:.4rem; }

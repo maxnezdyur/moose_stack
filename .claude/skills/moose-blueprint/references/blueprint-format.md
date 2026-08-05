@@ -53,9 +53,9 @@ units, a long reuse-decision list — split it across several `Edit` calls. Inse
 immediately *before* the sentinel, then remove the sentinel in the last call:
 
 ```
-Edit  <!-- FILL:work-plan -->  ->  <div class="wave">…wave 1…</div>\n  <!-- FILL:work-plan -->
-Edit  <!-- FILL:work-plan -->  ->  <div class="wave">…wave 2…</div>\n  <!-- FILL:work-plan -->
-Edit  <!-- FILL:work-plan -->  ->  <div class="gatebar">…gate A…</div>
+Edit  <!-- FILL:work-plan -->  ->  <div class="group">…implementation units…</div>\n  <!-- FILL:work-plan -->
+Edit  <!-- FILL:work-plan -->  ->  <div class="gatebar">…gate A…</div>\n  <!-- FILL:work-plan -->
+Edit  <!-- FILL:work-plan -->  ->  <div class="group">…tests & docs…</div>
 ```
 
 More calls is always allowed. Fewer is not.
@@ -80,7 +80,7 @@ home for a block, add a `Notes` subsection for it.
 | `#test-plan` | one entry per test: name, Tester kind (`Exodiff` / `CSVDiff` / `RunException` / … — or `gtest` for unit tests under `unit/`), asserted behavior (an observable consequence, not "runs without error"), mutation rationale (if `<line of new code>` were no-op'd, this test fails because …) | a consolidated test table in `Notes` or the `Validation Commands` area |
 | `#doc-plan` | **Needed:** yes / no; page path (`<repo>/doc/content/source/<area>/<NewClass>.md`); public surface (which params/behaviors are documented API) | the Docs phase, or `Notes` |
 | `#out-of-scope` | explicit non-goals, one per line | `Notes` → "Out of scope" |
-| `#work-plan` | work units + dependency edges + JSON island `#work-plan-data`, per [`work-plan-format.md`](work-plan-format.md) — units/waves/chips/read-only standing-gate strips | its own section, directly after `#summary` |
+| `#work-plan` | work units + dependency edges + JSON island `#work-plan-data`, per [`work-plan-format.md`](work-plan-format.md) — grouped unit cards / chips / read-only standing-gate strips | its own section, directly after `#summary` |
 
 ## Template slot mapping
 
@@ -151,12 +151,12 @@ Graceful degrade: if KaTeX isn't found, LaTeX is left as plain text (still a val
 - `back refs` = —
 - `forward refs` = —
 
-## Work plan (replaces the v1 "Implementation Phases" checklist)
+## Work plan (replaces the template's "Implementation Phases" checklist)
 
 The `#work-plan` block IS the build plan — author it per
 [`work-plan-format.md`](work-plan-format.md): implement units from the grill plan's *Work
 units*, test units from `#test-plan`, a doc unit when `#doc-plan` is `Needed: yes`; edges only
-for hard dependencies; waves computed; chips `idle`; gate strips read-only. Do **not** also
+for hard dependencies; cards grouped by kind; chips `idle`; gate strips read-only. Do **not** also
 author the template's per-phase task checklists — the unit cards (plus their optional `notes`)
 replace them; drop the template's `#phases` section or leave it out entirely.
 
