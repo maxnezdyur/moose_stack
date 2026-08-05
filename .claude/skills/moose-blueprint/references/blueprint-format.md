@@ -12,6 +12,9 @@ defines how to fill it.
   to produce the plan. Step 6 only formats it — read only the local template; never invoke the
   generic blueprint skill's workflows (its Analyze / Explore / Design steps are generic grep,
   no codegraph, and its build workflow belongs to /moose-build's territory).
+- **One section per tool call.** One `Write` lays down the skeleton; one `Edit` fills each
+  section after that. Never author the whole page in a single `Write` — see
+  [Sectioned authoring](#sectioned-authoring) below.
 - **Fill every `{{placeholder}}`.** The only `{{...}}` allowed to remain in the output are the
   image-slot tokens *inside* `<!-- ... -->` comments (blueprint leaves these for manual fill).
 - **Self-contained.** All CSS inline; **no external `http(s)` stylesheet/script links**. Math is
@@ -21,6 +24,45 @@ defines how to fill it.
 - **Standing gates are render-only.** The `#work-plan` gate strips copy `/moose-build`'s
   "Standing gates" text verbatim and never appear in the JSON island — a blueprint cannot add,
   remove, or alter a gate.
+
+## Sectioned authoring
+
+The page is built one section per tool call. `SKILL.md` step 6 owns the pass order; this
+section owns the mechanics.
+
+**The skeleton (pass 1).** Write a complete, valid HTML file up front: `<head>`, title, all CSS
+inline (template CSS + `.physics-pair` + the work-plan CSS), the filled metadata header, and one
+empty stub per section. Each stub carries its exact `id`, its `<h2>`, and one sentinel comment as
+its whole body:
+
+```html
+<section id="physics">
+  <h2>Physics &amp; signature</h2>
+  <!-- FILL:physics -->
+</section>
+```
+
+Drop the template's `#phases` section — the work plan replaces it.
+
+**Each fill pass.** One `Edit` per section, whose `old_string` is that section's sentinel and
+nothing else. The sentinel text is unique per section, so the match is unambiguous and the passes
+can run in any order the dependencies allow.
+
+**Splitting a big section.** When one section carries a lot of content — a work plan with many
+units, a long reuse-decision list — split it across several `Edit` calls. Insert each piece
+immediately *before* the sentinel, then remove the sentinel in the last call:
+
+```
+Edit  <!-- FILL:work-plan -->  ->  <div class="wave">…wave 1…</div>\n  <!-- FILL:work-plan -->
+Edit  <!-- FILL:work-plan -->  ->  <div class="wave">…wave 2…</div>\n  <!-- FILL:work-plan -->
+Edit  <!-- FILL:work-plan -->  ->  <div class="gatebar">…gate A…</div>
+```
+
+More calls is always allowed. Fewer is not.
+
+**Sentinels must not survive.** A `FILL:` sentinel left in the saved file means a section was
+never authored. The step 6 self-check fails on any remaining sentinel; `/moose-blueprint` step 1
+treats one as an unfinished section on resume.
 
 ## Contract blocks (the machine interface)
 

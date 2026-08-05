@@ -20,7 +20,7 @@ Requires a `/new-feature` worktree: walk up from CWD to a `.git` **file** (submo
 
 ## 1. Bootstrap
 
-If `<worktree-root>/specs/blueprint.html` already exists, `AskUserQuestion`: **Resume** (load it, grill only the sections whose contract blocks are empty or placeholder) / **Restart** (overwrite at step 6) / **Cancel**. A malformed blueprint on resume → restart with a warning.
+If `<worktree-root>/specs/blueprint.html` already exists, `AskUserQuestion`: **Resume** (load it, grill only the sections whose contract blocks are empty or placeholder) / **Restart** (overwrite at step 6) / **Cancel**. A leftover `<!-- FILL:<id> -->` sentinel marks a section a previous run never finished — treat it as empty, and fill it in step 6 with the same one-call-per-section passes. A malformed blueprint on resume → restart with a warning.
 
 ## 2. Grill — delegate to `/moose-grill`
 
@@ -71,11 +71,52 @@ Then present a draft summary via `AskUserQuestion`: **Looks good — write it** 
 | `#out-of-scope` | explicit non-goals |
 | `#work-plan` | work units + dep edges, rendered as computed waves with status chips + read-only standing-gate strips, plus the machine JSON island `#work-plan-data` — full spec in [`references/work-plan-format.md`](references/work-plan-format.md) |
 
-Authoring — a pure formatter over the grill plan, scout findings, and user decisions; **never re-explores the codebase** (codegraph already ran via grill + scout; the blueprint skill's generic Explore/Design/Build workflows would bypass it):
+Authoring is a **pure formatter** over the grill plan, scout findings, and user decisions. It **never re-explores the codebase** — codegraph already ran via grill + scout, and the generic blueprint skill's Explore/Design/Build workflows would bypass it. Follow [`references/blueprint-format.md`](references/blueprint-format.md) for the contract-block schema, template slot mapping, `.physics-pair` code↔math pairing, and metadata header.
 
-1. Read the HTML skeleton from this skill's own [`references/plan-template.html`](references/plan-template.html) — a pinned copy of the global blueprint template; no cross-skill reads at authoring time. If it's missing, warn and author a plain self-contained HTML page instead — the seven contract blocks are the deliverable; the template is only the visual identity.
-2. Fill it per [`references/blueprint-format.md`](references/blueprint-format.md) — the authoritative contract-block schema, template slot mapping, `.physics-pair` code↔math pairing, metadata header, and offline KaTeX rendering (`node <this skill's dir>/references/inline-katex.js <worktree-root>/specs/blueprint.html`; uses MOOSE's vendored KaTeX, degrades gracefully to plain-text LaTeX). The `#work-plan` block follows [`references/work-plan-format.md`](references/work-plan-format.md): implement units derived from the grill plan's predicted files (one per class), test units from `#test-plan`, doc unit from `#doc-plan`; edges only for hard dependencies; it **replaces** the template's per-phase task checklists.
-3. Save to `<worktree-root>/specs/blueprint.html`. Self-check: all seven contract `id`s present and non-placeholder, no `{{` outside image-slot comments, no external `http(s)` stylesheet/script links, every `file:line` citation verbatim, plus the work-plan checks from `work-plan-format.md` (JSON parses, deps resolve + acyclic, same-file units share an edge, chips all `idle`, gate strips verbatim and absent from the JSON).
+### Write one section per tool call
+
+**Never author the whole file in a single `Write`.** A blueprint written in one shot thins out: the later blocks lose the specificity the early ones got, and a long work plan gets truncated. Build the page in twelve passes instead. Each pass has the finished file on disk to check itself against.
+
+**Pass 1 — skeleton (`Write`).** Read this skill's own [`references/plan-template.html`](references/plan-template.html), a pinned copy of the global blueprint template; make no cross-skill reads at authoring time. If it is missing, warn the user and author a plain self-contained HTML page instead — the seven contract blocks are the deliverable, the template is only the visual identity. Then write a complete, valid HTML file that contains:
+
+- the `<head>`, the title, and **all** CSS inline — the template's own, `.physics-pair` from `blueprint-format.md`, and the work-plan CSS from `work-plan-format.md`;
+- the filled header and metadata block;
+- one empty stub per section below, carrying its exact `id`, its `<h2>`, and a single sentinel comment `<!-- FILL:<id> -->` as its whole body;
+- no `#phases` section — the work plan replaces the template's per-phase checklists.
+
+**Passes 2–11 — one `Edit` per section.** Each `Edit` replaces exactly one `<!-- FILL:<id> -->` sentinel with that section's finished content. The sentinel is unique, so every `old_string` matches once.
+
+| # | Section | `id` | Filled from |
+| --- | --- | --- | --- |
+| 2 | Summary | `#summary` | grill plan — repo, object kind, predicted files |
+| 3 | Relevant files | `#files` | predicted files, split existing vs new |
+| 4 | Physics & signature | `#physics` | grill plan math, validParams, residual form — plus one `id="physics-uN"` anchor per implement unit |
+| 5 | Reuse decisions | `#reuse-decisions` | scout findings + the user's decisions; `file:line` citations verbatim |
+| 6 | Test plan | `#test-plan` | the agreed tests |
+| 7 | Doc plan | `#doc-plan` | the agreed doc pages |
+| 8 | Out of scope | `#out-of-scope` | recorded non-goals |
+| 9 | Work plan — human view | `#work-plan` | waves, unit cards, gate strips, legend |
+| 10 | Work plan — machine copy | `#work-plan-data` | the JSON island |
+| 11 | Validation + Questionables | `#validation`, `#questionables` | test plan run commands; parked questions from the grill |
+
+The order is load-bearing. `#physics` comes before the work plan so every `physics_ref` anchor already exists. `#test-plan` and `#doc-plan` come before it so the test and doc units have rows to point at.
+
+Rules for these passes:
+
+- One section per call. Never merge two sections into one `Edit`. Never re-`Write` the whole file after pass 1.
+- Split a large section further — one `Edit` per wave, per unit card, or per reuse finding, each inserted before the sentinel, with the sentinel removed last. More calls is always allowed; fewer is not.
+- Do not re-read the file to confirm an `Edit` landed. `Edit` fails loudly when it does not.
+- Reading the file back to check that a reference resolves is fine. That is reading your own output, not re-exploring the codebase.
+
+The `#work-plan` passes follow [`references/work-plan-format.md`](references/work-plan-format.md): implement units from the grill plan's predicted files (one per class), test units from `#test-plan`, a doc unit from `#doc-plan`; edges for hard dependencies only.
+
+**Pass 12 — render and self-check.** Run the offline KaTeX pass:
+
+```
+node <this skill's dir>/references/inline-katex.js <worktree-root>/specs/blueprint.html
+```
+
+It uses MOOSE's vendored KaTeX and degrades to plain-text LaTeX when KaTeX is absent. Then verify: no `FILL:` sentinel remains, all seven contract `id`s are present and non-placeholder, no `{{` outside image-slot comments, no external `http(s)` stylesheet or script link, every `file:line` citation verbatim. Add the work-plan checks from `work-plan-format.md` — JSON parses, deps resolve and stay acyclic, same-file units share an edge, all chips `idle`, gate strips verbatim and absent from the JSON. Fix any failure with one more targeted `Edit`.
 
 ## 7. Stop
 
