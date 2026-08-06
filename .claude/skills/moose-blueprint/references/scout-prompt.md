@@ -31,6 +31,8 @@ Agent({
 
            ## What this angle covers
 
+           **Kind:** <cpp for implementation angles | test for 'what tests this already' angles>
+
            **Scope:** <one of ~/projects/moose_stack/moose, /blackbear, /isopod, or the worktree>
 
            **Specifically search for:**

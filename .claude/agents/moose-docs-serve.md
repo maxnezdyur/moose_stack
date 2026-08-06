@@ -2,6 +2,7 @@
 name: moose-docs-serve
 description: Start (or stop/restart) a long-running MooseDocs preview server for moose, blackbear, or isopod and return the URL, pid, and log path. Spawn whenever the user wants to preview docs, view the website, serve docs, start the docs server, open the doc preview, or restart/stop a running docs server. Runs the bundled serve script; read-only otherwise — never edits files.
 tools: Bash, Read, Grep, Glob
+model: opus
 color: magenta
 ---
 

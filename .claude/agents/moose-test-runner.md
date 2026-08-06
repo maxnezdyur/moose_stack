@@ -6,7 +6,7 @@ skills:
   - moose-run-tests
   - moose-test-standards
   - branch-diff
-model: sonnet
+model: opus
 color: yellow
 ---
 

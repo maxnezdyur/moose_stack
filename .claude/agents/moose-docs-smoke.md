@@ -2,6 +2,7 @@
 name: moose-docs-smoke
 description: Smoke-test the MooseDocs site for moose, blackbear, or isopod with a full build + serve + HTTP probe and report pass/fail. Spawn whenever the user (or a parent flow) wants to check that the website builds, verify the doc site runs, confirm the docs are healthy before push, or sanity-check a doc edit didn't break the site. Runs the build, serve, and probe steps directly with Bash; read-only otherwise — never edits files or routes fixes.
 tools: Bash, Read, Grep, Glob
+model: opus
 color: magenta
 ---
 

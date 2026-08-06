@@ -1,6 +1,7 @@
 ---
 name: moose-docs-builder
 description: "Smoke-build the MooseDocs site for one of moose, blackbear, or isopod and report whether the build broke because of files in this branch's diff. Spawned as a nested child by the moose-docs-writer parent to gate its pages, or directly by the build lead for a code-only !syntax check when no docs were authored. Runs the build/serve/probe steps directly and adds in-diff error filtering. Read-only: never authors, edits, or routes fixes itself."
+model: opus
 color: magenta
 ---
 

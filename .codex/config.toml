@@ -50,7 +50,7 @@ max_depth = 1
   config_file = "agents/moose-pr-reviewer.toml"
 
   [agents.moose-scout]
-  description = "CodeGraph-powered read-only reuse scout for moose, blackbear, and isopod. Given one search angle (or a teammate's context question), it finds code that may already implement the feature, opens each candidate and reads its actual residual/contribution code via CodeGraph, rates the match (structural / behavioral / naming), and returns `file_path:line`-cited findings — or an explicit \"no match\". Spawned per search-angle (`run_in_background: true`) by /moose-blueprint, directly by moose-implementer for one-shot reuse recon, and on a child's `NEEDS_CONTEXT` by the moose-feature-loop agent (under /moose-build). Read-only: never edits, builds, runs tests, or spawns other agents."
+  description = "CodeGraph-powered read-only recon scout for moose, blackbear, and isopod. Answers one scoped search question — about C++ (does this already exist, what contract does base `<X>` declare), regression tests, gtest unit tests, or doc-facing class facts — by opening each candidate and reading it, then returns a short ranked `file_path:line`-cited shortlist or an explicit \"no match\". Exists to keep bulk search out of the caller's context. Spawned per search-angle (`run_in_background: true`) by /moose-blueprint, and one-shot by moose-implementer, moose-test-writer, moose-unit-test-writer, moose-docs-writer, and moose-feature-loop (on a child's `NEEDS_CONTEXT`). Read-only: never edits, builds, runs tests, or spawns other agents."
   config_file = "agents/moose-scout.toml"
 
   [agents.moose-test-reviewer]

@@ -47,3 +47,4 @@ Always include the log path `/tmp/moose-docs-<scope>-smoke.log`.
 - Conda env not active / `MooseDocs` import fails → `BLOCKED`; the user activates the env (and check the `MOOSE_DIR`/`PYTHONPATH` exports). Env problems are `BLOCKED`, not `FAIL` — a hint-less `FAIL` would send the parent into doc-fix rounds against a broken env.
 - `moose_test-opt` / `blackbear-opt` / `isopod-opt` missing (and no module fallback applies) → `FAIL`, cause hint `cpp-side`, include the exact build command (`make -C <root>/moose/test -j`, `make -C <root>/blackbear -j`, or `make -C <root>/isopod -j`); the parent escalates the build.
 - Smoke timeout (default 600s) → `BLOCKED` with the partial log; suggest a longer timeout. Don't retry on your own."""
+model_reasoning_effort = "xhigh"

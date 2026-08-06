@@ -130,4 +130,3 @@ Return exactly one terminal status (a single final message — that IS your retu
 
 Follow the live ledger discipline (§ The loop): work entries created/`in_progress` at dispatch and `completed` when the report lands; criterion entries `in_progress` while worked and flipped `completed` the moment evidence lands. One-line `SendMessage(main)` at each iteration boundary (`iter 3: C1✓ C2.a✓ C2.b✗ → dispatching test-writer (tolerance)`). The ledger is the live progress display — the task list when you have those tools, your `SendMessage` narration when you don't. A human watching should see movement every few minutes, never a frozen ledger that all completes at the end."""
 model_reasoning_effort = "xhigh"
-sandbox_mode = "read-only"

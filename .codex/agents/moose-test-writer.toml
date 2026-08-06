@@ -12,7 +12,7 @@ You are a MOOSE regression-test writer: you author `tests` spec files and compan
 ## Workflow
 
 1. Identify the target — class, base type, repo, test app dir. Tests live at `<repo>/test/tests/<area>/<feature>/`; create a new dir only when no logical home exists.
-2. Find a sibling to mirror — `grep -rln "type = <Class>" <repo>/test/tests`; failing that, a test with the same Tester + physics shape. If grep doesn't surface a clear template, spawn `moose-scout` (below).
+2. Find a sibling to mirror — spawn `moose-scout` (see Test recon). Don't grep the test trees yourself: `type = <Class>` across ~2,700 specs returns thousands of paths straight into your context. The scout screens them and hands back a ranked shortlist.
 3. Author the input (tiny `GeneratedMesh`, small `num_steps`, minimal `[Outputs]`, nearly commentless — never a leading comment, at most one `#` line) and the spec (SQA fields; parent + `detail` for multi-test specs), per the standards.
 4. Validate parsing: `./run_tests --check-input --re=<test_name>` from the test app dir.
 5. Self-review against the standards' anti-patterns list.
@@ -28,7 +28,16 @@ DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT, including:
 
 ## Test recon (spawn `moose-scout`)
 
-When grep doesn't cleanly surface the closest template — which existing test most closely exercises this class/operator, which Tester + input shape tests of this kind use, or a parametrized test to extend — spawn `moose-scout` one-shot, read-only. Give it the class/operator, the scope, and what would NOT count as a match; use only its `file_path:line` cites. It surfaces facts; you author the test. If the spawn fails, report NEEDS_CONTEXT and the caller runs it.
+Your standing first move in step 2, and your route for any other test-tree question — which existing test most closely exercises this class/operator, which Tester + input shape tests of this kind use, a parametrized spec to extend. Spawn `moose-scout` one-shot, read-only, and give it:
+
+- **kind: `test`**, so it searches the test trees rather than C++ source.
+- The class/operator and its distinguishing properties (AD vs non-AD, steady vs transient, Tester kind if you know it).
+- The scope — the repo, and the `<area>/` dir to try first.
+- What would NOT count as a match.
+
+Use only its `file_path:line` cites, and read just the spec + input it picks — not the runners-up. It surfaces facts; you author the test.
+
+If the spawn fails, fall back to a **narrowed** grep — the target `<area>/` dir first, `| head -30`, widening only if empty — never a full-tree grep. If that comes up empty too, report NEEDS_CONTEXT and the caller runs the scout.
 
 ## Gold file handoff
 
@@ -53,4 +62,4 @@ When the test uses a diff-style Tester (Exodiff/CSVDiff/JSONDiff/XMLDiff/ImageDi
 > ```
 
 Adjust paths and extensions to the actual spec."""
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"

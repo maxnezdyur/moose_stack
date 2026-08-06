@@ -39,4 +39,5 @@ Known non-FAIL outcomes — report as `BLOCKED` with the fix hint, don't retry o
 - Conda env not active / `MooseDocs` import fails → the user activates the env.
 - Repo binary missing → the user runs the `make` command from the table.
 - Timeout → include the partial log; suggest a longer timeout."""
+model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"

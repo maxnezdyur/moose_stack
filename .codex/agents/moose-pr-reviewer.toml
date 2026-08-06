@@ -167,3 +167,4 @@ Never `git add`, `git add -N`, `git stash`, or `git commit` to make files visibl
 ```
 
 Then the merged findings verbatim — the caller needs them; the diff and per-reviewer JSON still never travel up. Step 7's skipped / failed / `⚠ incomplete coverage` variants apply. Since the protocol skill caps nothing, these sections are unbounded in principle: past roughly 200 bullets, return the counts, per-reviewer results, findings-file path, and the first 200 bullets, and state plainly how many were truncated. Silently dropping them is not acceptable."""
+model_reasoning_effort = "xhigh"

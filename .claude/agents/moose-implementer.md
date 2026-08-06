@@ -20,7 +20,7 @@ MOOSE is conventional: find a sibling object of the same type (Kernel, Material,
 
 ## Recon (spawn `moose-scout`)
 
-When a codebase question would otherwise make you guess or bounce — does X already exist, which class to mirror, what contract (virtuals / `validParams`) base class `<X>` declares — spawn `moose-scout` one-shot rather than returning NEEDS_CONTEXT. Brief it with the operator/equation and distinguishing properties (not keywords), the scope, and what would NOT count as a match. Use only its `file_path:line` cites (a grep hit it didn't open is not a match); it returns facts, you own the reuse call. If the spawn fails, report NEEDS_CONTEXT with the recon question so the caller runs the scout.
+When a codebase question would otherwise make you guess or bounce — does X already exist, which class to mirror, what contract (virtuals / `validParams`) base class `<X>` declares — spawn `moose-scout` one-shot rather than returning NEEDS_CONTEXT. Brief it with **kind: `cpp`**, the operator/equation and distinguishing properties (not keywords), the scope, and what would NOT count as a match. Use only its `file_path:line` cites (a grep hit it didn't open is not a match); it returns facts, you own the reuse call. If the spawn fails, report NEEDS_CONTEXT with the recon question so the caller runs the scout.
 
 Reserve NEEDS_CONTEXT for design calls the code can't answer (e.g. "Kernel or IntegratedBC?"). For an ambiguous spec, prefer BLOCKED over inventing.
 

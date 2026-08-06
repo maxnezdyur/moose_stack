@@ -25,4 +25,5 @@ Surface the script's output verbatim — the URL must reach the user clickable, 
 - `/tmp/moose-docs-<repo>-serve.log` — moosedocs stdout+stderr
 
 Notes to pass along: the server is up immediately but pages are incomplete until the build finishes (minutes for moose); reload as it progresses. It is detached (`nohup` + `disown`) — survives Claude Code exiting; stop explicitly with `stop`."""
+model_reasoning_effort = "xhigh"
 sandbox_mode = "read-only"
