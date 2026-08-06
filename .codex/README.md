@@ -40,7 +40,21 @@ If the meta-repo is dirty with unrelated changes, the tool will refuse. Either c
 
 4. **moose submodule writes.** The tool wants to replace `moose/CLAUDE.md` (symlink → `moose/AGENTS.md`) with a concrete file, and create `moose/petsc/AGENTS.md`. These land *inside* the `moose/` and `moose/petsc/` submodules — they don't belong in the meta-repo commit. Decide per-submodule whether to commit, revert, or ignore.
 
-5. **petsc commands skipped.** `moose/petsc/.claude/commands/{review-branch,review-mr-post,review-mr}.md` lack legacy frontmatter so the tool can't migrate them. Surface only — manual fix if you actually use those.
+5. **Worktree copies poison the output — the big one.** The tool scans the whole tree, so it also picks up `.claude/worktrees/<name>/.claude/agents/*.md`. Two sources map to one target (`.codex/agents/<agent>.toml` appears twice in the plan) and the worktree copy is written last, so a stale worktree silently *reverts* the mirror to old prose. Before any `--write`, check the plan for duplicate target paths:
+
+   ```bash
+   npx --yes claude-to-codex --dry-run --json > /tmp/c2c-plan.json
+   jq -r '.plan.operations[] | select(.type != "skip") | .relativePath' /tmp/c2c-plan.json | sort | uniq -d
+   ```
+
+   Any output means duplicates. Either delete/prune the stale worktree first (`git worktree list`, `git worktree remove`), or skip the full re-sync and hand-patch just the TOMLs you changed — the `developer_instructions` string is the `.md` body verbatim. Verify a hand-patch with:
+
+   ```bash
+   diff <(python3 -c "import tomllib;print(tomllib.load(open('.codex/agents/<agent>.toml','rb'))['developer_instructions'].strip())") \
+        <(python3 -c "import re,sys;s=open('.claude/agents/<agent>.md').read();print(re.sub(r'^---.*?\n---\n','',s,flags=re.S).strip())")
+   ```
+
+6. **petsc commands skipped.** `moose/petsc/.claude/commands/{review-branch,review-mr-post,review-mr}.md` lack legacy frontmatter so the tool can't migrate them. Surface only — manual fix if you actually use those.
 
 ## Verifying after a run
 

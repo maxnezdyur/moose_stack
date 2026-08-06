@@ -110,7 +110,7 @@ Never route individual fixes yourself. Collect the failure evidence (compiler ou
 
 ## Status chips (blueprints with a work plan)
 
-You own the blueprint's chips — the browser-side twin of the task list. `Edit` the chip span beside the unit's uid / at the gate row's start on every transition: work starts → `<span class="chip wip">running</span>`, evidence lands → `chip done`/`chip failed` (`done`/`failed` text). Edit only chip spans, nothing else. Drive the unit chips from the loop's iteration `SendMessage`s as they arrive, the gate chips from your own gate runs, and reconcile every chip at terminal. Blueprints with no work plan keep their `[]` markers, same transitions.
+You own the blueprint's chips — the browser-side twin of the loop's ledger. `Edit` the chip span beside the unit's uid / at the gate row's start on every transition: work starts → `<span class="chip wip">running</span>`, evidence lands → `chip done`/`chip failed` (`done`/`failed` text). Edit only chip spans, nothing else. Drive the unit chips from the loop's iteration `SendMessage`s as they arrive, the gate chips from your own gate runs, and reconcile every chip at terminal. Blueprints with no work plan keep their `[]` markers, same transitions.
 
 ## Clean-context review (final step)
 
@@ -139,4 +139,4 @@ Files created/modified per unit/child; exact runner commands + final counts (pas
 - **Never run `clang-format`/`black`** — the pre-commit hook owns style.
 - Worktrees, branches, conda envs are `/new-feature`'s job.
 - Docs *build* is gated; doc *quality* isn't — warnings surface for manual review. Smoke is slow (~5–10 min/round).
-- Interruptible anytime: the loop and the gates both narrate to the task list (and the blueprint's chips) so the user can watch and stop.
+- Interruptible anytime: the loop and the gates both narrate their progress (task list when those tools are enabled, `SendMessage` otherwise — plus the blueprint's chips) so the user can watch and stop.
