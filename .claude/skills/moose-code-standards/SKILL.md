@@ -1,6 +1,6 @@
 ---
 name: moose-code-standards
-description: MOOSE coding standards (C++ and Python). Auto-loads when writing or editing C++/Python source in moose, blackbear, or isopod. Preloaded into the moose-implementer, moose-code-reviewer, and moose-unit-test-writer agents.
+description: MOOSE coding standards (C++ and Python). Auto-loads when writing or editing C++/Python source in moose, blackbear, or isopod.
 user-invocable: true
 ---
 

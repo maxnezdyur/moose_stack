@@ -17,11 +17,11 @@ e.g. `/moose-grill add a kernel for thermal-anisotropic conduction in solid_mech
 
 ## Flow
 
-**Find candidates.** Infer the object kind (Kernel, IntegratedBC, Material, Postprocessor, UserObject, Action, Constraint, …), then pull candidate base classes with codegraph: `codegraph_explore "<ObjectKind> base class <key virtual>"` (`computeQpResidual` for kernels, `computeQpValue` for aux, `execute` for postprocessors) to surface the base plus representative implementations, then `codegraph_search` / `codegraph_node <BaseClassName>` for the declared virtuals and subclasses. Hold plausible alternatives (`Kernel` vs `IntegratedBC`, AD vs non-AD) as candidates.
+**Find candidates.** Infer the object kind (Kernel, IntegratedBC, Material, Postprocessor, UserObject, Action, Constraint, …), then pull candidate base classes with codegraph: `codegraph_explore "<ObjectKind> base class <key virtual>"` (`computeQpResidual` for kernels, `computeQpValue` for aux, `execute` for postprocessors) to surface the base plus representative implementations, then `codegraph node <BaseClassName>` (CLI, via Bash) for the declared virtuals and subclasses. Hold plausible alternatives (`Kernel` vs `IntegratedBC`, AD vs non-AD) as candidates.
 
 **Pick the base class.** Present each candidate with a one-line "use this when …" derived from what its existing subclasses actually do (read 1–2 via codegraph). Confirm via `AskUserQuestion`, 1–2 questions at a time — the back-and-forth is the point of a grill; don't dump everything at once. If nothing fits cleanly, widen the search (different key virtual, different namespace) before forcing a pick. Capture the pick with its repo-relative `path:line` — it's the spine of the rest of the grill.
 
-**Walk the contract.** Read the base plus one representative subclass (`codegraph_node`): required overrides and what each computes; `validParams` shape from the base and a sibling (`addRequiredCoupledVar`, `addParam<MaterialPropertyName>`, …); optional overrides only where the plan suggests they're needed.
+**Walk the contract.** Read the base plus one representative subclass (`codegraph node <Class>`): required overrides and what each computes; `validParams` shape from the base and a sibling (`addRequiredCoupledVar`, `addParam<MaterialPropertyName>`, …); optional overrides only where the plan suggests they're needed.
 
 **Mirror structure, not debt.** Treat "make it exactly like `<Class>`" as mirroring structure and public API only — drop deprecated parameters, compatibility shims, and known defects — and record each omission under **Pitfalls considered**.
 

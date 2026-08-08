@@ -15,9 +15,10 @@ to dispatch each iteration from the criteria still unmet. Nothing here orders th
   property/API another new unit declares, or **touches the same file** (two units editing one
   file MUST share an edge — the loop runs edge-free units concurrently, so they have to own
   disjoint files). Style preference, "feels related", or ordering habit are NOT edges.
-- **Standing gates** — NOT part of the plan. `/moose-build` owns them and runs them around the
-  loop; the blueprint renders them read-only (below) so the reviewer sees the whole run. A
-  blueprint can never add, remove, reorder, or edit a gate. Never encode a gate as a dep.
+- **Standing gates** — NOT part of the plan. `/moose-build` owns them, in
+  `.claude/skills/moose-build/references/standing-gates.md`, and runs them around the loop; the
+  blueprint renders them read-only (below) so the reviewer sees the whole run. A blueprint can
+  never add, remove, reorder, or edit a gate. Never encode a gate as a dep.
 
 Derivation (owned by `/moose-blueprint`): `implement` units from the grill plan's predicted
 files, one per class (single-class features get one unit, `U1`), with edges drawn by the
@@ -65,8 +66,10 @@ Render inside the same `#work-plan` section, above the island:
   on; the `deps:` line carries the real constraint.
 - A `.gatebar` strip after the implementation group (**gate A**) and after the tests & docs
   group (**gate B**), each labeled `Standing gate <A|B> — appended by /moose-build, not editable
-  here`, listing that gate's checks verbatim from `/moose-build`'s "Standing gates" section (copy
-  the current text at authoring time — the build skill is the source of truth).
+  here`. Read `.claude/skills/moose-build/references/standing-gates.md` and render one strip line
+  per table row belonging to that gate — row id, criterion, check **verbatim** — as that file
+  states them at authoring time. Read it every run: it is the gates' one home and it grows, so a
+  retyped snapshot silently drifts.
 - A legend line: unit-kind dots + the four chip states.
 
 Card skeleton:
@@ -99,8 +102,9 @@ unique); every gate check line gets one as its first element.
 
 ## CSS
 
-Add to the `<style>` block (alongside the template's own CSS; uses/extends its variables —
-define `--impl/--test/--doc/--gate/--gate-bg/--mock` variants if the template lacks them):
+Add to the page's own `<style>` block (the pinned template ships no CSS). These rules assume
+`--bg --surface --line --muted --impl --test --test-bg --doc --gate --gate-bg --mock` are
+defined in `:root`.
 
 ```css
 .legend { display:flex; flex-wrap:wrap; gap:.9rem; align-items:center; font-size:.78rem; color:var(--muted); margin:.6rem 0 1rem; }
@@ -136,4 +140,5 @@ define `--impl/--test/--doc/--gate/--gate-bg/--mock` variants if the template la
 2. No two edge-free units list the same file.
 3. Every `#test-plan` row has a test unit; every test unit's `test_plan_ref` resolves.
 4. Every `physics_ref` anchor exists in `#physics`.
-5. All chips `idle`; both gate strips present, text matching `/moose-build`; gates absent from JSON.
+5. All chips `idle`; both gate strips present, rows matching `standing-gates.md` as read this
+   run; gates absent from JSON.

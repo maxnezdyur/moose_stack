@@ -23,7 +23,7 @@ Walk up from `pwd` until a directory containing a `.clangd` file is found — th
 | `blackbear` | `blackbear` | |
 | `isopod` | `isopod` | |
 
-Picking both `moose` and `moose-combined` is harmless (the merge deduplicates to first-match per file) but usually one suffices.
+Picking both `moose` and `moose-combined` is harmless (the merge concatenates all entries; clangd uses the first entry it finds for a given file) but usually one suffices.
 
 If `$ARGUMENTS` is non-empty, treat it as a space-separated selection; error on unknown names. Otherwise AskUserQuestion (multiSelect: true), defaulting to `moose`, `blackbear`, `isopod` selected.
 
@@ -32,8 +32,10 @@ If `$ARGUMENTS` is non-empty, treat it as a space-separated selection; error on 
 For each selected submodule, sequentially (~5–10s each); stop and surface any non-zero exit:
 
 ```bash
-source ~/miniforge3/etc/profile.d/conda.sh && conda activate moose && make -j compile_commands.json -C <path>
+source ~/miniforge3/etc/profile.d/conda.sh && conda activate <env> && make -j compile_commands.json -C <path>
 ```
+
+`<env>` follows the located root: `moose` when its basename is `moose_stack`, otherwise `moose-<root-basename>` — the version-pinned env of that feature worktree. The emitted DB embeds `$CONDA_PREFIX` include paths, so the wrong env writes a DB against the wrong moose-dev pin.
 
 ## Merge
 

@@ -1,92 +1,53 @@
 ---
 name: moose-params
-description: Look up the registered-syntax YAML entry for an exact MOOSE object type name (e.g. `ADDirichletBC`). Auto-triggers on phrasings like "what params does X take", "params for X", "dump X", or invoke directly via `/moose-params <Type> [<ParamName> | --full]`. Returns a lean summary by default; a second positional arg drills into a single parameter; `--full` returns the complete YAML node. Reads from `<meta-repo>/.claude/cache/syntax.yaml`. Does NOT advise which object to pick — to find candidate objects, search the C++ source with codegraph (`codegraph_search` / `codegraph_explore`).
-allowed-tools:
-  - Bash(yq *)
-  - Bash(ls *)
-  - Bash(stat *)
-  - Bash(test *)
-  - Read
+description: Look up the registered parameters of an exact MOOSE object type name (e.g. `ADDirichletBC`) by querying a built app binary — never a cache, so the answer always matches the current checkout. Auto-triggers on phrasings like "what params does X take", "params for X", "dump X", or invoke directly via `/moose-params <Type> [<ParamName> | --full]`. Returns a lean summary by default; a second positional arg drills into a single parameter; `--full` returns the complete JSON node. Costs 15-30 s and needs the app built. Does NOT advise which object to pick — to find candidate objects, search the C++ source with codegraph (`codegraph_explore`).
 ---
 
 # moose-params
 
-Look up the YAML node for an exact MOOSE object type name. Arguments arrive as `$ARGUMENTS` — never ask the user for clarification; on bad input emit the usage error below and stop.
+Ask a built app what it actually registered. Arguments arrive as `$ARGUMENTS`: first token is the type name, an optional second token is either a parameter name or `--full`. Never ask for clarification — on bad input emit `ERROR: usage is /moose-params <TypeName> [<ParamName> | --full]` and stop.
 
-## Parse `$ARGUMENTS`
+## Which binary
 
-Split on whitespace. First token is the type name; the second, if present, picks the mode:
+Pick by where the object lives, `-opt` first and `-devel` if that is what is built:
 
-| Tokens                   | Mode    | Notes                                                        |
-|--------------------------|---------|--------------------------------------------------------------|
-| `<TypeName>`             | `lean`  | one token only                                               |
-| `<TypeName> --full`      | `full`  | exact flag `--full`                                          |
-| `<TypeName> <ParamName>` | `param` | second token is the parameter name; must not start with `--` |
+| Object | Binary |
+|---|---|
+| framework or any moose module | `moose/modules/combined/combined-opt` |
+| test-only | `moose/test/moose_test-opt` |
+| blackbear | `blackbear/blackbear-opt` |
+| isopod | `isopod/isopod-opt` |
 
-Empty `$ARGUMENTS`, three or more tokens, or a `--` flag other than `--full` → output exactly `ERROR: usage is /moose-params <TypeName> [<ParamName> | --full]` and stop.
+Paths are relative to the meta-repo root (or the feature worktree root — use the one you are in).
 
-## Run exactly one command
-
-Substitute `$TYPE` (and `$PARAM` in param mode).
-
-### Mode `lean` (default)
+## Get the JSON
 
 ```bash
-yq -y --arg name "$TYPE" '
-  [.. | objects | select(has("name") and ((.name | split("/") | last) == $name))] as $hits
-  | if ($hits | length) == 0 then
-      "ERROR: no exact match for \"\($name)\"" | halt_error(1)
-    else
-      $hits | map({
-        name,
-        description,
-        required: [.parameters[]? | select(.required == "Yes") | {(.name): .description}] | add,
-        optional: [.parameters[]? | select(.required != "Yes") | .name]
-      })[]
-    end
-' /Users/maxnezdyur/projects/moose_stack/.claude/cache/syntax.yaml
+<binary> --json-search <TypeName> 2>/dev/null \
+  | awk '/\*\*START JSON DATA\*\*/{f=1;next} /\*\*END JSON DATA\*\*/{f=0} f'
 ```
 
-### Mode `full`
+Three things about this, none of them guessable:
 
-```bash
-yq -y --arg name "$TYPE" '
-  [.. | objects | select(has("name") and ((.name | split("/") | last) == $name))] as $hits
-  | if ($hits | length) == 0 then
-      "ERROR: no exact match for \"\($name)\"" | halt_error(1)
-    else
-      $hits[]
-    end
-' /Users/maxnezdyur/projects/moose_stack/.claude/cache/syntax.yaml
-```
+- **`--json-search` takes a wildcard pattern and matches it against syntax paths, action names, parent paths, and parameter names.** A bare type name therefore matches exactly, and the payload is kilobytes instead of the ~15 MB full tree. Never add `*`; fuzzy matching breaks the contract below.
+- **Deprecation warnings and stack traces go to stdout**, interleaved with the payload. The `awk` slice is what makes the output parseable — `2>/dev/null` alone is not enough.
+- **It takes 15-30 s.** The app boots and builds its whole syntax tree. Don't kill it early and don't run it twice for one question.
 
-### Mode `param`
+## Read the tree
 
-```bash
-yq -y --arg name "$TYPE" --arg param "$PARAM" '
-  [.. | objects | select(has("name") and ((.name | split("/") | last) == $name))] as $hits
-  | if ($hits | length) == 0 then
-      "ERROR: no exact match for \"\($name)\"" | halt_error(1)
-    else
-      [$hits[].parameters[]? | select(.name == $param)] as $params
-      | if ($params | length) == 0 then
-          "ERROR: no parameter \"\($param)\" on type \"\($name)\"" | halt_error(1)
-        else
-          $params[]
-        end
-    end
-' /Users/maxnezdyur/projects/moose_stack/.claude/cache/syntax.yaml
-```
+The object sits at `blocks > <System> > star > subblock_types > <TypeName>`, so find it by that exact leaf key rather than trusting whatever the search returned — a type name that collides with some other object's *parameter* name pulls extra blocks in.
+
+The node carries `description`, `moose_base`, `parent_syntax` (the input block it goes in), `register_file` and `file_info` (source path and line), and `parameters` — an **object keyed by parameter name**, each with `required` as a real boolean, plus `cpp_type`, `basic_type`, `default`, `options`, `group_name`, `deprecated`.
+
+Then `jq` it to the mode asked for: the required/optional split for the default lean view, the whole node for `--full`, or `.parameters["<ParamName>"]` for a single parameter.
 
 ## Emit
 
-Print stdout verbatim in a fenced ```yaml block — no summary, no HIT block synthesis. On non-zero exit, print stderr verbatim and stop: no retry, no fallback to substring search. Exact-match-only is the contract; fuzzy results would let callers "verify" types that don't exist.
+Print the result verbatim in a fenced ```json block — no summary, no HIT block synthesis. Exact-match-only is the contract: no substring retry, no near-miss suggestions. A fuzzy hit would let a caller "verify" a type that is not registered.
 
-If the cache file is missing (yq complains), tell the user once:
+Two failures look alike and are not:
 
-```
-Cache missing. Run:
-  bash /Users/maxnezdyur/projects/moose_stack/.agents/skills/moose-params/refresh.sh <path-to-app-opt-binary>
-```
+- **No node for that name** — the app started and does not register the type. Believe it. Say so, and name the app you asked, since a blackbear or isopod object won't be in `combined-opt`.
+- **No JSON between the markers** — the app never started. Re-run without `2>/dev/null` and surface its stderr; it is usually a `dyld` mismatch after a `moose` bump, or an unbuilt app. This says nothing about whether the type exists.
 
-Out of scope: choosing *which* object to pick (that's codegraph over the C++ source), auto-regenerating the cache, caring which binary produced it.
+Out of scope: building or repairing the app, and caring which method binary answered.

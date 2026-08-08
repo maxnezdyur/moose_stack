@@ -17,7 +17,7 @@ If `$ARGUMENTS` is empty, ask what to write. If no target path is given, derive 
 
 ## Ground truth
 
-- **Types and parameters** — verify every type via the `moose-params` skill before use: confirm it is registered, supply every `required: 'Yes'` parameter, never invent parameter names. If `moose-params` doesn't know a type, that type isn't real — pick another or BLOCK. Drill into a single param (`/moose-params <Type> <Param>`) only when a cpp_type or default drives a decision.
+- **Types and parameters** — verify every type via the `moose-params` skill before use: confirm it is registered, supply every parameter it lists under `required`, never invent parameter names. If `moose-params` doesn't know a type, that type isn't real — pick another or BLOCK. Drill into a single param (`/moose-params <Type> <Param>`) only when a cpp_type or default drives a decision.
 - **Block structure** — mirror existing example inputs (`Grep`/`Glob` over `*/test/tests/**/*.i` and module test dirs); don't invent block layouts. Use `codegraph_explore "<TypeName>"` to understand what an object does or to choose between candidates.
 - **Binary** (for `--check-input`), by cwd: `moose/` → `moose/test/moose_test-opt`; `blackbear/` → `blackbear/blackbear-opt`; `isopod/` → `isopod/isopod-opt`; anywhere else → `isopod/isopod-opt`. Verify with `test -x`; if missing, report BLOCKED with: "Binary not built. Run `cd <app-dir> && METHOD=opt make -j2`."
 
@@ -43,11 +43,11 @@ Ask via `AskUserQuestion`, one question at a time, until every structural fork b
 
 Numeric placeholders (material constants, dt, output frequency, mesh resolution, sideset coordinates) are never interview questions — fill sensible defaults silently and list them under `Concerns:`, unless a wrong default would silently change the answer by an order of magnitude, in which case confirm it.
 
-**`physics-spec.md` in cwd is law.** Read it in full; every structural statement (element type, mesh topology, coupling style, contact algorithm, control wiring, BC placement) is a hard constraint and counts as an answered axis. If a spec requirement can't be expressed directly in HIT, ask or BLOCK — never substitute a proxy, skip a stated `[Controls]` requirement, or swap the specified algorithm and note the deviation under `Concerns:`. That section is for numeric placeholders and factual notes only.
+**`physics-spec.md` in cwd is law.** Read it in full; every structural statement (element type, mesh topology, coupling style, contact algorithm, control wiring, BC placement) is a hard constraint and counts as an answered axis. If a spec requirement can't be expressed directly in HIT, ask or BLOCK — never substitute a proxy, skip a stated `[Controls]` requirement, or silently swap the specified algorithm.
 
 ## Write
 
-Minimal style: clean HIT, no header, no separator lines, nearly commentless — never a comment on the first lines, at most one `#` line in the whole file, prefer zero. The file should look like one a human would commit. Complete and runnable: `[Mesh]`, `[Variables]`, kernels/physics, `[Materials]`, `[BCs]`, `[Executioner]`, `[Outputs]`, plus `[ICs]`/`[Postprocessors]` where warranted; no empty blocks. AD-named classes (`ADDirichletBC`, not `DirichletBC`) unless the user opted out. In modify mode, touch only the blocks the change requires.
+Minimal style: clean HIT, no header or separator lines, and the comment density of the example inputs you mirrored — in practice zero. The file should look like one a human would commit. Complete and runnable: `[Mesh]`, `[Variables]`, kernels/physics, `[Materials]`, `[BCs]`, `[Executioner]`, `[Outputs]`, plus `[ICs]`/`[Postprocessors]` where warranted; no empty blocks. AD-named classes (`ADDirichletBC`, not `DirichletBC`) unless the user opted out. In modify mode, touch only the blocks the change requires.
 
 ## Validate
 

@@ -102,7 +102,7 @@ Use the test names `test-writer` reports it **registered** (they equal the `test
 
 `MISSING GOLD` or a structural DIFF on a newly authored test is first-time gold capture, not overwriting a trusted baseline — don't stop to ask:
 
-1. Direct `test-runner`: "Regenerate gold for `<test>` — first-time capture; the new behavior is **authorized as correct-by-design**, so proceed without asking: run verbose, copy outputs to `gold/`, re-run to confirm `OK`, stage the gold (`git add`) — **do not commit**."
+1. Direct `test-runner`: "Regenerate gold for `<test>` — first-time capture; the new behavior is **authorized as correct-by-design**, so proceed without asking. Stage the gold (`git add`) — **do not commit**."
 2. The criterion is met once the confirm-run is `OK`.
 3. Keep a running list of every gold file written + the observed values — it goes in your final report so the human can sanity-check the physics in one place.
 
@@ -134,4 +134,4 @@ Return exactly one terminal status (a single final message — that IS your retu
 
 ## Observability
 
-Follow the live ledger discipline (§ The loop): work entries created/`in_progress` at dispatch and `completed` when the report lands; criterion entries `in_progress` while worked and flipped `completed` the moment evidence lands. One-line `SendMessage(main)` at each iteration boundary (`iter 3: C1✓ C2.a✓ C2.b✗ → dispatching test-writer (tolerance)`). The ledger is the live progress display — the task list when you have those tools, your `SendMessage` narration when you don't. A human watching should see movement every few minutes, never a frozen ledger that all completes at the end.
+Follow the live ledger discipline (§ The loop). One-line `SendMessage(main)` at each iteration boundary (`iter 3: C1✓ C2.a✓ C2.b✗ → dispatching test-writer (tolerance)`). The ledger is the live progress display — the task list when you have those tools, your `SendMessage` narration when you don't. A human watching should see movement every few minutes, never a frozen ledger that all completes at the end.

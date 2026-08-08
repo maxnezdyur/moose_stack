@@ -6,7 +6,7 @@ user-invocable: true
 
 # MOOSE `./run_tests` Cheat Sheet
 
-Flag/status reference for `moose`, `moose/modules/<m>`, `blackbear`, `isopod`. Procedures, failure diagnosis, and gold regeneration live in **moose-test-workflows**; authoring conventions in **moose-test-standards** / **moose-unit-test-standards**. Full flag list: `./run_tests --help` — this covers only the gotchas and the flags people invent.
+Flag/status reference for `moose`, `moose/modules/<m>`, `blackbear`, `isopod`. Procedures live in **moose-test-workflows** — its routing table sends you to `references/failure-diagnosis.md`, `references/gold-regeneration.md`, or `references/ci-and-debugging.md`; authoring conventions in **moose-test-standards** / **moose-unit-test-standards**. Full flag list: `./run_tests --help` — this covers only the gotchas and the flags people invent.
 
 ## Where to run
 
@@ -83,7 +83,7 @@ The `[bracket]` after a test name is the skip reason:
 
 ## Gold regeneration
 
-**No automation** — no `--copy-gold`, no `--update-golds`. Golds are copied by hand; end-to-end workflow in **moose-test-workflows**.
+**No automation** — no `--copy-gold`, no `--update-golds`. Golds are copied by hand; end-to-end workflow in **moose-test-workflows** `references/gold-regeneration.md`.
 
 ## Capability gating
 

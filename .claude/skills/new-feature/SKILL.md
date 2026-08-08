@@ -19,7 +19,7 @@ allowed-tools:
 
 # /new-feature
 
-Scaffold a feature workspace: a meta-repo worktree with matching feature branches on the meta-repo and all three submodules (`moose`, `blackbear`, `isopod`), a fresh version-pinned conda env, and a bootstrapped CodeGraph index. Every submodule always gets a worktree — no pairing prompt; matching branch names on all four repos let the meta-repo bump pointers cleanly later. Use the app(s) you need, leave the rest untouched.
+Every submodule always gets a worktree — no pairing prompt; matching branch names on all four repos (the meta-repo plus `moose`, `blackbear`, `isopod`) let the meta-repo bump pointers cleanly later. Use the app(s) you need, leave the rest untouched.
 
 ## Usage
 
@@ -68,8 +68,7 @@ On failure at any step, stop and report — do not partially tear down; the user
    yq -r '.packages."moose-dev".version' ~/projects/moose-worktrees/<feature>/moose/scripts/versioner.yaml   # e.g. 2026.05.08
    conda create -n moose-<feature> moose-dev=<version> -c https://conda.software.inl.gov/public -y
    ```
-   MOOSE and its conda packages move in lockstep: if the branch later bumps `moose` to a commit whose `versioner.yaml` reports a different version, recreate the env with the new pin.
-6. Report: workspace path, the `<feature>.code-workspace` file to open in VS Code, env name, the four branches created, CodeGraph status (or skipped), and remind the user to `conda activate moose-<feature>`.
+6. Report: workspace path, the `<feature>.code-workspace` file to open in VS Code, env name, the four branches created, CodeGraph status (or skipped), and remind the user to `conda activate moose-<feature>` and point them at `docs/local.md` for re-pinning the env if the branch later bumps `moose`.
 
 ## Notes
 

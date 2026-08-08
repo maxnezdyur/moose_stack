@@ -5,7 +5,7 @@ description: Smoke-test the MooseDocs site for moose, blackbear, or isopod with 
 
 # /moose-docs-smoke
 
-Thin dispatcher — the work happens in the `moose-docs-smoke` agent (this used to be a fork skill; it is not anymore).
+Thin dispatcher — the work happens in the `moose-docs-smoke` agent.
 
 ## Usage
 
@@ -17,4 +17,4 @@ Thin dispatcher — the work happens in the `moose-docs-smoke` agent (this used 
 
 Parse `$ARGUMENTS` (single token = repo, required; missing → ask which repo). Spawn the `moose-docs-smoke` agent (`Agent`, `subagent_type: "moose-docs-smoke"`, `run_in_background: true` — full builds take minutes) with the repo name, then relay its report verbatim: the `PASS:`/fail line, error lines, and the log path `/tmp/moose-docs-<repo>-smoke.log`.
 
-There is no bundled script — the agent runs the build/serve/probe steps itself. Don't run them on the main thread.
+Don't run the build/serve/probe steps on the main thread.

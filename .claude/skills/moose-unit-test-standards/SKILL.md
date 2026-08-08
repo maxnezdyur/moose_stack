@@ -165,19 +165,4 @@ Steps: `getValidParams(type)` from the factory → mutate → `_fe_problem->addX
 
 ## Unit vs regression — when to write which
 
-Write a **unit test** when:
-- The SUT is a pure utility class (math, interpolation, parsing).
-- You want AD chain-rule correctness on a property/UO.
-- You want parameter validation / `validParams` edge cases.
-- You want a specific `mooseError` message tested.
-- You want factory wiring (does `<Type>` register? does `getValidParams` work?).
-- The SUT is testable in milliseconds without an executioner.
-
-Write a **regression test** when:
-- The SUT only makes sense once a residual is being assembled.
-- You need time integration, multi-physics coupling, or convergence behavior.
-- You need MPI/threading parallel correctness on a real solve.
-- The assertion is "the integrated solution matches a CSV/Exodus gold file."
-- You're testing a kernel/BC/material whose behavior depends on quadrature, neighboring elements, or boundary integration.
-
-If the SUT can be tested as a unit, prefer it. Reach for regression only when you genuinely need the residual.
+Unit-test whatever runs in milliseconds without an executioner: pure utility classes (math, interpolation, parsing), AD chain-rule correctness on a material property or UserObject, `validParams` edge cases, a specific `mooseError` message, factory wiring (does `<Type>` register? does `getValidParams` work?). Reach for a regression test only once a residual genuinely has to be assembled — time integration, multiphysics coupling, convergence behavior, MPI/threading correctness on a real solve, a kernel/BC/material whose behavior depends on quadrature or neighboring elements or boundary integration, or an assertion that the integrated solution matches a CSV/Exodus gold file.

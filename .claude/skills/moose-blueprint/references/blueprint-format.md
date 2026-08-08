@@ -2,25 +2,35 @@
 
 Authoritative format for `/moose-blueprint` **step 6**. The inputs are the `moose-grill` plan,
 the merged `moose-scout` findings, and the user's recorded decisions; the output is the single
-deliverable `specs/blueprint.html`. The HTML skeleton and CSS come from this skill's own
-`references/plan-template.html` (a pinned copy of the global blueprint template); this file
-defines how to fill it.
+deliverable `specs/blueprint.html`. The HTML skeleton comes from this skill's own
+`references/plan-template.html` (a pinned copy of the global blueprint template) — it ships **no
+CSS**, so authoring the whole `<style>` block is part of step 6: a `:root` palette defining
+`--bg`, `--surface`, `--line`, `--muted`, `--impl`, `--test`, `--test-bg`, `--doc`, `--gate`,
+`--gate-bg`, `--mock` (the snippets below and in `work-plan-format.md` consume all eleven), plus
+rules for the template's own classes — `.meta`, `.files`, `.tag`, `.phase`, `.checklist`,
+`.status`, `.loop`, `.qa-answer`. `.status` is the marker `/moose-build` flips, so style it to
+read as a marker at a glance. This file defines how to fill the skeleton.
 
 ## Hard rules (non-negotiable)
 
 - **Pure formatter — never re-explore.** Codegraph already ran (`moose-grill` + `moose-scout`)
-  to produce the plan. Step 6 only formats it — read only the local template; never invoke the
-  generic blueprint skill's workflows (its Analyze / Explore / Design steps are generic grep,
-  no codegraph, and its build workflow belongs to /moose-build's territory).
+  to produce the plan. Step 6 only formats it — read only the local template and `/moose-build`'s
+  `standing-gates.md` (below); never invoke the generic blueprint skill's workflows (its Analyze /
+  Explore / Design steps are generic grep, no codegraph, and its build workflow belongs to
+  /moose-build's territory).
 - **Fill every `{{placeholder}}`.** The only `{{...}}` allowed to remain in the output are the
   image-slot tokens *inside* `<!-- ... -->` comments (blueprint leaves these for manual fill).
 - **Self-contained.** All CSS inline; **no external `http(s)` stylesheet/script links**. Math is
   rendered offline by `inline-katex.js` (see below) — never add a CDN `<script>`.
 - **Preserve every `file:line` citation verbatim** from the Reuse decisions.
 - **Status markers stay `[]` and status chips stay `idle`.** The build has not run at design time.
-- **Standing gates are render-only.** The `#work-plan` gate strips copy `/moose-build`'s
-  "Standing gates" text verbatim and never appear in the JSON island — a blueprint cannot add,
-  remove, or alter a gate.
+- **Standing gates are render-only.** Read
+  `.claude/skills/moose-build/references/standing-gates.md` (from this file:
+  `../../moose-build/references/standing-gates.md`) at authoring time — every time — and render
+  the `#work-plan` gate strips from what it says right now, **verbatim**. It is the gates' one
+  home and it grows; a retyped snapshot goes stale and the reviewer then reviews gates that no
+  longer exist. Gates never appear in the JSON island, and a blueprint cannot add, remove,
+  reorder, or alter a gate.
 
 ## Contract blocks (the machine interface)
 
@@ -30,15 +40,15 @@ and content may additionally appear elsewhere (e.g. per-phase Testing Strategy),
 carrying the `id` is the authoritative, complete copy. If the template layout has no natural
 home for a block, add a `Notes` subsection for it.
 
-| id | Complete content required | Natural template home |
-| --- | --- | --- |
-| `#summary` | prose (what / why / user-facing knob) + **Repo** (`moose` \| `moose/modules/<m>` \| `blackbear` \| `isopod`) + **Object kind** (Kernel / BC / Material / Postprocessor / Action / UserObject / …) + **Predicted files to touch**, split new vs existing — source, `test/`, `unit/` (when unit tests were agreed), and doc paths | `Purpose`/`Problem`/`Solution` block |
-| `#physics` | equation (LaTeX or plain math, every symbol defined) + **validParams shape** (param name, `Type`, description; `coupled("var")` entries) + one-line **residual / contribution form** (`computeQpResidual`, `computeValue`, `execute`, …) | `Notes` → "Physics & signature" |
-| `#reuse-decisions` | one entry per scout finding: `file_path:line` — `ClassName`, what it does (one sentence), **Decision** (Reuse / Extend / Parallel — for Parallel include the user's justification), why; if none: the negative record ("Searched for X, Y, Z — nothing matched."); failed scouts noted as "Scout failed: <reason>" | `Notes` → "Reuse decisions" |
-| `#test-plan` | one entry per test: name, Tester kind (`Exodiff` / `CSVDiff` / `RunException` / … — or `gtest` for unit tests under `unit/`), asserted behavior (an observable consequence, not "runs without error"), mutation rationale (if `<line of new code>` were no-op'd, this test fails because …) | a consolidated test table in `Notes` or the `Validation Commands` area |
-| `#doc-plan` | **Needed:** yes / no; page path (`<repo>/doc/content/source/<area>/<NewClass>.md`); public surface (which params/behaviors are documented API) | the Docs phase, or `Notes` |
-| `#out-of-scope` | explicit non-goals, one per line | `Notes` → "Out of scope" |
-| `#work-plan` | work units + dependency edges + JSON island `#work-plan-data`, per [`work-plan-format.md`](work-plan-format.md) — grouped unit cards / chips / read-only standing-gate strips | its own section, directly after `#summary` |
+| id | Complete content required |
+| --- | --- |
+| `#summary` | prose (what / why / user-facing knob) + **Repo** (`moose` \| `moose/modules/<m>` \| `blackbear` \| `isopod`) + **Object kind** (Kernel / BC / Material / Postprocessor / Action / UserObject / …) + **Predicted files to touch**, split new vs existing — source, `test/`, `unit/` (when unit tests were agreed), and doc paths |
+| `#physics` | equation (LaTeX or plain math, every symbol defined) + **validParams shape** (param name, `Type`, description; `coupled("var")` entries) + one-line **residual / contribution form** (`computeQpResidual`, `computeValue`, `execute`, …) |
+| `#reuse-decisions` | one entry per scout finding: `file_path:line` — `ClassName`, what it does (one sentence), **Decision** (Reuse / Extend / Parallel — for Parallel include the user's justification), why; if none: the negative record ("Searched for X, Y, Z — nothing matched."); failed scouts noted as "Scout failed: <reason>" |
+| `#test-plan` | one entry per test: name, Tester kind (`Exodiff` / `CSVDiff` / `RunException` / … — or `gtest` for unit tests under `unit/`), asserted behavior (an observable consequence, not "runs without error"), mutation rationale (if `<line of new code>` were no-op'd, this test fails because …) |
+| `#doc-plan` | **Needed:** yes / no; page path (`<repo>/doc/content/source/<area>/<NewClass>.md`); public surface (which params/behaviors are documented API); **Existing coverage:** every page already documenting the feature, plus the placement/consolidation the user chose |
+| `#out-of-scope` | explicit non-goals, one per line |
+| `#work-plan` | work units + dependency edges + JSON island `#work-plan-data`, per [`work-plan-format.md`](work-plan-format.md) — grouped unit cards / chips / read-only standing-gate strips |
 
 ## Template slot mapping
 
@@ -52,9 +62,10 @@ home for a block, add a `Notes` subsection for it.
 | validParams shape | `Notes` → "Physics & signature" → params list/table |
 | Residual / contribution form | `Notes` → "Physics & signature" |
 | Reuse decisions (one per finding) | `Notes` → "Reuse decisions": `file:line`, class, what it does, Decision, Why — citations verbatim. Cited files also appear under Relevant Files → Existing. |
-| Test plan (one per test) | the `#test-plan` table; echoed into each phase's `Testing Strategy` + the global `Validation Commands` |
-| Doc plan | a build phase task ("author doc page X"); note in `Solution` if `Needed: yes` |
+| Test plan (one per test) | the `#test-plan` block, placement per **Contract blocks** |
+| Doc plan | the `doc` unit in `#work-plan`; note in `Solution` if `Needed: yes` |
 | Out of scope | `Notes` → "Out of scope" |
+| Work plan | its own section, directly after `#summary` |
 
 ## Code ↔ math pairing (Physics & signature)
 
@@ -112,11 +123,9 @@ Graceful degrade: if KaTeX isn't found, LaTeX is left as plain text (still a val
 ## Work plan (replaces the template's "Implementation Phases" checklist)
 
 The `#work-plan` block IS the build plan — author it per
-[`work-plan-format.md`](work-plan-format.md): implement units from the grill plan's *Work
-units*, test units from `#test-plan`, a doc unit when `#doc-plan` is `Needed: yes`; edges only
-for hard dependencies; cards grouped by kind; chips `idle`; gate strips read-only. Do **not** also
-author the template's per-phase task checklists — the unit cards (plus their optional `notes`)
-replace them; drop the template's `#phases` section or leave it out entirely.
+[`work-plan-format.md`](work-plan-format.md), which owns unit derivation, edges, cards, chips,
+and gate strips. Do **not** also author the template's per-phase task checklists: drop the
+template's `#phases` section entirely.
 
 ## Global Validation Commands
 

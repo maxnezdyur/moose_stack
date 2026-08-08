@@ -1,6 +1,6 @@
 ---
 name: moose-pr-review
-description: Review a moose PR against MOOSE code/test/doc standards. Does the user-facing pre-flight (dirty-tree guard, PR-state check) on the main thread, then hands off to the moose-pr-reviewer orchestrator agent, which fans out the reviewer sub-agents (code/test/doc buckets plus triggered lenses like ad) in parallel, merges findings, and posts a GitHub PENDING review (draft comments). Pulls the PR locally with `gh pr checkout`. Never submits the review — the user always submits from the GitHub UI.
+description: Review an `idaholab/moose` PR only — refuses blackbear and isopod PRs. Pulls the PR locally with `gh pr checkout` and reviews it against MOOSE code/test/doc standards, then posts a GitHub PENDING review (draft comments). Never submits the review — the user always submits from the GitHub UI.
 user-invocable: true
 ---
 
@@ -38,10 +38,8 @@ Orchestrate the review of moose PR #<PR#>.
   repo_root: <absolute path to the moose/ submodule>
   meta_path: /tmp/moose-pr-<PR#>-meta.json
 
-Follow your workflow: checkout, classify files into code/test/doc buckets
-plus any triggered lens buckets, spawn the reviewers as nested children in
-parallel, merge their JSON, post a PENDING review (no event field), and
-return your summary block.
+Follow your PR-mode workflow and return your summary block.
+The review is posted PENDING — no `event` field, never submitted.
 ```
 
 The orchestrator can't reach the user; it resolves partial reviewer failures autonomously and notes them in its summary. A reviewer producing zero findings is a valid result. Physics/numerics correctness audits are out of scope — the reviewers enforce this.
@@ -49,8 +47,3 @@ The orchestrator can't reach the user; it resolves partial reviewer failures aut
 ## Relay and stop
 
 Print the orchestrator's summary block verbatim, then end the turn. The PENDING review is the deliverable: neither you nor the orchestrator ever submits — no `event` field on the POST, no `gh pr review --approve|--comment|--request-changes` — and don't ask whether to submit or offer follow-ups about review state. The user submits from the GitHub UI.
-
-## References
-
-- The `moose-pr-reviewer` agent definition — the orchestrator: checkout, classify, fan-out, merge, post. Trust its workflow. (It also has a local mode used by `/moose-build`'s clean-context review — no PR, no GitHub; this skill never triggers it.)
-- The `moose-code-reviewer` / `moose-test-reviewer` / `moose-doc-reviewer` / `moose-ad-reviewer` / `moose-dry-reviewer` agent definitions — the nested reviewers (restricted tools, no `Agent`, so the tree bottoms out at depth 2).

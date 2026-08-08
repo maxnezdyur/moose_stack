@@ -24,7 +24,6 @@ Meta-repo pinning three forks as submodules: `moose/`, `blackbear/`, `isopod/`. 
 - Always create PRs as drafts (`--draft`). I convert them to ready in the GitHub UI — never mark a PR ready yourself.
 - `gh pr create --repo idaholab/<app> --base next --head maxnezdyur:<feature> --draft`
 - `next` is only the PR target. Branch from `devel` and diff against `devel` as usual.
-- If an open PR has base `devel`, fix it: `gh pr edit <PR#> --base next`.
 
 ## Git context — skills target the submodule, not the meta-repo
 
@@ -32,16 +31,7 @@ When I invoke a git-oriented skill — `branch-diff`, `commit`, and the like —
 
 ## Environment
 
-Two parallel env-management flows. Pick by host:
+Two parallel env-management flows. Check `hostname` before any env, build, or test command, then pick:
 
 - Local machine (conda) → [`docs/local.md`](docs/local.md)
-- INL HPC (container modules; hostnames like `sawtooth*`, `lemhi*`, `bitterroot*`, `hoodoo*`) → [`docs/hpc.md`](docs/hpc.md)
-
-Quick host check before running any moose commands:
-
-```bash
-case "$HOSTNAME" in
-  sawtooth*|lemhi*|bitterroot*|hoodoo*|teton*) echo "HPC — see docs/hpc.md" ;;
-  *) echo "local — see docs/local.md" ;;
-esac
-```
+- INL HPC (container modules; hostnames like `sawtooth*`, `lemhi*`, `bitterroot*`, `hoodoo*`, `teton*`) → [`docs/hpc.md`](docs/hpc.md)

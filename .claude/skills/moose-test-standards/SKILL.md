@@ -6,7 +6,7 @@ user-invocable: false
 
 # MOOSE Regression Test Standards
 
-Reference for authoring tests in `moose`, `moose/modules/<m>`, `blackbear`, `isopod`: the `tests` HIT spec, the `.i` input, `gold/` outputs, and SQA traceability. For running, debugging, or regenerating golds see **moose-run-tests** (flags) and **moose-test-workflows** (procedures).
+Reference for authoring tests in `moose`, `moose/modules/<m>`, `blackbear`, `isopod`: the `tests` HIT spec, the `.i` input, `gold/` outputs, and SQA traceability. For running, debugging, or regenerating golds see **moose-run-tests** (flags) and **moose-test-workflows** (procedure router — `references/failure-diagnosis.md`, `references/gold-regeneration.md`, `references/ci-and-debugging.md`).
 
 ## File layout
 
@@ -147,7 +147,7 @@ Children of a requirement-grouping parent must use `detail`, NOT their own `requ
 
 ## Input file conventions
 
-- **Nearly commentless.** No comments on the first lines of a `.i` — no header block of any size. At most 1 `#` comment line in the whole file, and prefer zero. Rationale (physics, derivation, expected result, why the test exists) belongs in the spec's `requirement`/`detail` (and the class `.md`), not the input; a non-obvious tolerance or mutation guard is explained in the `tests` spec next to the parameter it justifies.
+- **Nearly commentless.** No comments on the first lines of a `.i` — no header block of any size. Rationale (physics, derivation, expected result, path-dependence essays, literature citations, ASCII matrices, why the test exists) belongs in the spec's `requirement`/`detail` (and the class `.md`), not the input; a non-obvious tolerance or mutation guard is explained in the `tests` spec next to the parameter it justifies.
 - Tiny mesh (4x4 to 10x10).
 - Small `num_steps` (5–20).
 - `[Outputs]` last; `exodus = true` default.
@@ -205,8 +205,6 @@ Module tests cannot use `MooseTestApp` test objects — only those from their ow
 - Per-leaf `requirement` when a parent + N `detail` children would do; `detail` on a top-level leaf with no parent requirement.
 - Duplicate `requirement` text across specs; re-stating `design`/`issues` on children the `[Tests]` block already covers.
 - Vague, passive `requirement` wording.
-- Any leading `#` comment in a `.i`, or more than one `#` line total — derivations, path-dependence essays, literature citations, ASCII matrices. Move to the `requirement`/`detail` or drop it.
 - `design` pointing at a deleted/renamed `.md` — grep specs whenever renaming doc pages.
 - Fabricated `input` paths.
 - A `RunException` test cementing a restriction a small code change would remove — fix the code instead of testing the limitation as intended behavior.
-- `[./name]` / `[../]` in a newly added or renamed block — use `[name]` / `[]`. See "Editing a legacy spec" above.

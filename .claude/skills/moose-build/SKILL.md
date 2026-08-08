@@ -14,8 +14,8 @@ Take a blueprint (`specs/blueprint.html`, from `/moose-blueprint`) to build clea
 /moose-build [path/to/blueprint.html] [--core]
 ```
 
-- Blueprint defaults to `<worktree-root>/specs/blueprint.html` (accept a legacy `specs/spec.md` or `<worktree-root>/spec.md` from pre-rename worktrees). Missing → refuse: *"No blueprint found. Run `/moose-blueprint` first."*
-- A blueprint with `#work-plan` + a parseable `#work-plan-data` island carries a unit decomposition — the loop's dispatch hint, and the chips this skill drives. One without it behaves the same, minus that decomposition. Freeform HTML or legacy spec.md → infer, then confirm `{repo, kind, files, unit-tests, docs}` with one `AskUserQuestion`.
+- Blueprint defaults to `<worktree-root>/specs/blueprint.html`. Missing → refuse: *"No blueprint found. Run `/moose-blueprint` first."*
+- A blueprint with `#work-plan` + a parseable `#work-plan-data` island carries a unit decomposition — the loop's dispatch hint, and the chips this skill drives. One without it behaves the same, minus that decomposition. Freeform HTML → infer, then confirm `{repo, kind, files, unit-tests, docs}` with one `AskUserQuestion`.
 - `--core` = slim mode: skip the docs gate (for features adding no registered syntax and no doc page); standing gates still run in full. Refuse `--core` when `#doc-plan` says `Needed: yes`.
 - Requires a `/new-feature` worktree: walk up for a `.git` **file** beside a `moose/`+`blackbear/`+`isopod/` layout; refuse otherwise.
 
@@ -24,12 +24,7 @@ Take a blueprint (`specs/blueprint.html`, from `/moose-blueprint`) to build clea
 Compiled once, before any execution. Two sources, **additive-only** — a blueprint can add criteria, never remove or weaken a standing one:
 
 ```
-STANDING (every run, unconditionally):
-  C1  build clean in <scope>                     (make exits 0)
-  C4  reuse decisions honored, no out-of-scope edits  (diff audit)
-  C5  specs SQA-complete                         (requirement/design/issues on every new/modified spec block)
-  C6  code ASCII-clean                           (source/specs/.i only; .md, .bib exempt)
-  DG  docs gate                                  (unless --core)
+STANDING (every run, unconditionally): C1, C4, C5, C6, DG (DG unless --core) — each defined with its check in references/standing-gates.md
 BLUEPRINT-DERIVED:
   C2.<name>  test exists AND passes              (one per #test-plan row)
   C3  unit tests exist AND pass                  (only if gtest entries / unit/ paths)
@@ -39,36 +34,26 @@ Slice fields: `repo`, `object_kind`, `files_to_touch`, `scope` (top-level submod
 
 ## Standing gates — not negotiable, not blueprint-editable
 
-The gates below are owned by this skill. Blueprints render them read-only and cannot add, remove, reorder, or alter them. Every gate check maps to a ledger criterion; a gate is passed when its checks are green.
+This skill owns the standing gates, and [`references/standing-gates.md`](references/standing-gates.md) is their one home. Blueprints render it read-only and cannot add, remove, reorder, or alter a gate. Every gate check maps to a ledger criterion; a gate is passed when its checks are green.
 
-**Gate A — inside the loop's normal flow:**
+**Gate A** — `A1` build clean (C1), inside the loop's normal flow. **Gate B** — `B1`–`B6` (consistency sweep, suites green + gold staged, reuse / out-of-scope audit, SQA, ASCII, docs smoke; C2/C3, C4, C5, C6, DG), after `GOAL_MET`. Read the reference for each row's criterion, its exact check, and the agent or command it dispatches — before running Gate B, every run, because the list grows.
 
-1. **Build clean** (C1): one-shot `moose-test-runner`, build-only — *"You are authorized to build: `cd <scope> && make -j 6`. Report compile errors verbatim with owning files."*
+What the main thread runs itself, no further reading needed:
 
-**Gate B — after `GOAL_MET`:**
+- **SQA** (`B4`, C5): grep the in-diff spec files for `requirement`/`design`/`issues` (parent-block declarations cover children), then `cd <doc-dir> && ./moosedocs.py check` — doc dir `moose/modules/doc` | `blackbear/doc` | `isopod/doc`. Errors filtered to the branch diff — pre-existing SQA debt is reported, not fixed. Env failure → surface the conda hint, note the grep audit still ran.
+- **ASCII** (`B5`, C6): two scans over the branch diff, code then `.md`. Fix hits in place, re-run until clean. `.md`/`.bib` are excluded from the code scan **on purpose**, and the `.md` scan's `-CSD` is load-bearing — read the reference before "fixing" any diacritic or dropping a flag.
 
-1. **Consistency sweep** (only when the work plan has ≥2 implement units): one-shot reviewer agent (`general-purpose`) that reads every new/changed source file *together* against `moose/framework/doc/content/sqa/framework_scs.md` — naming drift, param-style drift, duplicated helpers across units. Findings route through § Repair.
-2. **Suites green + gold staged** (C2, C3): already evidenced by the loop's runner; re-run `moose-test-runner` on the registered test names (`--re=<names>`) only when a later gate check changed a file. Gold per § Gold policy.
-3. **Reuse / out-of-scope audit** (C4): diff vs the blueprint's `reuse_decisions[]` + `out_of_scope[]`.
-4. **SQA** (C5): grep audit of in-diff spec files for `requirement`/`design`/`issues` (parent-block declarations cover children), then authoritative `cd <doc-dir> && ./moosedocs.py check` (doc dir: `moose/modules/doc` | `blackbear/doc` | `isopod/doc`), errors filtered to the branch diff — pre-existing SQA debt is reported, not fixed. Env failure → surface the conda hint, note the grep audit still ran.
-5. **ASCII** (C6): CIVET's precheck covers **code**, not documentation — `idaholab/moose` scoped the rule to code comments in `c12859fc3f` (May 2026, refs #32497), so `.md` and `.bib` are excluded from this gate and non-ASCII there (em dashes, `Nédélec`) is correct, not a defect. Never "fix" a name's diacritics.
+  ```bash
+  git -C <scope> diff devel...HEAD -- . ':(exclude)*gold*' ':(exclude)*.md' ':(exclude)*.bib' \
+    | perl -ne 'print if /^\+/ and /[^\x00-\x7F]/'
+  ```
 
-   ```bash
-   git -C <scope> diff devel...HEAD -- . ':(exclude)*gold*' ':(exclude)*.md' ':(exclude)*.bib' \
-     | perl -ne 'print if /^\+/ and /[^\x00-\x7F]/'
-   ```
+  ```bash
+  git -C <scope> diff devel...HEAD -- '*.md' \
+    | perl -CSD -ne 'print if /^\+/ and /[\x{2018}\x{2019}\x{201C}\x{201D}\x{00A0}\x{202F}\x{200B}\x{FEFF}]/'
+  ```
 
-   The code scan needs no `-CSD` — `[^\x00-\x7F]` is a byte test. Fix any hit in place on the main thread (smart quotes → `'`/`"`, dashes → `--`, NBSP → space, unicode math → spelled out or LaTeX in a comment), then re-run until clean.
-
-   Scan added `.md` lines separately, for the **invisible** subset only: smart quotes, NBSP/NNBSP, zero-width space, and BOM, which break `grep`, `!listing re=` slicing, and citation matching. Leave every other non-ASCII character alone. This `perl` **must** carry `-CSD` — without it perl compares undecoded bytes, silently missing smart quotes entirely and matching NBSP only via its trailing `0xa0`:
-
-   ```bash
-   git -C <scope> diff devel...HEAD -- '*.md' \
-     | perl -CSD -ne 'print if /^\+/ and /[\x{2018}\x{2019}\x{201C}\x{201D}\x{00A0}\x{202F}\x{200B}\x{FEFF}]/'
-   ```
-6. **Docs smoke** (DG): via the docs gate (§ Docs) — `moose-docs-writer`'s nested gate when docs are on, direct `moose-docs-builder` when off.
-
-When you get burned by CIVET on something new: add it here as a standing check once, and every future run inherits it.
+When you get burned by CIVET on something new: add it to [`references/standing-gates.md`](references/standing-gates.md) as a standing check once, and every future run inherits it.
 
 ## Execution
 
@@ -76,7 +61,7 @@ Caps: `impl_iters` = 5 (`--core`) or 10 (full), `no_progress` = 2, `run_label` =
 
 Spawn one `moose-feature-loop` (`Agent`, `subagent_type: "moose-feature-loop"`, always background) with the spec slice + caps + `run_label`. Include `units[]` + `deps` when the blueprint has a work plan — the loop dispatches from that decomposition instead of deriving its own, and units joined by an edge never run concurrently. Briefly tell the user the goal + criteria + § Caveats, then let it run.
 
-The loop owns C1–C6 internally; its criteria mirror the ledger, and Gate A's build happens inside its normal flow. On `GOAL_MET`, run Gate B yourself as the authoritative re-check: item 1 when it applies, then items 3–6 (item 2 is already evidenced by the loop's runner). Chip each gate row as you go. A failed check → § Repair, then re-run only that check. Terminal handling: § Terminal statuses.
+The loop owns C1–C6 internally; its criteria mirror the ledger, and Gate A's build happens inside its normal flow. On `GOAL_MET`, run Gate B yourself as the authoritative re-check: `B1` when it applies, then `B3`–`B6` (`B2` is already evidenced by the loop's runner). Chip each gate row as you go. A failed check → § Repair, then re-run only that check. Terminal handling: § Terminal statuses.
 
 ## Repair (the gate failure path)
 
@@ -121,9 +106,7 @@ Run a LOCAL review (mode: local) of this branch.
   repo_root: <absolute path to the scope submodule in this worktree>
   base_branch: devel
   label: <run_label>
-Follow your local-mode workflow: snapshot the diff, classify into
-code/test/doc buckets, spawn the three reviewers as nested children in
-parallel, merge, write the findings file. No PR exists — never call gh.
+Follow your local-mode workflow. No PR exists — never call gh.
 Return your local summary block including the merged findings.
 ```
 

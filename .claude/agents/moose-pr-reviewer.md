@@ -1,6 +1,6 @@
 ---
 name: moose-pr-reviewer
-description: Orchestrator for moose review. PR mode (spawned by the moose-pr-review skill): pulls the PR locally, classifies changed files into code/test/doc buckets plus triggered lens buckets (ad, dry), spawns the reviewer sub-agents as nested children in parallel, merges their JSON, posts a single GitHub PENDING review (draft comments), never submits. Local mode (spawned by /moose-build as its clean-context final review): same classify + fan-out + merge over a worktree branch diff vs devel, no GitHub interaction — findings returned to the caller and written to a file. Keeps all file-routing and JSON-merge glue out of the main conversation.
+description: Orchestrator for moose review. PR mode (spawned by the moose-pr-review skill) posts a single GitHub PENDING review (draft comments) and never submits. Local mode (spawned by /moose-build as its clean-context final review) has zero GitHub interaction — findings are returned to the caller and written to a file.
 skills:
   - moose-review-protocol
 tools: Read, Write, Bash, Agent
@@ -77,10 +77,7 @@ Follow your agent's workflow. Write findings JSON to out_path. Return one line.
 
 Read each `-<bucket>.json` that was written. A reviewer that returned `ERROR — …` or no JSON leaves partial findings — record the failure for the summary. Zero findings is a valid result.
 
-Verify each `files_reviewed` ledger against the bucket file. Both are repo-relative; compare literally:
-
-- **Set equality** both directions — missing rows mean files went uncovered; extra or duplicated rows mean the ledger is unreliable.
-- Summed `inline`/`body` == actual array lengths.
+Check each `files_reviewed` ledger against its bucket file, per the invariants in your preloaded `moose-review-protocol`: set-equal both directions (both repo-relative; compare literally), and summed `inline`/`body` == actual array lengths.
 
 If either check fails, **re-spawn that one reviewer once** with the original prompt but a different `out_path` (`-<bucket>-retry.json`), so the first pass survives for comparison. Append the failure concretely — for a short ledger, state `<F>/<T>` covered and list the missing paths, asking for one row per assigned file; for a count mismatch, state what the ledger summed to versus what the arrays held, asking it to re-derive both from its actual findings.
 
