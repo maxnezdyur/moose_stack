@@ -1,0 +1,7 @@
+# Core (required)
+PyYAML>=6.0
+
+# Reporting (optional — report.py degrades to a table-only HTML page when
+# these are absent, so the toolkit still runs in a bare environment).
+pandas>=1.5
+matplotlib>=3.6

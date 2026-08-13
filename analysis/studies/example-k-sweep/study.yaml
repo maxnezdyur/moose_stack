@@ -1,0 +1,39 @@
+# Example study: sweep thermal conductivity, read peak/avg temperature.
+# Runnable end-to-end once combined-opt is built. Serves as the schema
+# reference and a smoke target for the toolkit itself.
+id: example-k-sweep
+title: "Thermal conductivity sweep (steady heat conduction)"
+kind: sweep
+app: combined
+cluster: bitterroot
+account: intern
+
+baseline:
+  input: inputs/base.i
+  extra_files: []
+
+sweep:
+  method: grid
+  params:
+    Materials/thermal/prop_values: [1.0, 2.0, 5.0, 10.0]
+
+qoi:
+  csv: base_out.csv
+  columns: [peak_T, avg_T]
+  reduce: last
+
+# Cheap local smoke solve: coarsen the mesh so the short solve is instant.
+smoke:
+  overrides:
+    Mesh/gen/nx: 4
+    Mesh/gen/ny: 4
+
+budget:
+  ceiling_core_hours: 50
+  max_concurrent_jobs: 4
+  max_walltime_per_case: "00:30:00"
+
+resources:
+  nodes: 1
+  ntasks: 8
+  partition: short

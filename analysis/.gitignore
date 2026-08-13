@@ -1,0 +1,25 @@
+# Analysis system — code + state (study.yaml, card.yaml) are tracked; bulk
+# results are local/ephemeral and must never enter git.
+#
+# Rule of thumb: specs and cards have history worth keeping; CSVs, logs,
+# rendered reports, fetched fields, and plots are data, not code.
+
+# Per-study results payloads (rsynced back from HPC, rendered locally).
+studies/*/results/
+
+# Local build cache metadata / scratch symlinks, if any land here.
+.bincache/
+*.log
+
+# Python bytecode / packaging / venv artifacts.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.venv/
+build/
+dist/
+
+# Never track the rendered board HTML (regenerated from cards on demand).
+board.html

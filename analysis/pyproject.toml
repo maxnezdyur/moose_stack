@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moose-analysis"
+version = "0.1.0"
+description = "Fire-and-forget MOOSE analysis studies with a durable Kanban board and HPC dispatch."
+requires-python = ">=3.9"
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+report = ["pandas>=1.5", "matplotlib>=3.6"]
+
+[project.scripts]
+analysis = "tool.cli:main"
+
+[tool.setuptools]
+packages = ["tool"]

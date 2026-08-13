@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# No-install launcher for the analysis toolkit.
+#
+# Runs the CLI as a package (`python -m tool.cli`) with this directory on
+# PYTHONPATH, so relative imports resolve without `pip install`. Works
+# identically on the local machine and inside the HPC container.
+#
+# Interpreter selection (first that imports yaml wins):
+#   1. $ANALYSIS_PYTHON, if set
+#   2. python3 / python on PATH (the HPC container's python has PyYAML)
+#   3. the conda `moose` env python (local dev fallback)
+#
+# Usage:  ./analysis <command> [args...]
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+has_yaml() { "$1" -c 'import yaml' >/dev/null 2>&1; }
+
+pick_python() {
+  if [ -n "${ANALYSIS_PYTHON:-}" ]; then echo "$ANALYSIS_PYTHON"; return; fi
+  for c in python3 python; do
+    if command -v "$c" >/dev/null 2>&1 && has_yaml "$c"; then echo "$c"; return; fi
+  done
+  # conda `moose` env fallback (local development). conda is often a shell
+  # function absent from non-interactive PATH, so probe known env paths directly.
+  base=""
+  command -v conda >/dev/null 2>&1 && base="$(conda info --base 2>/dev/null || true)"
+  for p in ${base:+"$base/envs/moose/bin/python"} \
+           "$HOME/miniforge/envs/moose/bin/python" \
+           "$HOME/miniconda3/envs/moose/bin/python" \
+           "$HOME/anaconda3/envs/moose/bin/python"; do
+    if [ -x "$p" ] && has_yaml "$p"; then echo "$p"; return; fi
+  done
+  echo ""   # none found
+}
+
+PY="$(pick_python)"
+if [ -z "$PY" ]; then
+  echo "analysis: no python with PyYAML found. Activate the moose conda env," >&2
+  echo "  or set ANALYSIS_PYTHON=/path/to/python (needs: pip install PyYAML)." >&2
+  exit 127
+fi
+exec env PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m tool.cli "$@"
