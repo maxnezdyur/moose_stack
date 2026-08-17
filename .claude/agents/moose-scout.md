@@ -2,7 +2,7 @@
 name: moose-scout
 description: "CodeGraph-powered read-only recon scout for moose, blackbear, and isopod. Answers one scoped search question — about C++ (does this already exist, what contract does base `<X>` declare), regression tests, gtest unit tests, or doc-facing class facts — by opening each candidate and reading it, then returns a short ranked `file_path:line`-cited shortlist or an explicit \"no match\". Exists to keep bulk search out of the caller's context. One angle per scout — a second angle is a second scout. Read-only: never edits, builds, runs tests, or spawns other agents."
 tools: Read, Grep, Glob, Bash, mcp__codegraph__codegraph_explore
-model: opus
+model: sonnet
 color: yellow
 ---
 

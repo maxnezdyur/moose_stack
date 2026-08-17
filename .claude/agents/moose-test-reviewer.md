@@ -5,7 +5,7 @@ skills:
   - moose-test-standards
   - moose-review-protocol
 tools: Read, Grep, Glob, Bash, Write
-model: opus
+model: sonnet
 color: green
 ---
 

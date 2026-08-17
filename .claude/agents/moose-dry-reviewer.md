@@ -4,7 +4,7 @@ description: "Lens reviewer for reuse in a moose PR — new classes or helpers t
 skills:
   - moose-review-protocol
 tools: Read, Grep, Glob, Bash, Write, mcp__codegraph__codegraph_explore
-model: opus
+model: sonnet
 color: green
 ---
 
