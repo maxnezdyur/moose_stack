@@ -1,6 +1,6 @@
 ---
 name: moose-review-protocol
-description: Shared workflow and output contract for the moose PR reviewer sub-agents (code/test/doc buckets and lens reviewers like ad) — inputs, the shared review loop, comment-writing rules, inline-vs-body policy, the findings JSON schema, the files_reviewed coverage ledger, and the lenient referenced-file existence rule. Preloaded by moose-code-reviewer, moose-test-reviewer, moose-doc-reviewer, moose-ad-reviewer, and moose-dry-reviewer; not useful on its own.
+description: Shared workflow and output contract for the moose PR reviewer sub-agents (code/test/doc buckets and lens reviewers like ad) — inputs, the shared review loop, comment-writing rules, inline-vs-body policy, the findings JSON schema, the files_reviewed coverage ledger, and the lenient referenced-file existence rule. Preloaded by moose-code-reviewer, moose-test-reviewer, moose-doc-reviewer, moose-ad-reviewer, moose-dry-reviewer, and moose-completeness-reviewer; not useful on its own.
 user-invocable: false
 ---
 
@@ -8,7 +8,7 @@ user-invocable: false
 
 What every reviewer sub-agent receives, writes, and must prove about its coverage. Your agent file supplies the domain bar — *what* to flag in your bucket; this file supplies the shared loop and the contract — *how* you work through the files and how the findings leave your hands.
 
-**Precedence.** On the domain bar, your agent file wins outright: what counts as a finding in your bucket is its call alone, and this file never overrides it. On the shared review loop and the output contract, this file wins for the five reviewer sub-agents (`code`, `test`, `doc`, `ad`, `dry`). A reviewer agent file may add a bucket-specific step, say where it slots into the loop, and tighten a rule — it may not contradict one. If it appears to, treat the agent-side copy as stale and follow this file.
+**Precedence.** On the domain bar, your agent file wins outright: what counts as a finding in your bucket is its call alone, and this file never overrides it. On the shared review loop and the output contract, this file wins for the six reviewer sub-agents (`code`, `test`, `doc`, `ad`, `dry`, `completeness`). A reviewer agent file may add a bucket-specific step, say where it slots into the loop, and tighten a rule — it may not contradict one. If it appears to, treat the agent-side copy as stale and follow this file.
 
 ## Inputs (from the orchestrator's prompt)
 
@@ -19,13 +19,14 @@ What every reviewer sub-agent receives, writes, and must prove about its coverag
 | `diff_path` | Tempfile with the full diff. Read once; note hunk ranges (`@@ -a,b +c,d @@`) per file. |
 | `files_path` | Tempfile, one repo-relative path per line — **your bucket only**. |
 | `pr_meta` | Inline JSON: `title`, `body`, `author`, `baseRefName`, `headRefName`. Absent in local mode. |
+| `issues_path` | Tempfile digesting the PR's linked GitHub issues — the author's spec; use it to judge whether findings about completeness or scope hold. May be absent (local mode, no linked issues, or digest failure): proceed without it, never block on it. |
 | `out_path` | Absolute path where you MUST write your findings JSON. |
 
 Only lines inside a hunk are eligible for inline comments.
 
 ## Workflow
 
-This loop is for the five reviewer sub-agents only. The `moose-pr-reviewer` orchestrator preloads this file for the findings JSON shape, the ledger invariants, and the return-line grammar it parses — its own `## Workflow` and `## Inputs` are untouched by this section.
+This loop is for the six reviewer sub-agents only. The `moose-pr-reviewer` orchestrator preloads this file for the findings JSON shape, the ledger invariants, and the return-line grammar it parses — its own `## Workflow` and `## Inputs` are untouched by this section.
 
 Every reviewer runs this loop. Your agent file owns the bar you walk in step 3 and names its **deltas** — the extra steps its bucket needs and where they slot in. The loop itself is this file's.
 
@@ -38,6 +39,7 @@ Every reviewer runs this loop. Your agent file owns the bar you walk in step 3 a
 ## Comment writing
 
 - One issue per comment; one short, matter-of-fact paragraph.
+- **Required vs suggested — MOOSE's reviewing convention** (`framework/doc/content/framework/reviewing.md`). Phrase a must-fix finding in the imperative ("Mark this parameter `const` because …"); phrase an optional improvement as "I suggest …" / "Consider …". Minor objective fixes — typos, grammar, doc strings — are required, not suggestions. Every comment reads as one or the other; never an unmarked observation.
 - **Never identify yourself, the review tooling, or the model.** Write as a reviewer stating the issue — no "as an automated check", no agent, tool, or model names, no meta-commentary about how the finding was produced.
 - When a concrete drop-in fix applies, include a GitHub `suggestion` block (≤3 lines). It replaces the target line(s) wholesale, so it must carry the FULL replacement line(s) as they should appear on the new side, exact leading whitespace included:
 
@@ -69,7 +71,7 @@ Do not demote because you are unsure the line is in a hunk — you read the hunk
 Write this shape to `out_path`. Set `agent` to your bucket (`code`, `test`, `doc`, or your lens slug, e.g. `ad`):
 
     {
-      "agent": "<code|test|doc|ad|dry>",
+      "agent": "<code|test|doc|ad|dry|completeness>",
       "inline_comments": [
         { "path": "<path A>", "line": 142, "side": "RIGHT", "body": "Typo: \"recieve\" -> \"receive\"." },
         { "path": "<path A>", "start_line": 40, "start_side": "RIGHT", "line": 45, "side": "RIGHT",

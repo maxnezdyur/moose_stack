@@ -55,9 +55,37 @@ D=/tmp/moose-pr-<PR#>.diff
   | sort -u | grep -Fxf - /tmp/moose-pr-<PR#>-code.files > /tmp/moose-pr-<PR#>-dry.files
 ```
 
+- `-newobj.files` — completeness (`moose-completeness-reviewer`): code-bucket files whose added lines register an object or action. Each new registration drives an absence check — doc stub page, `addClassDescription`, any test coverage — that no changed-file bucket can see.
+
+```bash
+awk '/^\+\+\+ b\//{f=substr($0,7)} /^\+/ && /register(AD)?MooseObject|registerMooseAction/{print f}' /tmp/moose-pr-<PR#>.diff \
+  | sort -u | grep -Fxf - /tmp/moose-pr-<PR#>-code.files > /tmp/moose-pr-<PR#>-newobj.files
+```
+
+### 2b. Linked-issue digest — one quick child (PR mode only)
+
+Before the reviewer fan-out, spawn ONE `general-purpose` child (`model: "sonnet"`, foreground) to digest the PR's linked issues — they are the author's spec, and the reviewers (the completeness lens especially) judge scope and coverage against them. Self-contained prompt:
+
+```
+Build a linked-issue digest for moose PR #<PR#>. Read-only apart from the one file you write.
+
+1. Read /tmp/moose-pr-<PR#>-meta.json (title, body). Also run:
+   gh pr view <PR#> --repo idaholab/moose --json commits --jq '.commits[].messageHeadline'
+2. Extract every issue reference from title, body, and commit headlines: #N, refs/closes/fixes #N,
+   and full idaholab/moose issue URLs.
+3. For each unique N: gh issue view N --repo idaholab/moose --json number,title,state,body
+4. Write /tmp/moose-pr-<PR#>-issues.md: per issue a "## #N — <title> (<state>)" heading and a
+   <=15-line summary of what it asks for (deliverables, constraints, reproduction steps). End with
+   one line naming any reference that failed to fetch. No references found -> write exactly
+   "No linked issues."
+5. Return one line: "DONE — <K> issues" or "DONE — none".
+```
+
+If the child errors or writes nothing, write `No linked issues.` to the digest yourself and record the failure for the step-7 summary — the review never blocks on this step.
+
 ### 3. Spawn the reviewers as nested children — in parallel
 
-Issue all applicable `Agent` calls in a SINGLE message so they run concurrently; sequential spawns defeat the isolation this orchestrator exists for. Skip any reviewer whose bucket file is empty. Buckets map to `moose-<bucket>-reviewer` — lens buckets included (`-ad.files` → `moose-ad-reviewer`, `-dry.files` → `moose-dry-reviewer`), spawned in that same single message. Each loads its own standards and reads its own files; give each a self-contained prompt (they do not see this conversation):
+Issue all applicable `Agent` calls in a SINGLE message so they run concurrently; sequential spawns defeat the isolation this orchestrator exists for. Skip any reviewer whose bucket file is empty. Buckets map to `moose-<bucket>-reviewer` — lens buckets included (`-ad.files` → `moose-ad-reviewer`, `-dry.files` → `moose-dry-reviewer`, `-newobj.files` → `moose-completeness-reviewer`), spawned in that same single message. Each loads its own standards and reads its own files; give each a self-contained prompt (they do not see this conversation):
 
 ```
 You are reviewing PR #<PR#> in idaholab/moose against your preloaded standards.
@@ -68,6 +96,7 @@ Inputs:
   diff_path: /tmp/moose-pr-<PR#>.diff
   files_path: /tmp/moose-pr-<PR#>-<bucket>.files
   pr_meta: <contents of meta_path>
+  issues_path: /tmp/moose-pr-<PR#>-issues.md
   out_path: /tmp/moose-pr-<PR#>-<bucket>.json
 
 Follow your agent's workflow. Write findings JSON to out_path. Return one line.
@@ -86,7 +115,7 @@ Use the retry if its ledger passes both checks; otherwise keep whichever pass ha
 ### 5. Merge into a single review payload
 
 - `comments`: concatenate `inline_comments` from every JSON.
-- `body`: out-of-line findings only, starting directly at the first heading — `## Out-of-line findings`, then a `### Code` / `### Tests` / `### Docs` / `### AD` / `### Reuse` (the `dry` bucket) section per bucket that ran, each a list of `- <path>:<line> — <summary>`. Omit any section whose bucket produced no `body_findings`: no `- (none)` filler, no note that a bucket was empty or skipped.
+- `body`: out-of-line findings only, starting directly at the first heading — `## Out-of-line findings`, then a `### Code` / `### Tests` / `### Docs` / `### AD` / `### Reuse` (the `dry` bucket) / `### Completeness` (the `newobj` bucket) section per bucket that ran, each a list of `- <path>:<line> — <summary>`. Omit any section whose bucket produced no `body_findings`: no `- (none)` filler, no note that a bucket was empty or skipped.
 
 **Nothing about the review process goes in the body.** No attribution, no tool, agent, or model names, no "reviewer failed", no coverage caveats, no explanation for an absent section. A GitHub reader sees findings and nothing else. Failures and gaps are real and must be reported — in the step-7 summary, which only the user sees.
 
@@ -122,9 +151,10 @@ Submit when ready: https://github.com/idaholab/moose/pull/<PR#>/files
 - doc:  <K> inline, <M> body, <F>/<T> files
 - ad:   <K> inline, <M> body, <F>/<T> files
 - dry:  <K> inline, <M> body, <F>/<T> files
+- compl: <K> inline, <M> body, <F>/<T> files
 ```
 
-Variants — replacing the whole `<K> inline, …` clause: `skipped — no <bucket> files in this PR` (for a lens: `skipped — trigger not fired`), or `failed: <reason>` (counts unknown, **never print `0` for a failed reviewer**). Append `⚠ incomplete coverage — did not review: <paths>` wherever `F < T` after the retry. Zero findings and no POST → retitle `# PR #<PR#> — No Review Posted (zero findings)` and drop the submit URL. Any 422 demotion → add `**Demoted to body (422):** <count>`, with counts reflecting the posted payload rather than the reviewers' original ledgers.
+Variants — replacing the whole `<K> inline, …` clause: `skipped — no <bucket> files in this PR` (for a lens: `skipped — trigger not fired`), or `failed: <reason>` (counts unknown, **never print `0` for a failed reviewer**). If the linked-issue digest child failed, add a line `⚠ issue digest failed — reviewers ran without linked-issue context` after the reviewer results. Append `⚠ incomplete coverage — did not review: <paths>` wherever `F < T` after the retry. Zero findings and no POST → retitle `# PR #<PR#> — No Review Posted (zero findings)` and drop the submit URL. Any 422 demotion → add `**Demoted to body (422):** <count>`, with counts reflecting the posted payload rather than the reviewers' original ledgers.
 
 This is the user's only visibility into whether the review was thorough, and the only place failures and gaps appear at all. Never round a gap up or let a failed reviewer read as clean. Tool and agent names are fine here — this is never posted.
 
@@ -149,7 +179,7 @@ sort -u -o "$L.files" "$L.files"
 
 Never `git add`, `git add -N`, `git stash`, or `git commit` to make files visible — the index belongs to the user's build. Report composition as `<N> tracked, <M> untracked`. **If the untracked list is non-empty but the buckets come out empty, that is a routing bug — report it loudly rather than emitting a clean review.**
 
-**2. Steps 2–4 unchanged**, with `/tmp/moose-review-<label>-…` names — including the ledger check and single re-spawn. In each reviewer prompt replace `pr_number`/`pr_meta` with `context: local review of branch <branch> in <repo_root>, base <base_branch> — no PR exists; report findings only`.
+**2. Steps 2–4 unchanged**, with `/tmp/moose-review-<label>-…` names — including the ledger check and single re-spawn, and including the `-newobj.files` completeness lens. **Skip step 2b entirely** — no PR exists and `gh` is off-limits; omit the `issues_path` line from every reviewer prompt (the reviewers proceed without it). In each reviewer prompt replace `pr_number`/`pr_meta` with `context: local review of branch <branch> in <repo_root>, base <base_branch> — no PR exists; report findings only`.
 
 **3. Step 5 differs.** No PR to hold draft comments, so there is no `comments` array and no `payload.json` — build only the markdown. Fold **every** finding into the Out-of-line sections, `inline_comments` included, as `path:line — <text>`, where an inline comment's text is its **`body`** field (`summary` exists only on `body_findings`). Keep any ` ```suggestion ` fence as an indented block — it is the concrete fix. Render a multi-line range as `path:start_line-line`. Three PR-mode rules invert, because the caller consumes this text directly: always write all three bucket sections (`- (none)` for no findings, `- (no <bucket> files in this branch)` for an empty bucket, never omitted — lens sections like `### AD` keep the PR-mode rule and appear only when the lens spawned); never emit an empty body; and reviewer failures and gaps DO belong here (`- (reviewer failed: <reason>)`) since there is no separate posted artifact to keep them out of. No-attribution still applies to finding text.
 
@@ -170,6 +200,7 @@ Never `git add`, `git add -N`, `git stash`, or `git commit` to make files visibl
 - doc:  <N> findings, <F>/<T> files
 - ad:   <N> findings, <F>/<T> files
 - dry:  <N> findings, <F>/<T> files
+- compl: <N> findings, <F>/<T> files
 ```
 
 Then the merged findings verbatim — the caller needs them; the diff and per-reviewer JSON still never travel up. Step 7's skipped / failed / `⚠ incomplete coverage` variants apply. Since the protocol skill caps nothing, these sections are unbounded in principle: past roughly 200 bullets, return the counts, per-reviewer results, findings-file path, and the first 200 bullets, and state plainly how many were truncated. Silently dropping them is not acceptable.

@@ -11,11 +11,13 @@ Thin main-thread skill: it does only the parts that need the user (pre-flight), 
 ```
 main thread (this skill)        →  parse + dirty-tree guard + PR-state check
   └─ moose-pr-reviewer (agent)  →  checkout, classify files, merge, post pending review
+       ├─ issue-digest child (sonnet)      →  digests linked issues into the reviewers' spec context
        ├─ moose-code-reviewer   →  C++/Python  (preloads moose-code-standards)
        ├─ moose-test-reviewer   →  tests/.i/gold  (preloads moose-test-standards)
        ├─ moose-doc-reviewer    →  .md + prose  (preloads moose-doc-standards)
        ├─ moose-ad-reviewer     →  AD/Jacobian lens  (only when the diff touches AD or residual/Jacobian code)
-       └─ moose-dry-reviewer    →  reuse lens  (only when the PR adds new code files or registers new objects)
+       ├─ moose-dry-reviewer    →  reuse lens  (only when the PR adds new code files or registers new objects)
+       └─ moose-completeness-reviewer  →  absence lens: doc stub, addClassDescription, test coverage per new object  (only when the PR registers new objects)
 ```
 
 Target repo: `idaholab/moose` only — refuse anything else with `This skill only reviews idaholab/moose PRs.` Accept a bare number, `idaholab/moose#N`, or a PR URL; if no argument, ask once for one.
@@ -24,7 +26,7 @@ Target repo: `idaholab/moose` only — refuse anything else with `This skill onl
 
 1. Extract the PR number.
 2. From the meta-repo root, `cd moose`; `git status --porcelain` — any output → STOP and tell the user to commit or stash. Never auto-stash or force-checkout: the orchestrator will `gh pr checkout` and would clobber local work.
-3. `gh pr view <PR#> --json number,title,author,baseRefName,headRefName,headRepository,state,url` — confirm `state == "OPEN"` and the head repo is a fork of `idaholab/moose`. If closed/merged, ask once whether to proceed anyway. If `baseRefName` is `devel`, warn the user: idaholab PRs must target `next` (CIVET's precheck rejects `devel`) — suggest `gh pr edit <PR#> --base next`.
+3. `gh pr view <PR#> --json number,title,body,author,baseRefName,headRefName,headRepository,state,url` — confirm `state == "OPEN"` and the head repo is a fork of `idaholab/moose`. If closed/merged, ask once whether to proceed anyway. If `baseRefName` is `devel`, warn the user: idaholab PRs must target `next` (CIVET's precheck rejects `devel`) — suggest `gh pr edit <PR#> --base next`.
 4. Save the JSON to `/tmp/moose-pr-<PR#>-meta.json` — the orchestrator reads it and forwards it into each reviewer.
 
 ## Hand off
