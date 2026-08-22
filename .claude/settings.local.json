@@ -5,5 +5,7 @@
       "Bash(mkdir -p *)",
       "Bash(rtk *)"
     ]
-  }
+  },
+  "prefersReducedMotion": true,
+  "outputStyle": "Concise"
 }
