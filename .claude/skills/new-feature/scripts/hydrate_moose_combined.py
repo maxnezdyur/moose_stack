@@ -32,6 +32,19 @@ GENERATED_HEADERS = (
     Path("framework/include/base/MooseRevision.h"),
     Path("modules/combined/include/base/CombinedRevision.h"),
 )
+# Revision headers are regenerated from .git/HEAD and .git/index, so make always
+# considers them out of date. A real make runs get_repo_revision.py, which leaves
+# the file untouched when the revision is unchanged, so nothing downstream
+# recompiles. `make -n` never runs the recipe but assumes the target was remade,
+# which makes every dependent look stale. Passing these to `make -o` cancels that
+# assumption so a dry run reports only genuine work. Both the real header and the
+# build/header_symlinks/ alias are listed because dependency files name the alias.
+REVISION_HEADERS = (
+    Path("framework/include/base/MooseRevision.h"),
+    Path("framework/build/header_symlinks/MooseRevision.h"),
+    Path("modules/combined/include/base/CombinedRevision.h"),
+    Path("modules/combined/build/header_symlinks/CombinedRevision.h"),
+)
 # Absolute __FILE__ strings are common in MOOSE objects. These sources are the
 # known cases that turn their source location into a runtime data/resource root.
 FORCED_LOCAL_SOURCES = (
@@ -172,11 +185,36 @@ def env_for(prefix: Path) -> dict[str, str]:
     return _ENV_CACHE[prefix].copy()
 
 
+# Non-interactive shells often lack conda on PATH: a common local setup defers
+# `conda shell.<sh> hook` behind a shell function, which only exists in an
+# interactive session. Search the usual install roots before giving up so the
+# helper runs the same way from a login shell and from a tool invocation.
+CONDA_SEARCH_ROOTS = (
+    "~/miniforge",
+    "~/miniforge3",
+    "~/miniconda3",
+    "~/mambaforge",
+    "~/anaconda3",
+    "/opt/miniforge3",
+    "/opt/miniconda3",
+    "/opt/homebrew/Caskroom/miniforge/base",
+)
+
+
 def conda_executable() -> str:
     candidate = os.environ.get("CONDA_EXE") or shutil.which("conda")
-    if not candidate:
-        raise HydrationError("conda is not available")
-    return candidate
+    if candidate and Path(candidate).is_file():
+        return candidate
+    root_env = os.environ.get("CONDA_ROOT") or os.environ.get("MAMBA_ROOT_PREFIX") or ""
+    roots = ((root_env,) if root_env else ()) + CONDA_SEARCH_ROOTS
+    for root in roots:
+        binary = Path(root).expanduser() / "bin/conda"
+        if binary.is_file():
+            return str(binary)
+    raise HydrationError(
+        "conda is not available; set CONDA_EXE or run this helper from a shell "
+        "where conda is on PATH (an interactive shell function does not count)"
+    )
 
 
 def package_snapshot(prefix: Path) -> list[list[object]]:
@@ -229,10 +267,14 @@ def compiler_snapshot(prefix: Path, root: Path) -> dict[str, str]:
     }
 
 
-def make_command(*, jobs: int, dry_run: bool = False) -> list[str]:
+def make_command(*, jobs: int, dry_run: bool = False, root: Path | None = None) -> list[str]:
     command = ["make"]
     if dry_run:
         command.append("-n")
+        if root is None:
+            raise HydrationError("dry-run make requires the repository root")
+        for header in REVISION_HEADERS:
+            command.extend(["-o", str(root / header)])
     command.extend(["-j", str(jobs)])
     command.extend(f"{key}={value}" for key, value in PROFILE.items())
     return command
@@ -240,7 +282,7 @@ def make_command(*, jobs: int, dry_run: bool = False) -> list[str]:
 
 def require_settled_build(root: Path, prefix: Path, jobs: int) -> None:
     dry = output(
-        make_command(jobs=jobs, dry_run=True),
+        make_command(jobs=jobs, dry_run=True, root=root),
         cwd=root / "modules/combined",
         env=env_for(prefix),
     )
