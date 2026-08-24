@@ -663,6 +663,14 @@ def create_env(args: argparse.Namespace) -> None:
     if git_sha(target) != manifest["git_sha"]:
         raise Incompatible("target MOOSE SHA does not match the stamped donor")
     require_tracked_clean(target, "target")
+    try:
+        prefix = resolve_named_env(args.name)
+    except HydrationError:
+        prefix = None
+    if prefix is not None:
+        require_environment_match(prefix, target, manifest, f"existing shared env {args.name}")
+        log(f"reusing shared locked environment {args.name}: {prefix}")
+        return
     lock = manifest["environment"]["explicit_lock"]
     descriptor, lock_path = tempfile.mkstemp(prefix="moose-hydration-", suffix=".txt")
     try:

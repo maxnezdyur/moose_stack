@@ -13,7 +13,7 @@ Flag/status reference for `moose`, `moose/modules/<m>`, `blackbear`, `isopod`. P
 `run_tests` is a tiny Python shim and does NOT activate conda.
 
 ```bash
-conda activate moose   # in a /new-feature worktree: its moose-<feature> env
+conda activate $(bash scripts/moose-env.sh)   # shared version-pinned env, e.g. moose-8.19 (run from meta-repo root or any worktree)
 cd <app>/test          # or moose/modules/<m>/test, blackbear/, isopod/
 ./run_tests -j 2
 ```

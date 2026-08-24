@@ -1,26 +1,29 @@
 # Local development (conda)
 
-Per-feature env setup on a local machine. Pairs with [`../README.md`](../README.md) for the worktree layout, and [`hpc.md`](hpc.md) for the INL HPC equivalent.
+Shared version-pinned env setup on a local machine. Pairs with [`../README.md`](../README.md) for the worktree layout, and [`hpc.md`](hpc.md) for the INL HPC equivalent.
 
-## Base env (one-time)
+## Shared envs — one per moose-dev pin
 
-```bash
-conda create -n moose moose-dev -c https://conda.software.inl.gov/public
-```
+Each env is named for its moose-dev pin: version `YYYY.MM.DD` → `moose-<M>.<DD>` (month's leading zero stripped, day verbatim). Example: `2026.08.19` → `moose-8.19`. Every worktree on the same pin uses the same env. Treat shared envs as read-only — never `conda install`/`update` into one.
 
-This is the shared base for day-to-day work in the meta-repo. Never modify it directly.
-
-## Per-feature env
-
-After creating the feature worktrees per `../README.md`, create a fresh env pinned to the moose-dev version the checkout needs (read from the worktree's own moose — the same source MOOSE's install docs use):
+To find the env name for any worktree:
 
 ```bash
-yq -r '.packages."moose-dev".version' ~/projects/moose-worktrees/<feature>/moose/scripts/versioner.yaml
-conda create -n moose-<feature> moose-dev=<version> -c https://conda.software.inl.gov/public
-conda activate moose-<feature>
+bash ~/projects/moose_stack/scripts/moose-env.sh <path-inside-worktree>   # prints e.g. moose-8.19
 ```
 
-A fresh pinned env matches the checkout exactly and isolates any `update_and_rebuild_*` runs from the base. MOOSE and its conda packages move in lockstep — if the branch bumps `moose` to a commit whose `versioner.yaml` reports a different version, recreate the env with the new pin.
+The helper reads the pin from the worktree's own `moose/conda/moose-dev/meta.yaml`.
+
+## Create an env for a pin (when it does not exist)
+
+```bash
+conda create -n moose-<M.DD> moose-dev=<version> -c https://conda.software.inl.gov/public
+conda activate moose-<M.DD>
+```
+
+`/new-feature` does this automatically — it reuses the env when present (verified against the donor's exact package lock) and creates it from that lock otherwise.
+
+MOOSE and its conda packages move in lockstep. If a branch bumps `moose` to a commit with a different moose-dev version, the helper prints a new env name — create that env with the new pin. The old env stays for worktrees still on the old pin.
 
 ## Build
 
@@ -48,8 +51,9 @@ mpiexec -n N ./blackbear-opt -i input.i
 
 ## Teardown
 
-After removing worktrees per `../README.md`:
+Shared envs outlive individual worktrees. Remove an env only when no remaining worktree resolves to it:
 
 ```bash
-conda env remove -n moose-<feature>
+for w in ~/projects/moose_stack ~/projects/moose-worktrees/*/; do bash ~/projects/moose_stack/scripts/moose-env.sh "$w"; done | sort -u
+conda env remove -n moose-<M.DD>   # only if absent from the list above
 ```

@@ -47,7 +47,7 @@ Common upstream causes for `EXIT CODE != 0`:
 - mooseError / divergence → framework prints stack
 - Segfault → exit 139; rerun under debugger
 - Stale capability registry → rebuild
-- `Failed to import hit` → `$PYTHONPATH` interference or wrong env → `unset PYTHONPATH`, then activate the right env (`moose`, or the worktree's `moose-<feature>` env)
+- `Failed to import hit` → `$PYTHONPATH` interference or wrong env → `unset PYTHONPATH`, then activate the worktree's shared version-pinned env (`bash <meta-root>/scripts/moose-env.sh` prints it, e.g. `moose-8.19`)
 
 ## TIMEOUT
 

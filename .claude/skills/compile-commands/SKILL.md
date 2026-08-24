@@ -35,7 +35,7 @@ For each selected submodule, sequentially (~5–10s each); stop and surface any 
 source ~/miniforge3/etc/profile.d/conda.sh && conda activate <env> && make -j compile_commands.json -C <path>
 ```
 
-`<env>` follows the located root: `moose` when its basename is `moose_stack`, otherwise `moose-<root-basename>` — the version-pinned env of that feature worktree. The emitted DB embeds `$CONDA_PREFIX` include paths, so the wrong env writes a DB against the wrong moose-dev pin.
+`<env>` is the worktree's shared version-pinned env: `$(bash <root>/scripts/moose-env.sh <root>)` (e.g. `moose-8.19`). The emitted DB embeds `$CONDA_PREFIX` include paths, so the wrong env writes a DB against the wrong moose-dev pin.
 
 ## Merge
 
@@ -54,4 +54,5 @@ Which submodules regenerated, merged entry count and file size, and any submodul
 ## Notes
 
 - The meta-repo's `.clangd` and `.gitignore` are already set up — don't modify them.
+- `/new-feature` seeds a fresh worktree's DBs by copying the canonical stack's with the root path rewritten — this skill is the refresh path when entries go stale.
 - clangd's index cache at `<root>/.cache/` may need clearing if entries go stale — mention only if the user reports clangd misbehaving.
