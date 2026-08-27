@@ -5,7 +5,6 @@ allowed-tools:
   - Bash(make *)
   - Bash(jq *)
   - Bash(bash *)
-  - Bash(source * && conda activate * && *)
 ---
 
 # Regenerate compile_commands.json for clangd
@@ -32,10 +31,19 @@ If `$ARGUMENTS` is non-empty, treat it as a space-separated selection; error on 
 For each selected submodule, sequentially (~5–10s each); stop and surface any non-zero exit:
 
 ```bash
-source ~/miniforge3/etc/profile.d/conda.sh && conda activate <env> && make -j compile_commands.json -C <path>
+bash <root>/scripts/conda-run.sh -C <root> -- make -j compile_commands.json -C <path>
 ```
 
-`<env>` is the worktree's shared version-pinned env: `$(bash <root>/scripts/moose-env.sh <root>)` (e.g. `moose-8.19`). The emitted DB embeds `$CONDA_PREFIX` include paths, so the wrong env writes a DB against the wrong moose-dev pin.
+`conda-run.sh` resolves the worktree's version-pinned env (via `moose-env.sh`, e.g. `moose-8.23`), finds conda on whatever machine you are on, activates, and execs the command. Never hardcode a conda path here — the install prefix differs per machine, and in a non-interactive shell `conda` is often a lazy shell function rather than a binary on `PATH`.
+
+The emitted DB embeds `$CONDA_PREFIX` include paths, so the wrong env writes a DB against the wrong moose-dev pin. Two failure modes worth recognizing:
+
+| Error | Meaning | Fix |
+|---|---|---|
+| `no conda installation found` | conda lives somewhere unusual on this machine | set `MOOSE_CONDA_BASE` to the base prefix (the dir holding `etc/profile.d/conda.sh`) in that machine's shell profile |
+| `conda env '<name>' not found` | this worktree's moose pin has no env yet | run the `conda create` line the error prints (see [`docs/local.md`](../../../docs/local.md)) |
+
+This skill assumes the conda flow. On INL HPC (`sawtooth*`, `lemhi*`, `bitterroot*`, `hoodoo*`, `teton*`) the env comes from container modules instead — `conda-run.sh` will fail there; regenerate inside `moose-dev-shell` by hand, per [`docs/hpc.md`](../../../docs/hpc.md).
 
 ## Merge
 

@@ -25,6 +25,19 @@ conda activate moose-<M.DD>
 
 MOOSE and its conda packages move in lockstep. If a branch bumps `moose` to a commit with a different moose-dev version, the helper prints a new env name — create that env with the new pin. The old env stays for worktrees still on the old pin.
 
+## Run a command in a worktree's env
+
+Scripts and skills should not hardcode a conda path — the install prefix differs per machine, and in a non-interactive shell `conda` is often a lazy shell function rather than a binary on `PATH`. Use the wrapper:
+
+```bash
+bash ~/projects/moose_stack/scripts/conda-run.sh -C <path-inside-worktree> -- <command> [args...]
+bash ~/projects/moose_stack/scripts/conda-run.sh --print-env            # just the env name
+```
+
+It resolves the worktree's pinned env with `moose-env.sh`, discovers conda, activates, and execs the command. It searches `$MOOSE_CONDA_BASE`, `$CONDA_EXE`, `conda` on `PATH`, `$CONDA_ROOT`, `$MAMBA_ROOT_PREFIX`, then the usual install roots.
+
+On a machine whose conda sits somewhere unusual, set `MOOSE_CONDA_BASE` to the base prefix (the directory that holds `etc/profile.d/conda.sh`) in that machine's shell profile. Do not add the path to the script.
+
 ## Build
 
 From your app's worktree with the env active:
