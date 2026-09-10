@@ -110,7 +110,7 @@ if ! conda activate "$env_name" 2>/dev/null; then
   set -u
   die "conda env '$env_name' not found in $conda_base.
 This worktree pins moose-dev to that env. Create it (see docs/local.md):
-  conda create -n $env_name moose-dev=<version> -c https://conda.software.inl.gov/public"
+  conda create -n $env_name moose-dev=<version>=mpich -c https://conda.software.inl.gov/public"
 fi
 set -u
 

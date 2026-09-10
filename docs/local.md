@@ -17,9 +17,11 @@ The helper reads the pin from the worktree's own `moose/conda/moose-dev/meta.yam
 ## Create an env for a pin (when it does not exist)
 
 ```bash
-conda create -n moose-<M.DD> moose-dev=<version> -c https://conda.software.inl.gov/public
+conda create -n moose-<M.DD> moose-dev=<version>=mpich -c https://conda.software.inl.gov/public
 conda activate moose-<M.DD>
 ```
+
+Always pin the `=mpich` build string. `moose-dev` ships an `mpich` build and an `openmpi` build at the same version and the same build number. Neither build has priority in its metadata, and conda then picks the openmpi build. The openmpi build is broken on a local Mac: its PMIx server drops the client during startup, and every job with more than one rank fails in `MPI_Init`.
 
 `/new-feature` does this automatically — it reuses the env when present (verified against the donor's exact package lock) and creates it from that lock otherwise.
 
