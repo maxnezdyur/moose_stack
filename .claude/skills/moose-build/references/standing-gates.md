@@ -1,59 +1,32 @@
 # Standing gates
 
-Sole owner of the standing gates `/moose-build` enforces — the checks every run passes, whatever
-the blueprint asked for. Not negotiable, not blueprint-editable. Blueprints render it read-only
-and cannot add, remove, reorder, or alter a gate.
-
-**Gate A** runs inside the loop's normal flow. **Gate B** runs after `GOAL_MET`. Each row's
-`Criterion` is its entry in `/moose-build`'s goal ledger; a gate is passed when its checks are
-green. Row ids are stable — `/moose-build` addresses gate B checks by number.
+The checks every `/moose-build` run passes, whatever the blueprint asked for. A blueprint renders these rows
+as its gate strips (id, criterion, check, verbatim) and cannot add, remove, reorder, or alter one. Gate A
+runs inside the loop; Gate B runs after `GOAL_MET`. Each row's criterion is its entry in `/moose-build`'s
+goal ledger, and a gate passes when its rows are green. Row ids are stable and `/moose-build` addresses Gate
+B rows by number; B1 (the consistency sweep) was retired because the code and dry lenses of the clean-context
+review cover it, and its id is not reused. The commands live in `scripts/gates.sh` beside this file: a new
+CIVET rejection becomes a gate there plus a row here, once, and every later run inherits it.
 
 | Gate | Criterion | Check |
 | --- | --- | --- |
-| **A1** Build clean | C1 | One-shot `moose-test-runner`, build-only — *"You are authorized to build: `cd <scope> && make -j 6`. Report compile errors verbatim with owning files."* |
-| **B1** Consistency sweep | — | Only when the work plan has ≥2 implement units. One-shot reviewer agent (`general-purpose`) that reads every new/changed source file *together* against `moose/framework/doc/content/sqa/framework_scs.md` — naming drift, param-style drift, duplicated helpers across units. Findings route through `/moose-build` § Repair. |
-| **B2** Suites green + gold staged | C2, C3 | Already evidenced by the loop's runner; re-run `moose-test-runner` on the registered test names (`--re=<names>`) only when a later gate check changed a file. Gold per `/moose-build` § Gold policy. |
-| **B3** Reuse / out-of-scope audit | C4 | Diff vs the blueprint's `reuse_decisions[]` + `out_of_scope[]`. |
-| **B4** SQA | C5 | Grep audit of in-diff spec files, then the authoritative `./moosedocs.py check` — `standing-gates.md` § SQA. |
-| **B5** ASCII | C6 | Two scans over the branch diff, code then `.md` — `standing-gates.md` § ASCII. |
-| **B6** Docs smoke | DG | Via the docs gate (`/moose-build` § Docs) — `moose-docs-writer`'s nested gate when docs are on, direct `moose-docs-builder` when off. Skipped by `--core`. |
+| **A1** Build clean | C1 | The loop's `moose-test-runner` round whose build exits 0 (`make -j 6` in the scope). |
+| **B2** Suites green + gold staged | C2, C3 | Evidenced by the loop's runner on the registered names (`--re=<names>`, gold captured and staged per `/moose-build`'s gold policy); re-run only when a later row changed a file. |
+| **B3** Reuse / out-of-scope audit | C4 | Main-thread diff check against the slice's `reuse_decisions` and `out_of_scope`. |
+| **B4** SQA | C5 | `gates.sh <repo> sqa`: every touched runnable `tests` block carries `requirement`, `design`, and `issues` at its own level or on an ancestor, then `moosedocs.py check` with errors filtered to in-diff files. |
+| **B5** ASCII | C6 | `gates.sh <repo> ascii`: added lines of code files (not `.md`, `.bib`, gold) hold only 7-bit ASCII; added `.md` lines carry no invisible character. |
+| **B6** Docs smoke | DG | `docs.sh <repo> smoke --diff devel`: the `docs` line of `gates.sh <repo> all`, or the docs-writer's SMOKE line when it authored pages. Skipped by `--core`. |
 
-## SQA (B4, C5)
+Two gotchas.
 
-Grep audit of in-diff spec files for `requirement`/`design`/`issues` — parent-block declarations
-cover children. Then the authoritative check:
+`.md` and `.bib` are exempt from the ASCII rule because CIVET's precheck covers code, not documentation:
+idaholab/moose scoped the rule to code in `c12859fc3f` (May 2026, refs #32497). An em dash or Nedelec with
+its accent in a `.md` or `.bib` is correct, not a defect, and a name's diacritics there are never "fixed".
+In code a diacritic is a hit like any other and is transliterated; unicode math is spelled out or written
+as LaTeX in a comment.
 
-```bash
-cd <doc-dir> && ./moosedocs.py check
-```
-
-Doc dir: `moose/modules/doc` | `blackbear/doc` | `isopod/doc`. Errors filtered to the branch diff
-— pre-existing SQA debt is reported, not fixed. Env failure → surface the conda hint, note the
-grep audit still ran.
-
-## ASCII (B5, C6)
-
-CIVET's precheck covers **code**, not documentation — `idaholab/moose` scoped the rule to code
-comments in `c12859fc3f` (May 2026, refs #32497), so `.md` and `.bib` are excluded from this gate
-and non-ASCII there (em dashes, `Nédélec`) is correct, not a defect. Never "fix" a name's
-diacritics in a `.md` or `.bib`; in code a diacritic is a hit like any other.
-
-```bash
-git -C <scope> diff devel...HEAD -- . ':(exclude)*gold*' ':(exclude)*.md' ':(exclude)*.bib' \
-  | perl -ne 'print if /^\+/ and /[^\x00-\x7F]/'
-```
-
-The code scan needs no `-CSD` — `[^\x00-\x7F]` is a byte test. Fix any hit in place on the main
-thread (smart quotes → `'`/`"`, dashes → `--`, NBSP → space, unicode math → spelled out or LaTeX
-in a comment, diacritics → transliterated), then re-run until clean.
-
-Scan added `.md` lines separately, for the **invisible** subset only: smart quotes, NBSP/NNBSP,
-zero-width space, and BOM, which break `grep`, `!listing re=` slicing, and citation matching.
-Leave every other non-ASCII character alone. This `perl` **must** carry `-CSD` — without it perl
-compares undecoded bytes, silently missing smart quotes entirely and matching NBSP only via its
-trailing `0xa0`:
-
-```bash
-git -C <scope> diff devel...HEAD -- '*.md' \
-  | perl -CSD -ne 'print if /^\+/ and /[\x{2018}\x{2019}\x{201C}\x{201D}\x{00A0}\x{202F}\x{200B}\x{FEFF}]/'
-```
+The `.md` scan looks only for the invisible subset (smart quotes U+2018/2019/201C/201D, NBSP U+00A0, NNBSP
+U+202F, ZWSP U+200B, BOM U+FEFF), which breaks `grep`, `!listing re=` slicing, and citation matching. That
+perl runs with `-CSD`, and the flag is load-bearing: without it perl compares undecoded bytes, never sees a
+smart quote as one character, and matches NBSP only through its trailing 0xA0 byte. The code scan is a byte
+test and needs no `-CSD`.
