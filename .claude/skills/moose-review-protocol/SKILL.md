@@ -19,7 +19,7 @@ Read-only review: no builds, tests, formatters, edits, or GitHub calls. The only
 | `repo_root` | Absolute path to the working tree, already on the branch. |
 | `diff_path` | The full diff. Hunk headers (`@@ -a,b +c,d @@`) define the lines eligible for inline comments. |
 | `files_path` | One repo-relative path per line: your bucket only. |
-| `meta_path` | PR mode: JSON with `title`, `body`, `author`, `baseRefName`, `headRefName`, `commits`. Absent in local mode. |
+| `meta_path` | PR mode: JSON with `title`, `body`, `author`, `baseRefName`, `headRefName`, `commits`. Local mode: JSON with `mode`, `root`, `base`, `branch`, `label` (no PR fields). |
 | `issues_path` | PR mode: digest of the linked issues, the author's spec for scope and completeness judgments. May be absent; proceed without it. |
 | `context` | Local mode: one line naming the branch and base. No PR exists. |
 | `constraints` | Optional free text from the caller (for example a blueprint's out-of-scope list). |
