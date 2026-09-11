@@ -1,37 +1,42 @@
 # AGENTS.md
 
-# moose_stack — operating guide
+# moose_stack operating guide
 
-Meta-repo pinning three forks as submodules: `moose/`, `blackbear/`, `isopod/`. Each submodule is an independent repo; this stack tracks their tips together.
-
-`moose` is the framework + physics modules. `blackbear` (structural degradation) and `isopod` (multiphysics constrained optimization) are MOOSE-based apps that link against it.
+Meta-repo that pins three forks as submodules: `moose/`, `blackbear/`, `isopod/`. Each submodule is an independent repo. This stack tracks their tips together. `moose` is the framework and the physics modules. `blackbear` (structural degradation) and `isopod` (multiphysics constrained optimization) are MOOSE-based apps that link against it.
 
 ## Remotes (every submodule)
 
-- `origin` → `maxnezdyur/<repo>` (push + fetch)
-- `upstream` → `idaholab/<repo>` (fetch only — push URL is `DISABLED_UPSTREAM_PUSH`)
-- Never add, re-enable, or push to idaholab upstream. Sync is manual via GitHub web UI.
+- `origin` = `maxnezdyur/<repo>` (push and fetch).
+- `upstream` = `idaholab/<repo>` (fetch only; the push URL is `DISABLED_UPSTREAM_PUSH`).
+- Never add, re-enable, or push to the idaholab upstream. Sync is manual through the GitHub web UI.
 
-## Default branches
+## Branches and pull requests
 
-- `moose` → `devel`
-- `blackbear`, `isopod` → `devel`
-- This meta-repo → `main`
-
-## Pull requests — target `next`, never `devel`
-
-- Every PR to `idaholab/<app>` (moose, blackbear, isopod) must set the base branch to `next`. CIVET's precheck rejects PRs against `devel`.
-- Always create PRs as drafts (`--draft`). I convert them to ready in the GitHub UI — never mark a PR ready yourself.
+- Default branches: `moose`, `blackbear`, and `isopod` use `devel`; this meta-repo uses `main`.
+- Every PR to `idaholab/<app>` sets the base branch to `next`. CIVET's precheck rejects PRs against `devel`. `next` is only the PR target: branch from `devel` and diff against `devel`.
+- Create PRs as drafts (`--draft`). I mark them ready in the GitHub UI. Never mark a PR ready.
 - `gh pr create --repo idaholab/<app> --base next --head maxnezdyur:<feature> --draft`
-- `next` is only the PR target. Branch from `devel` and diff against `devel` as usual.
 
-## Git context — skills target the submodule, not the meta-repo
+## CIVET precheck facts
 
-When I invoke a git-oriented skill — `branch-diff`, `commit`, and the like — I almost always mean the **submodule I'm working in** (`moose/`, `blackbear/`, or `isopod/`), not the meta-repo root. The meta-repo only pins submodule tips; the real changes live inside a submodule. Default the skill's working directory to that inner repo (detect it from `cwd`, or ask which submodule if it's ambiguous)
+- Code files (`.C`, `.h`, `.py`, `.i`, `tests`) are 7-bit ASCII. `.md` and `.bib` are exempt.
+- Every new `tests` spec block carries `requirement`, `design`, and `issues`. A parent block covers its children.
+
+## Git context
+
+A git-oriented skill (`branch-diff`, `commit`) targets the submodule I am working in, not the meta-repo root. Detect it from `cwd`. Ask which submodule only when it is ambiguous.
+
+## Worktrees
+
+Feature work happens in `~/projects/moose-worktrees/<feature>/`, a full copy of this layout that `/new-feature` creates. Skills and scripts run inside the worktree they are invoked from.
 
 ## Environment
 
-Two parallel env-management flows. Check `hostname` before any env, build, or test command, then pick:
+Check `hostname` before any env, build, or test command:
 
-- Local machine (conda) → [`docs/local.md`](docs/local.md)
-- INL HPC (container modules; hostnames like `sawtooth*`, `lemhi*`, `bitterroot*`, `hoodoo*`, `teton*`) → [`docs/hpc.md`](docs/hpc.md)
+- Local machine (conda): [`docs/local.md`](docs/local.md). Run commands through `scripts/conda-run.sh -C <path> -- <command>`.
+- INL HPC (container modules; hostnames `sawtooth*`, `lemhi*`, `bitterroot*`, `hoodoo*`, `teton*`): [`docs/hpc.md`](docs/hpc.md). Run bare commands inside the container.
+
+## Codex mirror
+
+Codex reads this tree through the tracked symlink `.agents -> .claude`. A skill with `disable-model-invocation: true` has `agents/openai.yaml` beside it with `allow_implicit_invocation: false`. Codex ignores the `skills:` preload on agents, so each agent names its preloaded skills in its body.

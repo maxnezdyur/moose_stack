@@ -1,17 +1,9 @@
-# Keeping Codex in sync
+# Codex mirror
 
-When you add or edit anything under `.claude/agents/` or `.claude/skills/`, the Codex-side mirror at `.codex/` and `.agents/skills/` goes stale until you re-run `claude-to-codex`.
+Codex reads `.claude/` through the tracked symlink `.agents -> .claude`. There is no separate mirror to regenerate. A change under `.claude/` is visible to Codex when it lands.
 
-**Quick re-sync** (from the meta-repo root):
-
-```bash
-npx --yes claude-to-codex --dry-run --json > /tmp/c2c-plan.json && jq '.plan.summary' /tmp/c2c-plan.json
-# STOP if this prints anything — a stale .claude/worktrees/ copy will overwrite the mirror:
-jq -r '.plan.operations[] | select(.type != "skip") | .relativePath' /tmp/c2c-plan.json | sort | uniq -d
-npx --yes claude-to-codex --write --emit-report
-python3 .codex/scripts/apply-models.py   # re-apply .codex/model-map.json model overrides
-```
-
-When the duplicate check fails, prune the worktree or hand-patch the one TOML instead — see gotcha 5 in `.codex/README.md`.
-
-Full instructions, gotchas (hardlinks, dropped `skills:` preload, hardcoded model, moose submodule writes), and rollback steps live in `.codex/README.md`.
+- A skill with `disable-model-invocation: true` carries `agents/openai.yaml` (`policy: allow_implicit_invocation: false`), so Codex does not auto-invoke it either.
+- Codex ignores the `skills:` preload on agent files. Each agent names its preloaded skills in its body.
+- Hooks in `.claude/settings.json` are Claude-only. The checks they run also live in `moose-build/scripts/gates.sh` and the standards skills.
+- Check frontmatter after edits: `claude plugin validate --strict .claude/skills && claude plugin validate --strict .claude/agents`.
+- The former `.codex/` TOML mirror was removed in commit 4ce9cb9.
