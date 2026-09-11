@@ -1,99 +1,43 @@
 ---
 name: analysis-run
-description: Fire and reconcile a MOOSE analysis study for the fire-and-forget system. Reconciles the durable Kanban board against SLURM on every entry (a study submitted a week ago is picked up automatically), fires an approved study (smoke → budget-gate → dispatch to HPC), applies judgment to parked cards, and reports. Use when the user says "/analysis-run", "fire the study", "check my studies", "reconcile the board", or asks how a submitted analysis is doing.
+description: Reconciles every outstanding MOOSE analysis study against SLURM, then fires one approved study on HPC through the analysis toolkit (smoke, budget gate, dispatch) and reports the board with a diagnosis of any parked card. Use for "/analysis-run <study-id>", "fire the study", "reconcile the board", "re-fire my study".
 disable-model-invocation: true
+argument-hint: "[<study-id>]"
+effort: medium
 ---
 
 # /analysis-run
 
-Execute and track fire-and-forget analysis studies. The durable board
-(`analysis/studies/<id>/card.yaml`) is the source of truth; you are stateless
-between sessions. Two things happen here: **reconcile** every outstanding study
-against SLURM, and **fire** an approved one. The toolkit does the mechanics; you
-supply judgment on parked cards.
+The toolkit is `${CLAUDE_PROJECT_DIR:-$PWD}/analysis/analysis` (a launcher that picks a python with PyYAML; no install; `$PWD` is the meta-root or worktree root when `CLAUDE_PROJECT_DIR` is unset, which the Bash tool does not export). The durable board, `analysis/studies/<id>/card.yaml`, is the source of truth between sessions, and the toolkit sets every lane from cluster reality; this skill supplies judgment and reports. `analysis/README.md` carries the lifecycle, the lane names, the command table, and the `study.yaml` schema.
 
-## Usage
+## 2FA pre-check
 
-```
-/analysis-run [<study-id>]     # fire that study; with no id, just reconcile + report
-```
+HPC access rides the SSH ControlMaster in `~/.ssh/config`; the toolkit never authenticates. If the master is not up, a toolkit command parks the study in `connection_down` and the user has to type `! ssh bitterroot1.hpc.inl.gov true` (or `teton1`) in their own terminal to clear 2FA, then re-run this skill. Say this before the first command when a study is about to fire.
 
-Run from inside `moose_stack`. SSH auth is delegated to `~/.ssh/config` — never
-attempt to authenticate; if a probe fails, the study parks in `connection_down`.
+## Reconcile, then fire
 
-## 1. Reconcile first — always
-
-On every entry, before anything else, advance every outstanding card:
+Run reconcile as a Bash tool call, on every entry, before anything else. It is side-effecting (syncs SLURM, resubmits transient failures, parks systematic ones, collects and reports finished studies), so it does not belong in a `!cmd` block:
 
 ```bash
-analysis/analysis reconcile --all
+"${CLAUDE_PROJECT_DIR:-$PWD}/analysis/analysis" reconcile --all
 ```
 
-This syncs `sacct`/`squeue` over SSH, auto-resubmits transient failures, parks
-systematic ones, enforces the budget ceiling, and drives finished studies through
-collection and reporting to `done`. Then read the board:
+Exit 1 means at least one card sits in an attention lane (`attention`, `budget_exceeded`, `connection_down`); that is a report item, not a failure of the skill.
+
+With a study id in `$ARGUMENTS`, fire it:
 
 ```bash
-analysis/analysis status              # whole board
-analysis/analysis status <id>         # one card + recent history
+"${CLAUDE_PROJECT_DIR:-$PWD}/analysis/analysis" run <study-id>
 ```
 
-Report to the user what changed: newly `done` studies (point at
-`studies/<id>/results/report.html`), studies still `running` (progress), and
-anything in an attention lane.
+`run` smokes locally when the card has not passed smoke, gates on the worst-case core-hour estimate, then dispatches. It prints `<id>: state -> <lane>` plus the reasons for a parked lane and exits 1 on any parked lane; it refuses a study already in a live lane. With no id, reconcile and report only.
 
-## 2. Fire an approved study
+## Parked cards
 
-When given an id:
+Diagnose from `analysis status <id>` (last reasons and history) and the log tail: collected cases have `*.out` under `analysis/studies/<id>/results/case_<NNNN>/`; cases that failed keep their logs on the cluster under the `workdir:` line of the status output, in `logs/`, readable over `ssh <cluster>`. Report the likely cause (diverged, NaN, bad path, smoke failure, budget over the ceiling). An optimization study is marked terminal when its single job ends; convergence is your call from the objective history in the report, and hitting `max_iters` without converging is reported as such.
 
-```bash
-analysis/analysis run <id>            # smoke (local) → budget-gate → dispatch
-```
+This skill does not edit inputs, specs, lanes, or cards, and it does not poll: after a fire, the study runs unattended and the next `/analysis-run` picks it up through reconcile. Fixes to an input or to `budget.ceiling_core_hours` in `study.yaml` are the user's.
 
-Interpret the resulting lane:
+## Report
 
-- `dispatched` / `running` — report the case count and that it is on HPC. Done for now.
-- `attention` (smoke failed) — show the smoke message; the input is broken. Do
-  not retry blindly; help the user fix the input, then re-run.
-- `budget_exceeded` — the estimate exceeds the ceiling. Surface the numbers;
-  the user shrinks the study or raises the ceiling in `study.yaml`.
-- `connection_down` — HPC unreachable. Ask the user to establish the master
-  connection themselves, e.g. suggest they type ``! ssh teton1.hpc.inl.gov true``
-  (or bitterroot) to clear 2FA, then re-run.
-
-Never mark a study ready or done yourself — the toolkit sets lanes from reality.
-
-Re-firing is safe: `run` refuses to resubmit a study already in a live lane, and
-dispatch adopts any submission already carrying the study's `an-<id>` job name
-(so a dropped ssh right after submit never causes a lost or duplicated array).
-
-## 3. Judgment on parked cards
-
-The toolkit parks; you diagnose. For each card in `attention`:
-
-- **Systematic case failure**: read the diagnosis on the card. If useful, pull
-  the log tail to explain the cause (diverged, NaN, bad path):
-  `analysis/analysis fetch-fields <id> -c <case>` is for fields; for logs, the
-  console output is under the study's remote `logs/` (rsync or `ssh <cluster> tail`).
-  Summarize the likely cause. Do **not** edit the input to "fix" it unattended —
-  surface it and let the user decide.
-- **Partial sweep** (some done, some failed): the report already covers the good
-  cases and flags the bad. Tell the user the study is usable with gaps.
-- **Optimization done-ness**: the toolkit marks the single job terminal; you
-  judge convergence from the objective history in the report. If it hit
-  `max_iters` without converging, say so plainly.
-
-## 4. When to notify vs wait
-
-Fire-and-forget means nothing runs the AI while the user is away. After firing,
-tell the user the study is on HPC and that reopening Claude later will pick it up
-via reconcile. Do not poll in a loop. If they ask for a proactive ping when a
-study finishes, that needs a scheduled reconcile (out of scope here) — offer it,
-don't assume it.
-
-## Caveats
-
-- `/scratch` may be purged; the card records provenance (app/sha/module hash) so
-  a purged study can be re-fired.
-- A study built on one cluster is not reused on the other (cache is keyed by
-  cluster); firing the same study `--cluster teton` rebuilds there.
+Done when reconcile has run, the named study (if any) has been fired or its parked lane explained, and the reply lists what changed by lane: newly `done` studies with their `studies/<id>/results/report.html` path, `running` studies with progress, and each attention-lane card with its cause and the next step.

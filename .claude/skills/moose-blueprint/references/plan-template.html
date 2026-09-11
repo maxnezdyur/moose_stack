@@ -3,168 +3,324 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- slot: PLAN_TITLE = the feature name (repeated in <h1>) -->
 <title>Plan: {{PLAN_TITLE}}</title>
+<style>
+/* Palette. Every rule below and in work-plan-format.md consumes these eleven tokens. */
+:root {
+  --bg: #fbfbf9;
+  --surface: #ffffff;
+  --line: #d9d7d0;
+  --muted: #6b6a66;
+  --impl: #2f6fdb;
+  --test: #2a8a5c;
+  --test-bg: #e8f5ee;
+  --doc: #8a5cc2;
+  --gate: #b8720a;
+  --gate-bg: #fbf1df;
+  --mock: #c43d3d;
+}
+body { margin: 0; padding: 1.5rem; background: var(--bg); color: #1f1f1d; font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 62rem; margin: 0 auto; }
+h1 { font-size: 1.7rem; margin: 0 0 .6rem; }
+h2 { font-size: 1.2rem; margin: 2rem 0 .6rem; padding-bottom: .25rem; border-bottom: 1px solid var(--line); }
+h3 { font-size: 1rem; margin: 1.2rem 0 .4rem; }
+code, pre { font: .86em/1.45 ui-monospace, Menlo, monospace; }
+pre { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: .7rem .9rem; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; margin: .6rem 0 1rem; font-size: .9rem; }
+th, td { border: 1px solid var(--line); padding: .4rem .6rem; text-align: left; vertical-align: top; }
+th { background: var(--surface); }
+figure { margin: 1rem 0; }
+figcaption { font-size: .8rem; color: var(--muted); }
+.kv { font-size: .9rem; }
+/* Metadata: collapsed by default; append-only lists on resume. */
+.meta { font-size: .8rem; color: var(--muted); margin-bottom: 1rem; }
+.meta dl { display: grid; grid-template-columns: max-content 1fr; gap: .15rem .8rem; margin: .4rem 0 0; }
+.meta dt { font-weight: 600; }
+.meta dd { margin: 0; }
+/* Relevant files: existing vs new tags. */
+.files li { margin: .2rem 0; }
+.tag { display: inline-block; font-size: .65rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border-radius: 4px; padding: .1em .45em; margin-right: .3rem; }
+.tag.existing { background: var(--test-bg); color: var(--test); }
+.tag.new { background: #e6eefb; color: var(--impl); }
+/* Checklists and the [] status marker /moose-build flips on blueprints without a work plan. */
+.checklist { list-style: none; padding-left: 0; }
+.checklist li { margin: .3rem 0; }
+.status { display: inline-block; min-width: 3.2em; text-align: center; font-weight: 700; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 .3em; margin-right: .4rem; }
+.loop { border-left: 3px solid var(--gate); background: var(--gate-bg); padding: .5rem .8rem; border-radius: 0 8px 8px 0; font-size: .9rem; margin: .6rem 0; }
+.qa-answer { color: var(--muted); margin: .3rem 0 .6rem 1rem; }
+/* Physics pairing: pseudocode beside its equation. */
+.physics-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: stretch; margin: 1rem 0; }
+@media (max-width: 760px) { .physics-pair { grid-template-columns: 1fr; } }
+.physics-pair .pp-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; margin-bottom: .35rem; }
+.physics-pair pre { margin: 0; height: 100%; }
+.physics-pair .pp-math { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: .7rem .9rem; display: flex; flex-direction: column; justify-content: center; }
+/* Work plan: groups, unit cards, chips, gate strips. */
+.legend { display: flex; flex-wrap: wrap; gap: .9rem; align-items: center; font-size: .78rem; color: var(--muted); margin: .6rem 0 1rem; }
+.dot { display: inline-block; width: .65em; height: .65em; border-radius: 50%; margin-right: .35em; }
+.dot.implement { background: var(--impl); }
+.dot.test { background: var(--test); }
+.dot.doc { background: var(--doc); }
+.groups { display: flex; flex-direction: column; gap: .55rem; margin: 1rem 0; }
+.group { border: 1px solid var(--line); border-radius: 10px; padding: .7rem .9rem .85rem; }
+.group-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; margin-bottom: .55rem; }
+.units { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: .55rem; }
+.unit { border-radius: 8px; padding: .5rem .65rem .55rem; border: 1px solid var(--line); border-left: 3.5px solid var(--muted); background: var(--surface); }
+.uhead { display: flex; justify-content: space-between; align-items: center; gap: .4rem; }
+.unit .uid { font: .7rem/1 ui-monospace, Menlo, monospace; color: var(--muted); }
+.unit .uname { font-weight: 650; font-size: .88rem; margin: .15rem 0 .1rem; }
+.unit .uagent { font-size: .74rem; color: var(--muted); }
+.unit .udeps { font-size: .7rem; margin-top: .3rem; }
+.unit.implement { border-left-color: var(--impl); }
+.unit.test { border-left-color: var(--test); }
+.unit.doc { border-left-color: var(--doc); }
+.chip { display: inline-block; font-size: .6rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; border-radius: 999px; padding: .12em .5em; border: 1px solid var(--line); color: var(--muted); background: transparent; white-space: nowrap; }
+.chip.wip { color: var(--gate); border-color: var(--gate); background: var(--gate-bg); }
+.chip.done { color: var(--test); border-color: var(--test); background: var(--test-bg); }
+.chip.failed { color: var(--mock); border-color: var(--mock); }
+.unit details.unote { margin-top: .35rem; font-size: .75rem; color: var(--muted); }
+.unit details.unote summary { cursor: pointer; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.gatebar { border: 1.5px solid var(--gate); background: var(--gate-bg); border-radius: 10px; padding: .55rem .9rem; font-size: .85rem; }
+.gatebar .glabel { font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; color: var(--gate); font-weight: 800; }
+.gatebar ul { margin: .35rem 0 0; padding-left: 1.1rem; }
+.gatebar li .chip { margin-right: .4rem; background: var(--bg); }
+.arrow { text-align: center; color: var(--muted); font-size: .85rem; line-height: 1; }
+</style>
 </head>
 <body>
 <main>
 
-  <!-- ===== HEADER + UPDATABLE METADATA ===== -->
+  <!-- ===== HEADER + METADATA (see blueprint-format.md, Metadata) ===== -->
   <header>
     <h1>Plan: {{PLAN_TITLE}}</h1>
     <details class="meta">
       <summary>Metadata</summary>
       <dl>
+        <!-- slot: CREATED_ISO = date -u +%Y-%m-%dT%H:%M:%SZ at first write; never overwritten -->
         <dt>created</dt>      <dd>{{CREATED_ISO}}</dd>
+        <!-- slot: MODIFIED_ISO_LIST = created at first write; append on resume -->
         <dt>modified</dt>     <dd>{{MODIFIED_ISO_LIST}}</dd>
+        <!-- slot: COMMIT_SHA_LIST = "-" at design time; append on resume -->
         <dt>commits</dt>      <dd>{{COMMIT_SHA_LIST}}</dd>
-        <dt>agent name</dt>        <dd>{{AGENT_NAME_LIST}}</dd>
-        <dt>session id</dt>      <dd>{{SESSION_ID_LIST}}</dd>
+        <!-- slot: AGENT_NAME_LIST = "Claude via /moose-blueprint"; append on resume -->
+        <dt>agent name</dt>   <dd>{{AGENT_NAME_LIST}}</dd>
+        <!-- slot: BACK_REFERENCES / FORWARD_REFERENCES = "-" at design time -->
         <dt>back refs</dt>    <dd>{{BACK_REFERENCES}}</dd>
         <dt>forward refs</dt> <dd>{{FORWARD_REFERENCES}}</dd>
       </dl>
     </details>
   </header>
 
-  <!-- Hero image — synced to the :root visual identity. Replace with <img> once generated. -->
+  <!-- Hero image slot. The {{...}} token inside this comment may stay; replace with <img> when one exists. -->
   <figure>
     <!-- {{HERO_IMAGE: subject describing the plan at a glance}} -->
     <figcaption>{{HERO_IMAGE_CAPTION}}</figcaption>
   </figure>
 
-  <!-- ===== PURPOSE / PROBLEM / SOLUTION ===== -->
-  <section id="purpose">
-    <h2>Purpose</h2>
+  <!-- ===== #summary (contract block 1): purpose, problem, solution, Repo:, Object kind:, files ===== -->
+  <section id="summary">
+    <h2>Summary</h2>
+    <!-- slot: PURPOSE = one-line intent -->
+    <h3>Purpose</h3>
     <p>{{PURPOSE}}</p>
-  </section>
-
-  <section id="problem">
-    <h2>Problem</h2>
+    <!-- slot: PROBLEM = why this is needed, what is missing today -->
+    <h3>Problem</h3>
     <p>{{PROBLEM}}</p>
-    <figure>
-      <!-- {{PROBLEM_IMAGE: subject visualizing the problem this plan addresses}} -->
-      <figcaption>{{PROBLEM_IMAGE_CAPTION}}</figcaption>
-    </figure>
-  </section>
-
-  <section id="solution">
-    <h2>Solution</h2>
+    <!-- slot: SOLUTION = the object and the approach; the user-facing knob; say "docs needed" when #doc-plan is Needed: yes -->
+    <h3>Solution</h3>
     <p>{{SOLUTION}}</p>
-    <figure>
-      <!-- {{SOLUTION_IMAGE: subject visualizing the proposed solution}} -->
-      <figcaption>{{SOLUTION_IMAGE_CAPTION}}</figcaption>
-    </figure>
+    <!-- slot: OBJECT_KIND = Kernel, BC, Material, ...; REPO = moose | moose/modules/<m> | blackbear | isopod. Labels are parsed literally; keep this order and the " | " separator -->
+    <p class="kv"><strong>Object kind:</strong> {{OBJECT_KIND}} | <strong>Repo:</strong> {{REPO}}</p>
+
+    <!-- ===== #files: predicted files to touch, existing (reused or templated, with file:line) vs new ===== -->
+    <div id="files" class="files">
+      <h3>Predicted files to touch</h3>
+      <h4>Existing</h4>
+      <ul>
+        <!-- repeat: one <li> per existing file; a bare path when the feature edits it (the slicer collects those), path:line when it is only a reference; WHY_RELEVANT = what is reused or templated from it -->
+        <li><span class="tag existing">existing</span> <code>{{EXISTING_FILE_PATH}}</code> -- {{WHY_RELEVANT}}</li>
+      </ul>
+      <h4>New</h4>
+      <ul>
+        <!-- repeat: one <li> per new file (source, test/, unit/ when agreed, doc page) -->
+        <li><span class="tag new">new</span> <code>{{NEW_FILE_PATH}}</code> -- {{WHY_NEEDED}}</li>
+      </ul>
+    </div>
   </section>
 
-  <!-- ===== RELEVANT FILES ===== -->
-  <section id="files" class="files">
-    <h2>Relevant Files</h2>
-
-    <h3>Existing Files</h3>
-    <ul>
-      <!-- repeat -->
-      <li><span class="tag existing">existing</span> <code>{{EXISTING_FILE_PATH}}</code> — {{WHY_RELEVANT}}</li>
-    </ul>
-
-    <h3>New Files</h3>
-    <ul>
-      <!-- repeat -->
-      <li><span class="tag new">new</span> <code>{{NEW_FILE_PATH}}</code> — {{WHY_NEEDED}}</li>
-    </ul>
-  </section>
-
-  <!-- ===== IMPLEMENTATION PHASES ===== -->
-  <section id="phases">
-    <h2>Implementation Phases</h2>
-    <p><strong>IMPORTANT:</strong> Execute every phase and task step by step, in order, top to bottom.</p>
-    <p>Status markers: <code>[]</code> idle · <code>[wip]</code> in progress · <code>[x]</code> complete · <code>[f]</code> failed. All start as <code>[]</code>; the Build Plan workflow updates them as it works.</p>
-
-    <!-- repeat: one .phase block per phase -->
-    <div class="phase">
-      <h3><code class="status">[]</code> Phase {{PHASE_NUMBER}}: {{PHASE_NAME}}</h3>
-      <p>{{PHASE_DESCRIPTION}}</p>
-
-      <!-- Optional focused image for this phase, synced to :root identity -->
-      <figure>
-        <!-- {{PHASE_IMAGE: subject describing this phase's architecture/flow}} -->
-        <figcaption>{{PHASE_IMAGE_CAPTION}}</figcaption>
-      </figure>
-
-      <!-- repeat: one <h4> + checklist per task -->
-      <h4>{{TASK_NUMBER}}. {{TASK_NAME}}</h4>
-      <ul class="checklist">
-        <!-- repeat -->
-        <li><code class="status">[]</code> {{SPECIFIC_ACTION}}</li>
-      </ul>
-
-      <!-- Final task of every phase: Testing Strategy + validation loop -->
-      <h4>{{LAST_TASK_NUMBER}}. Testing Strategy</h4>
-      <p>{{TESTING_APPROACH: technology used to test/validate, including edge cases}}</p>
-      <ul class="checklist">
-        <!-- repeat -->
-        <li><code class="status">[]</code> <code>{{VALIDATION_COMMAND}}</code> — {{WHAT_IT_PROVES}}</li>
-      </ul>
-      <div class="loop">
-        🔁 <strong>Do not exit this phase until every box above is checked.</strong>
-        If any command fails, fix the cause and re-run — loop until all pass.
+  <!-- ===== #work-plan (contract block 7): units, chips, gate strips, JSON island (work-plan-format.md) ===== -->
+  <section id="work-plan">
+    <h2>Work plan</h2>
+    <p>{{WORK_PLAN_INTRO: one or two sentences on the decomposition and its hard edges}}</p>
+    <div class="legend">
+      <span><span class="dot implement"></span>implement</span>
+      <span><span class="dot test"></span>test</span>
+      <span><span class="dot doc"></span>doc</span>
+      <span><span class="chip">idle</span> <span class="chip wip">running</span> <span class="chip done">done</span> <span class="chip failed">failed</span></span>
+    </div>
+    <div class="groups">
+      <!-- group 1: implementation units; IMPL_COUNT = number of implement units -->
+      <div class="group">
+        <div class="group-label">Implementation -- {{IMPL_COUNT}} units</div>
+        <div class="units">
+          <!-- repeat: one .unit card per implement unit, ordered so a unit follows its deps; the chip beside the uid is what /moose-build edits -->
+          <div class="unit implement">
+            <div class="uhead"><span class="uid">{{UNIT_ID}}</span><span class="chip">idle</span></div>
+            <div class="uname">{{CLASS_NAME}}</div>
+            <div class="uagent">moose-implementer</div>
+            <div class="udeps kv">deps: {{DEPS_OR_DASH}}</div>
+            <!-- optional: only when the JSON payload has "notes" -->
+            <details class="unote"><summary>notes</summary><p>{{UNIT_NOTES}}</p></details>
+          </div>
+        </div>
+      </div>
+      <!-- gate A strip: one <li> per standing-gates.md row for gate A, verbatim (id, criterion, check); chip first -->
+      <div class="gatebar">
+        <div class="glabel">Standing gate A -- appended by /moose-build, not editable here</div>
+        <ul>
+          <!-- repeat -->
+          <li><span class="chip">idle</span> <strong>{{GATE_ROW_ID}}</strong> {{GATE_ROW_CRITERION}} -- {{GATE_ROW_CHECK}}</li>
+        </ul>
+      </div>
+      <div class="arrow">v</div>
+      <!-- group 2: test and doc units; TESTDOC_COUNT = number of test plus doc units -->
+      <div class="group">
+        <div class="group-label">Tests &amp; docs -- {{TESTDOC_COUNT}} units</div>
+        <div class="units">
+          <!-- repeat: one .unit card per test unit (class "unit test", agent moose-test-writer or moose-unit-test-writer) -->
+          <div class="unit test">
+            <div class="uhead"><span class="uid">{{UNIT_ID}}</span><span class="chip">idle</span></div>
+            <div class="uname">{{TEST_NAME}}</div>
+            <div class="uagent">moose-test-writer</div>
+            <div class="udeps kv">deps: {{DEPS_OR_DASH}}</div>
+          </div>
+          <!-- one .unit card for the doc unit, only when #doc-plan is Needed: yes -->
+          <div class="unit doc">
+            <div class="uhead"><span class="uid">{{UNIT_ID}}</span><span class="chip">idle</span></div>
+            <div class="uname">{{DOC_PAGE_NAME}}</div>
+            <div class="uagent">moose-docs-writer</div>
+            <div class="udeps kv">deps: {{DEPS_OR_DASH}}</div>
+          </div>
+        </div>
+      </div>
+      <!-- gate B strip: one <li> per standing-gates.md row for gate B, verbatim; chip first -->
+      <div class="gatebar">
+        <div class="glabel">Standing gate B -- appended by /moose-build, not editable here</div>
+        <ul>
+          <!-- repeat -->
+          <li><span class="chip">idle</span> <strong>{{GATE_ROW_ID}}</strong> {{GATE_ROW_CRITERION}} -- {{GATE_ROW_CHECK}}</li>
+        </ul>
       </div>
     </div>
+    <!-- machine copy: the JSON island per work-plan-format.md; declarative only, no gates, no status; must JSON.parse -->
+    <script type="application/json" id="work-plan-data">
+{{WORK_PLAN_JSON}}
+    </script>
   </section>
 
-  <!-- ===== GLOBAL VALIDATION ===== -->
-  <section id="validation">
-    <h2>Validation Commands</h2>
-    <p>Execute these commands to validate the entire plan is complete:</p>
-    <ul class="checklist">
-      <!-- repeat -->
-      <li><code class="status">[]</code> <code>{{VALIDATION_COMMAND}}</code> — {{WHAT_IT_PROVES}}</li>
-    </ul>
-    <div class="loop">
-      🔁 <strong>The plan is not complete until every box is checked and every command passes. If for some reason a step is not possible to complete, mark it with [f] and move on if possible.</strong>
+  <!-- ===== #physics (contract block 2): equation, validParams shape, residual or contribution form ===== -->
+  <section id="physics">
+    <h2>Physics &amp; signature</h2>
+    <!-- repeat: one paragraph per implement unit with id="physics-uN" (the JSON physics_ref target); math as $$...$$ or \(...\) in prose -->
+    <div id="physics-u1">
+      <h3>{{CLASS_NAME}}</h3>
+      <p>{{EQUATION_WITH_SYMBOLS_DEFINED}}</p>
+      <!-- physics pair: only when both a pseudocode form and a math form exist for a residual, Jacobian, or contribution override; otherwise render the one half alone -->
+      <div class="physics-pair">
+        <div class="pp-code"><div class="pp-label">intended {{OVERRIDE_NAME}}()</div>
+          <pre><code>{{PSEUDOCODE_LINE}}</code></pre></div>
+        <div class="pp-math"><div class="pp-label">residual form</div>
+          $$ {{RESIDUAL_TEX}} $$</div>
+      </div>
+      <!-- validParams shape: one row per parameter; coupled("var") entries included -->
+      <h4>validParams</h4>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <!-- repeat -->
+        <tr><td><code>{{PARAM_NAME}}</code></td><td><code>{{PARAM_TYPE}}</code></td><td>{{PARAM_DESCRIPTION}}</td></tr>
+      </table>
     </div>
   </section>
 
-  <!-- ===== QUESTIONABLES (only include this section if QUESTIONABLE is true) ===== -->
+  <!-- ===== #reuse-decisions (contract block 3): one row per scout finding; the Decision column is parsed ===== -->
+  <section id="reuse-decisions">
+    <h2>Reuse decisions</h2>
+    <table>
+      <tr><th>Finding</th><th>Class</th><th>What it does</th><th>Decision</th><th>Why</th></tr>
+      <!-- repeat: FINDING = file_path:line verbatim; DECISION = Reuse | Extend | Parallel (with the user's justification); no finding = one row with the negative record; failed scout = "Scout failed: <reason>" -->
+      <tr><td><code>{{FILE_PATH_LINE}}</code></td><td><code>{{CLASS_NAME}}</code></td><td>{{WHAT_IT_DOES}}</td><td>{{DECISION}}</td><td>{{WHY}}</td></tr>
+    </table>
+  </section>
+
+  <!-- ===== #test-plan (contract block 4): one row per test; the <code> name is the canonical test_plan_ref ===== -->
+  <section id="test-plan">
+    <h2>Test plan</h2>
+    <table>
+      <tr><th>Test name</th><th>Tester kind</th><th>Asserted behavior</th><th>Mutation rationale</th></tr>
+      <!-- repeat: TESTER = Exodiff | CSVDiff | RunException | ... | gtest (unit/) -->
+      <tr><td><code>{{TEST_NAME}}</code></td><td>{{TESTER}}</td><td>{{ASSERTED_BEHAVIOR}}</td><td>{{MUTATION_RATIONALE}}</td></tr>
+    </table>
+  </section>
+
+  <!-- ===== #doc-plan (contract block 5): Needed: yes|no is parsed literally; page paths in <code> ===== -->
+  <section id="doc-plan">
+    <h2>Doc plan</h2>
+    <p class="kv"><strong>Needed:</strong> {{YES_OR_NO}}</p>
+    <!-- slot: DOC_PAGE_PATH = <repo>/doc/content/source/<area>/<NewClass>.md -->
+    <p class="kv"><strong>Page:</strong> <code>{{DOC_PAGE_PATH}}</code></p>
+    <!-- slot: PUBLIC_SURFACE = which params and behaviors are documented API -->
+    <p><strong>Public surface:</strong> {{PUBLIC_SURFACE}}</p>
+    <!-- slot: EXISTING_COVERAGE = every page already documenting the feature and the placement or consolidation the user chose -->
+    <p><strong>Existing coverage:</strong> {{EXISTING_COVERAGE}}</p>
+  </section>
+
+  <!-- ===== #out-of-scope (contract block 6): one <li> per non-goal ===== -->
+  <section id="out-of-scope">
+    <h2>Out of scope</h2>
+    <ul>
+      <!-- repeat -->
+      <li>{{NON_GOAL}}</li>
+    </ul>
+  </section>
+
+  <!-- ===== VALIDATION COMMANDS: from #test-plan plus build clean; [] markers stay at design time ===== -->
+  <section id="validation">
+    <h2>Validation commands</h2>
+    <ul class="checklist">
+      <!-- repeat: VALIDATION_COMMAND = ./run_tests --re=<names> or the build command -->
+      <li><code class="status">[]</code> <code>{{VALIDATION_COMMAND}}</code> -- {{WHAT_IT_PROVES}}</li>
+    </ul>
+    <div class="loop">The plan is complete when every command above passes.</div>
+  </section>
+
+  <!-- ===== QUESTIONABLES: one <details> per open question, deferred item, or parked decision from the grill ===== -->
   <section id="questionables">
     <h2>Questionables</h2>
-    <!-- Optional image for this section, synced to :root identity -->
-    <figure>
-      <!-- {{QUESTIONABLES_IMAGE: subject visualizing the key open question/risk}} -->
-      <figcaption>{{QUESTIONABLES_IMAGE_CAPTION}}</figcaption>
-    </figure>
-    <!-- repeat: one <details> per questionable decision / assumption / risk -->
+    <!-- repeat -->
     <details>
       <summary>{{QUESTIONABLE}}</summary>
       <p class="qa-answer">{{ASSUMPTION_OR_RATIONALE}}</p>
     </details>
   </section>
 
-  <!-- ===== NOTES ===== -->
-  <!-- Open canvas — the planning agent runs free here. There is no fixed shape:
-       use whatever HTML best serves the plan (prose, lists, tables, code blocks,
-       diagrams, callouts, decision logs, alternatives considered, open threads,
-       links, anything). Embed as many image slots as the plan benefits from. -->
+  <!-- ===== NOTES: free-form; context, tradeoffs, rejected approaches, risks, future work, references ===== -->
   <section id="notes">
     <h2>Notes</h2>
-    {{NOTES: free-form. Capture anything that helps the trifecta understand, build,
-      or extend this plan — context, dependencies (new libraries),
-      tradeoffs, rejected approaches, risks, future work, references. Author rich,
-      bespoke HTML as needed.}}
-    <!-- repeat: add as many of these image slots as the notes warrant including the image block below -->
+    {{NOTES}}
+    <!-- optional image slot; the {{...}} token inside this comment may stay -->
     <figure>
       <!-- {{NOTES_IMAGE: subject for a note worth visualizing}} -->
       <figcaption>{{NOTES_IMAGE_CAPTION}}</figcaption>
     </figure>
   </section>
 
-  <!-- ===== AMENDMENTS ===== -->
-  <!-- Running history of changes made AFTER the plan was first executed. Append-only.
-       Populated by the Update Plan and Update References workflows — never edited during Create. -->
+  <!-- ===== AMENDMENTS: append-only history of changes made after the plan was first executed; empty at design time ===== -->
   <section id="amendments">
     <h2>Amendments</h2>
     <!-- repeat: one entry per amendment, newest at the bottom -->
     <details>
-      <summary>{{AMEND_ISO}} — {{AMEND_SUMMARY}}</summary>
-      <p>{{AMEND_DETAIL: what changed and why}}</p>
+      <summary>{{AMEND_ISO}} -- {{AMEND_SUMMARY}}</summary>
+      <p>{{AMEND_DETAIL}}</p>
     </details>
   </section>
 

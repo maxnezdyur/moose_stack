@@ -1,6 +1,6 @@
 """Command-line surface for the analysis toolkit.
 
-The AI (skills /analysis-blueprint, /analysis-run) drives these commands and
+The AI (skills /analysis-blueprint, /analysis-run, /analysis-status) drives these commands and
 supplies judgment; the commands themselves are deterministic. Nothing here
 authenticates to HPC — SSH auth is delegated to ~/.ssh/config.
 

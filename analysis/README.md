@@ -5,7 +5,7 @@ study, approve it, and fire. The system smokes it locally, dispatches the full
 study to HPC, and tracks every card across sessions. When you reopen Claude a
 week later, it reconciles the board against SLURM and finishes the work.
 
-The AI (skills `/analysis-blueprint` and `/analysis-run`) owns judgment. This
+The AI (skills `/analysis-blueprint`, `/analysis-run`, and `/analysis-status`) owns judgment. This
 toolkit owns everything that must be reliable. SSH auth is delegated to your
 `~/.ssh/config` — the toolkit never handles credentials.
 
@@ -71,27 +71,38 @@ off-happy-path: attention · budget_exceeded · connection_down
 
 ## study.yaml schema
 
+The comments carry the per-field judgment that `/analysis-blueprint` grills against.
+
 ```yaml
-id: my-study                 # required, matches the dir name
+id: my-study                 # required, short kebab-case, matches the dir name
 title: "..."
 kind: sweep                  # sweep | convergence | optimization
+                             #   sweep: vary parameters over a grid or list, collect QoIs
+                             #   (embarrassingly parallel)
+                             #   convergence: refine one parameter over levels, fit an order
+                             #   optimization: one self-driving job (isopod, calibration),
+                             #   bounded by max_iters
 app: combined                # moose | combined | blackbear | isopod
 cluster: bitterroot          # default; override per run with --cluster
 account: intern              # SLURM accounting key
 # repo_sha: HEAD             # pin a sha; default = scratch checkout HEAD
 
 baseline:
-  input: inputs/base.i       # required, relative to the study dir
-  extra_files: [inputs/mesh.e]
+  input: inputs/base.i       # required, relative to the study dir; an existing .i that
+                             # runs today, copied into inputs/ (the toolkit never edits it)
+  extra_files: [inputs/mesh.e]   # every mesh or include the input reads, also under inputs/
+                             # Leave Outputs/file_base out of the input and the spec;
+                             # the toolkit sets it per case.
 
 # one block matching `kind`:
 sweep:
   method: grid               # grid (cartesian) | zip (parallel lists)
-  params:
+  params:                    # exact MOOSE HIT paths; confirm each one exists in the input
+                             # (grep the .i or /moose-params). A wrong path fails every case.
     Materials/thermal/k: [1, 2, 5, 10]          # explicit list
-    BCs/right/value: {start: 300, stop: 900, num: 5}   # range → linspace
+    BCs/right/value: {start: 300, stop: 900, num: 5}   # range -> linspace
 convergence:
-  param: Mesh/uniform_refine
+  param: Mesh/uniform_refine # the one parameter refined (mesh or timestep)
   levels: [0, 1, 2, 3, 4]
   reference: finest          # finest | analytic  (for order fit)
 optimization:
@@ -99,25 +110,32 @@ optimization:
 
 qoi:                         # required for sweep/convergence
   csv: base_out.csv          # informational; per-case CSV is <file_base>.csv
-  columns: [peak_T, avg_T]   # CSV columns to extract
+  columns: [peak_T, avg_T]   # postprocessor CSV columns that answer the study question;
+                             # the input must already write them ([Outputs] csv = true)
   reduce: last               # last | max | min
+                             #   last for a steady answer; max/min for an extremum over time
+                             # The report asserts only computed quantities. Keep any threshold
+                             # ("where does peak_T exceed 900 K") as an observation the report
+                             # computes, not a pass/fail in the spec.
 
 smoke:                       # optional cheap local solve (else check-input only)
-  overrides: {Mesh/gen/nx: 4, Executioner/num_steps: 1}
+  overrides: {Mesh/gen/nx: 4, Executioner/num_steps: 1}   # coarse mesh, one step, so the
+                             # local smoke finishes in seconds
 
-budget:                      # required — fire-and-forget must be bounded
-  ceiling_core_hours: 200    # refuse-and-park if the worst-case estimate exceeds
+budget:                      # required, fire-and-forget must be bounded
+  ceiling_core_hours: 200    # refuse-and-park if the worst-case estimate exceeds;
+                             # check with `analysis estimate <id>` after writing
   max_concurrent_jobs: 16    # SLURM array throttle (%N)
   max_walltime_per_case: "02:00:00"
 
 resources:
-  nodes: 1
+  nodes: 1                   # one node unless the mesh needs more
   ntasks: 48
   partition: general         # short (6h) | general (7d) | hbm
 ```
 
 Parameters are MOOSE HIT paths applied as command-line overrides
-(`Materials/thermal/k=2.0`) — the input file is never edited.
+(`Materials/thermal/k=2.0`), so the input file is never edited.
 
 ## How it runs on HPC
 

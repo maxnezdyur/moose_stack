@@ -1,7 +1,9 @@
 ---
 name: new-feature
-description: Scaffold a new moose_stack feature workspace — creates a meta-repo worktree with feature branches on all three submodules, ensures the shared version-pinned conda env (one per moose-dev pin, reused across worktrees), a bootstrapped CodeGraph index, and a locally relinked combined-opt hydrated from the canonical MOOSE seed. Manual-invoke only.
+description: Scaffolds a moose_stack feature workspace under ~/projects/moose-worktrees/<feature> with matching branches on the meta-repo and all three submodules, the shared pinned conda env, a cloned CodeGraph DB, remapped clangd DBs, and a combined-opt hydrated from the canonical MOOSE seed. Use for "/new-feature <name>", "new feature worktree", "start a feature". Manual invoke only.
 disable-model-invocation: true
+argument-hint: "<feature-name>"
+effort: medium
 allowed-tools:
   - Bash(git worktree *)
   - Bash(git branch *)
@@ -22,60 +24,53 @@ allowed-tools:
 
 # /new-feature
 
-Every submodule always gets a worktree — no pairing prompt; matching branch names on all four repos (the meta-repo plus `moose`, `blackbear`, `isopod`) let the meta-repo bump pointers cleanly later. Use the app(s) you need, leave the rest untouched.
+Creates `~/projects/moose-worktrees/<feature>/` with branch `<feature>` on the meta-repo and on `moose`, `blackbear`, `isopod`, so the meta-repo can bump submodule pointers cleanly later. Local conda host only. The name is kebab-case; without one, ask. Any failed step stops the run with a report and leaves the workspace as it is.
 
-## Usage
+Four facts:
+- This skill does not run `git submodule update --init` in the worktree; the submodule worktrees are the source of truth.
+- This skill does not `mv` the tracked `moose_stack.code-workspace`; it copies it (the copy is gitignored).
+- This skill does not run `codegraph init` and does not copy `daemon.sock`, `daemon.pid`, `*-wal`, or `*-shm`; the worktree spawns its own daemon on first `sync`.
+- This skill does not tear down a partial workspace; the user decides what to clean up.
 
-/new-feature <feature-name>   # kebab-case (lowercase, hyphens); ask if missing
+## Commands, in order
 
-On failure at any step, stop and report — do not partially tear down; the user decides what to clean up.
+1. Preflight. `env_name` is the shared env (one per moose-dev pin; existing is expected). `<feature>` must exist on none of the four repos. `moose_stack` must sit at `main` and each submodule at `devel`, with the three submodule SHAs equal to the gitlinks in `moose_stack/main`; stop before any mutation if a pair differs. Retain the SHA and lease that `preflight` prints; both later helper calls take that exact lease.
+   ```bash
+   env_name=$(bash ~/projects/moose_stack/scripts/moose-env.sh ~/projects/moose_stack)
+   ```
+   ```bash
+   for r in moose_stack moose_stack/moose moose_stack/blackbear moose_stack/isopod; do
+     git -C ~/projects/$r branch --list <feature>
+   done
+   ```
+   ```bash
+   git -C ~/projects/moose_stack rev-parse HEAD main
+   for r in moose blackbear isopod; do
+     git -C ~/projects/moose_stack/$r rev-parse HEAD devel
+   done
+   git -C ~/projects/moose_stack ls-tree main moose blackbear isopod
+   ```
+   ```bash
+   python3 ~/projects/moose_stack/.claude/skills/new-feature/scripts/hydrate_moose_combined.py \
+     preflight --donor ~/projects/moose_stack/moose
+   ```
+   A missing or stale donor manifest fails here; refresh it after a clean, settled combined opt build with `python3 ~/projects/moose_stack/.claude/skills/new-feature/scripts/hydrate_moose_combined.py stamp --donor ~/projects/moose_stack/moose`.
 
-## Steps
-
-1. Validate and lease the canonical combined seed before creating anything:
-   - Run `hostname`; this workflow is for the local conda host, not an INL HPC host.
-   - Name is kebab-case.
-   - `~/projects/moose-worktrees/<feature>/` does not exist.
-   - Resolve the shared env name from the canonical stack (e.g. `moose-8.19` — one env per moose-dev pin, reused across worktrees; it existing already is expected, not an error):
-     ```bash
-     env_name=$(bash ~/projects/moose_stack/scripts/moose-env.sh ~/projects/moose_stack)
-     ```
-   - Branch `<feature>` exists on none of the four repos:
-     ```bash
-     for r in moose_stack moose_stack/moose moose_stack/blackbear moose_stack/isopod; do
-       git -C ~/projects/$r branch --list <feature>
-     done
-     ```
-   - The canonical checkouts are at their local base tips: `moose_stack` at `main`, and `moose`, `blackbear`, and `isopod` at `devel`. The three SHAs must also equal the submodule gitlinks recorded by `moose_stack/main`. Inspect and compare these outputs; stop before mutation if any pair differs, and never branch a new feature from an incidental topic `HEAD`.
-     ```bash
-     git -C ~/projects/moose_stack rev-parse HEAD main
-     for r in moose blackbear isopod; do
-       git -C ~/projects/moose_stack/$r rev-parse HEAD devel
-     done
-     git -C ~/projects/moose_stack ls-tree main moose blackbear isopod
-     ```
-   - The fixed donor `~/projects/moose_stack/moose` must pass the stamped-build preflight. This verifies its clean SHA, opt/unity profile, build environment, compiler, complete reusable inventory, hashes, binary provenance, and practical make no-op state. Missing, stale, or mixed seeds stop here rather than silently creating a cold workspace.
-     ```bash
-     python3 ~/projects/moose_stack/.claude/skills/new-feature/scripts/hydrate_moose_combined.py \
-       preflight --donor ~/projects/moose_stack/moose
-     ```
-     Retain the reported SHA and lease. Pass that exact lease to both later helper commands; a concurrent restamp or donor change then stops safely.
-2. Meta-repo worktree + specs home:
+2. Meta-repo worktree and specs home.
    ```bash
    mkdir -p ~/projects/moose-worktrees   # shared home for all feature worktrees
    git -C ~/projects/moose_stack worktree add ~/projects/moose-worktrees/<feature> -b <feature> main
    mkdir -p ~/projects/moose-worktrees/<feature>/specs   # home for blueprint.html (see /moose-blueprint)
    cp ~/projects/moose-worktrees/<feature>/moose_stack.code-workspace ~/projects/moose-worktrees/<feature>/<feature>.code-workspace
    ```
-   The workspace copy gives each worktree a distinguishable VS Code window title. It is gitignored (`*.code-workspace` except the tracked original); never `mv` the tracked `moose_stack.code-workspace` — that dirties the feature branch.
-   Submodule paths are left as empty directories (gitlinks only). Do NOT run `git submodule update --init` in this worktree — the submodule worktrees created next are the source of truth, and `update --init` would try to clone into those paths and conflict.
-3. Submodule worktrees, for each of `moose`, `blackbear`, `isopod`:
+
+3. Submodule worktrees, for each of `moose`, `blackbear`, `isopod`. Apps find MOOSE through `../moose`.
    ```bash
    rmdir ~/projects/moose-worktrees/<feature>/<sub>   # empty dir left by step 2, if present
    git -C ~/projects/moose_stack/<sub> worktree add ~/projects/moose-worktrees/<feature>/<sub> -b <feature> devel
    ```
-   Apps locate MOOSE via `../moose` (Makefile fallback) — the paired MOOSE worktree satisfies this.
-4. CodeGraph index: always **copy + sync**, never `codegraph init` — the ~1 GB DB stores relative paths, so cloning the meta-repo's DB and syncing the branch diff takes ~50s vs a multi-minute full rebuild. Skip (and note it) if `~/projects/moose_stack/.codegraph/codegraph.db` is absent.
+
+4. CodeGraph DB: copy and sync (about 50 s; a full rebuild takes minutes). Skip and note it when `~/projects/moose_stack/.codegraph/codegraph.db` is absent. Independent of step 5.
    ```bash
    # Flush main's WAL so a single-file copy is consistent, then APFS-clone the DB (instant, same volume)
    sqlite3 ~/projects/moose_stack/.codegraph/codegraph.db "PRAGMA wal_checkpoint(TRUNCATE);"
@@ -84,8 +79,8 @@ On failure at any step, stop and report — do not partially tear down; the user
    cp    ~/projects/moose_stack/.codegraph/.gitignore   ~/projects/moose-worktrees/<feature>/.codegraph/.gitignore
    ( cd ~/projects/moose-worktrees/<feature> && codegraph sync . )   # re-parses only changed files; prunes files absent from the worktree
    ```
-   Copy only `codegraph.db` + `.gitignore` — never `daemon.sock`/`daemon.pid`/`*-wal`/`*-shm`; the new worktree spawns its own daemon on first `sync`. The DB stays gitignored and machine-local (it exceeds GitHub's 100 MB limit and goes stale immediately). This step is independent of the conda env — safe to run concurrently with it.
-5. Conda env — shared, one per moose-dev pin (`$env_name` from step 1), never mutated by any worktree. The helper reuses the env when it exists (after verifying its exact package lock, packages, and compiler against the donor manifest) and otherwise creates it from the manifest's explicit lock, so C++ objects retain the same compiler and dependency ABI either way; it also requires the target MOOSE SHA/versioner file to match:
+
+5. Conda env: reused when present (verified against the donor manifest), created from the manifest lock otherwise.
    ```bash
    python3 ~/projects/moose_stack/.claude/skills/new-feature/scripts/hydrate_moose_combined.py \
      create-env \
@@ -94,7 +89,8 @@ On failure at any step, stop and report — do not partially tear down; the user
      --name "$env_name" \
      --lease <donor-lease>
    ```
-6. Hydrate MOOSE combined only. Run this immediately, before feature edits. The helper rechecks the donor lease and target cleanliness, stages APFS clones outside the target, rebases text metadata and header symlinks, installs only reusable compile triplets/generated inputs, recompiles path-sensitive objects, and relinks every library/executable locally in the target env. It then requires a compile/link-clean second make, target-local Mach-O/data paths, two combined canaries, and clean tracked Git state.
+
+6. Hydrate MOOSE combined, before any feature edit. A failure after installation begins leaves the workspace in place for diagnosis; no cold build fallback.
    ```bash
    conda run -n "$env_name" python \
      ~/projects/moose_stack/.claude/skills/new-feature/scripts/hydrate_moose_combined.py \
@@ -103,8 +99,8 @@ On failure at any step, stop and report — do not partially tear down; the user
      --target ~/projects/moose-worktrees/<feature>/moose \
      --lease <donor-lease>
    ```
-   Any environment mismatch stops before copying. Any failure after installation/build begins stops and preserves the workspace for diagnosis; do not tear it down or fall back to a cold build.
-7. clangd: seed the worktree's compile DB and index from the canonical stack. With shared envs the DBs differ from the donor's only in the repo-root path, so a one-substitution rewrite is exact. The copied `.cache/` keeps the env/libmesh/petsc header shards valid (identical absolute paths); clangd re-indexes only the worktree's own sources. Skip (and note it) if the root `compile_commands.json` is absent.
+
+7. clangd: remap the canonical compile DBs by repo-root path and clone `.cache/`. Skip and note it when the root `compile_commands.json` is absent. `/compile-commands` regenerates them later.
    ```bash
    src=~/projects/moose_stack
    dst=~/projects/moose-worktrees/<feature>
@@ -113,19 +109,9 @@ On failure at any step, stop and report — do not partially tear down; the user
    done
    [ -d "$src/.cache" ] && cp -c -R "$src/.cache" "$dst/.cache"
    ```
-   Per-submodule DBs are copied too so a later `/compile-commands` merge in the worktree starts from remapped inputs; regenerate anytime via `/compile-commands` (~5–10s per submodule).
-8. Report: workspace path, the `<feature>.code-workspace` file to open in VS Code, env name (and whether it was reused or created), the four branches created, CodeGraph status (or skipped), clangd DB/index status (seeded or skipped), donor SHA/lease, objects reused versus rebuilt locally, hydration timing/validation, and remind the user to `conda activate <env-name>`. State explicitly that BlackBear and Isopod were worktreed but not hydrated or built. Point to `docs/local.md` if the branch later bumps `moose`.
 
-## Notes
+## Report
 
-- Shared envs are read-only by convention: never `conda install`/`update` into a `moose-<M>.<DD>` env. If a feature branch later bumps moose-dev, its worktree's `scripts/moose-env.sh` output changes with it — create that new env per `docs/local.md` rather than mutating the old one.
-- Do NOT run `update_and_rebuild_libmesh.sh` / `update_and_rebuild_petsc.sh` / `update_and_rebuild_wasp.sh` here — those only run later, if the feature branch bumps those submodules.
-- Branches are local-only at create time; the first `git push -u origin <feature>` happens with the user's first pushed commit.
-- The ignored donor manifest is `moose/framework/build/hydration/combined-opt-v1.json`. Create or refresh it only immediately after a clean, settled combined opt/unity/header-symlink build:
-  ```bash
-  python3 ~/projects/moose_stack/.claude/skills/new-feature/scripts/hydrate_moose_combined.py \
-    stamp --donor ~/projects/moose_stack/moose
-  ```
-  `stamp` rejects source changes (including untracked files), mixed dependency metadata, and stale builds; it never repairs the seed. An individual object with a foreign embedded conda prefix is recorded as forced-local and omitted from hydration.
-- The settle probe (`require_settled_build`) runs `make -n`. MOOSE regenerates `MooseRevision.h` and `CombinedRevision.h` from `.git/HEAD` and `.git/index`, so make always treats them as out of date. A real `make` runs `get_repo_revision.py`, which leaves the file alone when the revision is unchanged, and nothing recompiles. A dry run never executes the recipe but assumes the target was remade, so every dependent looks stale. The probe therefore passes each revision header — the real path and its `build/header_symlinks/` alias — to `make -o`. Keep those `-o` flags: without them the probe always reports 4 phantom compiles plus 4 links, and `preflight`, `stamp`, and `hydrate` all fail on a settled seed.
-- The helper finds `conda` through `CONDA_EXE`, `PATH`, `CONDA_ROOT`, then the usual install roots. A local setup that defers `conda shell.zsh hook` behind a shell function gives a non-interactive shell no `conda`, so do not rely on `PATH` alone.
+Workspace path; the `<feature>.code-workspace` file to open in VS Code; env name and whether it was reused or created; the four branches created; CodeGraph status (or skipped); clangd DB/index status (seeded or skipped); donor SHA/lease; objects reused versus rebuilt locally; hydration timing/validation; a reminder to `conda activate <env-name>`. State that BlackBear and Isopod were worktreed but not hydrated or built. Point to `docs/local.md` if the branch later bumps `moose`. Next steps: `/moose-blueprint` in the worktree, then `/moose-build`, then `/moose-ship`.
+
+Host: !`hostname`

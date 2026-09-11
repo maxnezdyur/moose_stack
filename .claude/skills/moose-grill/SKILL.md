@@ -1,43 +1,36 @@
 ---
 name: moose-grill
-description: Pre-coding grill for MOOSE C++ work that picks the base class by exploring MOOSE's class hierarchy with codegraph, challenges the pick, confirms the contract (overrides + validParams + coupling), and surfaces pitfalls before code is written. Use directly via /moose-grill or as the grill phase of /moose-blueprint.
+description: Grills a planned MOOSE C++ change against the real class hierarchy before code exists. Picks the base class with codegraph, confirms overrides, validParams shape, and coupling with the user, captures the math verbatim, and prints a plan. Use for "/moose-grill <plan>", "which base class should this derive from", "grill my kernel plan", or as the grill phase of /moose-blueprint.
+argument-hint: "<planned C++ work>"
 ---
 
 # /moose-grill
 
-Stress-test a MOOSE C++ plan against MOOSE's **actual class hierarchy**, explored live with codegraph: pick the base class, confirm overrides + `validParams` + coupling, surface pitfalls — grounded in the real source rather than a static guide. Composes with `/moose-blueprint` (which delegates its base-class grilling here) or runs standalone.
+Stress-test a MOOSE C++ plan against the class hierarchy in this checkout, explored live with codegraph rather than remembered. The output is a printed plan with a confirmed base class, contract, coupling, and math that `/moose-blueprint` folds into `specs/blueprint.html`; a standalone run copies the plan wherever it is needed. This skill prints only. It writes no files and no code, and reading the codebase is its only source interaction.
 
-## Usage
+The plan is `$ARGUMENTS`. When it is empty, ask "What MOOSE C++ work are you planning?" with `AskUserQuestion` first.
 
-```
-/moose-grill <freeform plan>
-```
+## Rounds
 
-e.g. `/moose-grill add a kernel for thermal-anisotropic conduction in solid_mechanics`. If `$ARGUMENTS` is empty, ask via `AskUserQuestion`: "What MOOSE C++ work are you planning?"
+The grill is a design tree: the base class decides the required overrides, which decide the `validParams` shape and coupling, which decide the pitfalls and the math. Each round asks every question whose prerequisites are settled, in one `AskUserQuestion` call (up to 4 questions, recommended answer as the first option); a question that depends on an answer still open this round waits for the next one. Round 1 is usually only the base-class pick, plus the repo or module when that is ambiguous; settling it unblocks the contract, coupling, and pitfall questions, which go out together as one batched round.
 
-## Cadence — frontier rounds
+Facts come from the codebase, not from the user. While a round is out, spawn `moose-scout` agents (one angle each, all in one message) for lookups later rounds need, such as sibling `validParams` shapes, representative subclass reads, and existing similar objects; keep fast `codegraph_explore` calls inline. A scout still running is an unsettled prerequisite: only the questions downstream of it wait. The grill is done when no question remains and nothing is silently assumed.
 
-Model the grill as a **design tree**: every decision branches into the decisions that hang off it (base class → required overrides → validParams/coupling → pitfalls → math). Work the tree in **rounds**. The **frontier** is every question whose prerequisites are already settled — the questions you can ask *now* without guessing at answers you haven't heard yet. Each round, ask the whole frontier in one `AskUserQuestion` call (up to 4 questions; recommended answer as the first option), then wait. A question whose answer depends on another question still open this round belongs to a *later* round. Round 1 is usually just the base-class pick (plus repo/module if ambiguous); settling it unblocks most contract, coupling, and pitfall questions — ask those as one batched round, not one or two at a time.
+## What each round settles
 
-**Facts are yours to find, never the user's.** While a round is out with the user, dispatch `moose-scout` (one angle per scout, run in parallel) for lookups later rounds will need — sibling `validParams` shapes, representative subclass reads, existing similar objects — and keep fast codegraph calls inline. A still-running scout is an unsettled prerequisite: only the questions downstream of it wait; ask the rest of the frontier now. The session is done when the frontier is empty — every branch visited, nothing silently assumed.
+Candidates. Infer the object kind (Kernel, IntegratedBC, Material, Postprocessor, UserObject, Action, Constraint, ...) and query `codegraph_explore "<ObjectKind> base class <key virtual>"`, where the key virtual is `computeQpResidual` for kernels, `computeQpValue` for aux kernels, and `execute` for postprocessors and user objects; then `codegraph node <BaseClassName>` (CLI, via Bash) for the declared virtuals and subclasses. Hold plausible alternatives (`Kernel` vs `IntegratedBC`, AD vs non-AD) as candidates. When nothing fits, widen the search (another key virtual, another namespace) before forcing a pick; when it still does not fit, ask the user to name a base or run a free-form grill and print `Base class: undetermined (free-form grill)` so the caller knows the hierarchy did not cover the case.
 
-## Flow
+Base class. Present each candidate with a one-line "use this when ..." derived from what one or two of its existing subclasses do, and confirm the pick. Record it with its repo-relative `path:line`; it is the spine of the rest of the grill.
 
-**Find candidates.** Infer the object kind (Kernel, IntegratedBC, Material, Postprocessor, UserObject, Action, Constraint, …), then pull candidate base classes with codegraph: `codegraph_explore "<ObjectKind> base class <key virtual>"` (`computeQpResidual` for kernels, `computeQpValue` for aux, `execute` for postprocessors) to surface the base plus representative implementations, then `codegraph node <BaseClassName>` (CLI, via Bash) for the declared virtuals and subclasses. Hold plausible alternatives (`Kernel` vs `IntegratedBC`, AD vs non-AD) as candidates.
+Contract. Read the base plus one representative subclass with `codegraph node <Class>`: the required overrides and what each computes, the `validParams` shape from the base and a sibling (`addRequiredCoupledVar`, `addParam<MaterialPropertyName>`, ...), and optional overrides only where the plan calls for them. "Make it exactly like `<Class>`" means mirror its structure and public API only: deprecated parameters, compatibility shims, and known defects are dropped, and each omission is recorded under Pitfalls considered.
 
-**Pick the base class.** Present each candidate with a one-line "use this when …" derived from what its existing subclasses actually do (read 1–2 via codegraph). Confirm via `AskUserQuestion` — this is round 1, and usually the whole round: nearly every other question hangs off the pick. While the pick is out with the user, start scouts for facts the next round will need regardless of the answer (e.g. `validParams` shape shared by all candidates). If nothing fits cleanly, widen the search (different key virtual, different namespace) before forcing a pick. Capture the pick with its repo-relative `path:line` — it's the spine of the rest of the grill.
+Coupling and pitfalls. Load the `moose-code-standards` skill for this round. Settle what the class consumes (variables, material properties, functors) and produces. For a dual-flavor object ask which shape applies: one `is_ad`-templated class (the default), a separate pair, AD-only, or dropped-in-AD (that skill's "AD and non-AD variants" section). Ask which object names, indices, or physical assumptions the design would hardcode; each becomes a typed name parameter or a documented assumption (its "Input parameters" section). Raise the base-class pitfalls the standards skill does not cover, such as `usingMooseObjectMembers` in templated bases, member initialization order, and `_qp` indexing, as "does this apply, and how does the plan avoid it?"; skip only the ones that clearly do not apply.
 
-**Walk the contract.** Read the base plus one representative subclass (`codegraph node <Class>`): required overrides and what each computes; `validParams` shape from the base and a sibling (`addRequiredCoupledVar`, `addParam<MaterialPropertyName>`, …); optional overrides only where the plan suggests they're needed.
+Math. Ask once: "Write the residual or contribution form in plain math or LaTeX; what does `computeQpResidual` (or the equivalent override) return?" Push back on hand-waving, because vague math becomes vague code. Codegraph shows structure, not whether the physics is right: the user owns the math, and it goes into the plan verbatim and unvalidated.
 
-**Mirror structure, not debt.** Treat "make it exactly like `<Class>`" as mirroring structure and public API only — drop deprecated parameters, compatibility shims, and known defects — and record each omission under **Pitfalls considered**.
+## Output
 
-**Walk coupling + pitfalls.** These questions are mostly independent once the base class is settled — batch them into one round (spill into a second `AskUserQuestion` call only past 4 questions). What the new class consumes (variables, material properties, functors) and produces; confirm AD vs non-AD picks — for a dual-flavor object, which shape applies: one `is_ad`-templated class (the default), a separate pair, AD-only, or dropped-in-AD (moose-code-standards § AD and non-AD variants). Ask which object names, indices, or physical assumptions the design would hardcode — those become typed name parameters or documented assumptions (moose-code-standards § Input parameters). Surface the pitfalls that apply to this base class — AD vs non-AD residual typing, `usingMooseObjectMembers`, member init order, `_qp` indexing, registration — asking "does this apply / how does your plan avoid it?" Skip ones that obviously don't apply, but err toward asking.
-
-**Capture the math verbatim.** Ask once: "Write the residual / contribution form in plain math or LaTeX — what does `computeQpResidual` (or your equivalent) return?" Push back on hand-waving — vague math becomes vague code. Codegraph shows structure, not whether the physics is right; the user owns the math, and it goes into the plan verbatim, unvalidated.
-
-## Output — the plan
-
-When all picks are clear, print this structured plan to terminal:
+When every round is settled, print this plan to the terminal with these headings and field names:
 
 ```md
 ## Plan: <short feature name>
@@ -47,13 +40,11 @@ When all picks are clear, print this structured plan to terminal:
 **Reference subclass(es):** `<ExistingClass>` (<path:line>)
 
 ### Required overrides
-- `methodA() override` — computes ...
-- `methodB() override` — computes ...
+- `methodA() override` -- computes ...
 
 ### validParams shape
-- `param_name` (Type) — purpose
-- `coupledVar("name")` — purpose
-- ...
+- `param_name` (Type) -- purpose
+- `coupledVar("name")` -- purpose
 
 ### Coupling
 - Reads variable: `<var>` (AD / non-AD)
@@ -61,21 +52,12 @@ When all picks are clear, print this structured plan to terminal:
 - Writes material property: `<prop>` (consumed by ...)
 
 ### Residual / contribution math
-<verbatim from the math step>
+<verbatim from the math round>
 
 ### Pitfalls considered
-- <pitfall summary> — mitigation: ...
-- ...
+- <pitfall> -- mitigation: ...
 
 ### Predicted files to touch
 - <repo>/include/<area>/<NewClass>.h
 - <repo>/src/<area>/<NewClass>.C
 ```
-
-Print only — never write files or code; folding the plan into `specs/blueprint.html` is `/moose-blueprint`'s job, and standalone users copy it where they need it. Reading the codebase (codegraph, or `Grep`/`Glob` fallback) is the only source interaction.
-
-## Fallbacks
-
-- **No base class matches** → widen the codegraph search; if still unclear, ask the user to name one, or run a free-form grill and emit `Base class: undetermined (free-form grill)` so the caller knows the hierarchy didn't cover this case.
-- **codegraph unavailable** (no `.codegraph/` index) → `Grep`/`Glob` over `*/include/**` and `*/src/**` for the base class and subclasses; same flow.
-- **User abandons mid-grill** → no plan emitted: "Grill cancelled — no plan saved."

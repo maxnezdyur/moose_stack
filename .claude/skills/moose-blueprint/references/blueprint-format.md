@@ -1,139 +1,79 @@
 # blueprint.html format
 
-Authoritative format for `/moose-blueprint` **step 6**. The inputs are the `moose-grill` plan,
-the merged `moose-scout` findings, and the user's recorded decisions; the output is the single
-deliverable `specs/blueprint.html`. The HTML skeleton comes from this skill's own
-`references/plan-template.html` (a pinned copy of the global blueprint template) — it ships **no
-CSS**, so authoring the whole `<style>` block is part of step 6: a `:root` palette defining
-`--bg`, `--surface`, `--line`, `--muted`, `--impl`, `--test`, `--test-bg`, `--doc`, `--gate`,
-`--gate-bg`, `--mock` (the snippets below and in `work-plan-format.md` consume all eleven), plus
-rules for the template's own classes — `.meta`, `.files`, `.tag`, `.phase`, `.checklist`,
-`.status`, `.loop`, `.qa-answer`. `.status` is the marker `/moose-build` flips, so style it to
-read as a marker at a glance. This file defines how to fill the skeleton.
+Inputs: the `moose-grill` plan, the merged `moose-scout` findings, and the user's recorded
+decisions. Output: `<worktree-root>/specs/blueprint.html`, one self-contained page filled from
+`plan-template.html`. The template ships its own `<style>` block and labels every slot with an
+HTML comment; fill the slots and every `{{...}}` token. Tokens inside `<!-- -->` comments
+(image slots) may remain; any other `{{` left in a contract block fails the check.
 
-## Hard rules (non-negotiable)
+## Contract blocks
 
-- **Pure formatter — never re-explore.** Codegraph already ran (`moose-grill` + `moose-scout`)
-  to produce the plan. Step 6 only formats it — read only the local template and `/moose-build`'s
-  `standing-gates.md` (below); never invoke the generic blueprint skill's workflows (its Analyze /
-  Explore / Design steps are generic grep, no codegraph, and its build workflow belongs to
-  /moose-build's territory).
-- **Fill every `{{placeholder}}`.** The only `{{...}}` allowed to remain in the output are the
-  image-slot tokens *inside* `<!-- ... -->` comments (blueprint leaves these for manual fill).
-- **Self-contained.** All CSS inline; **no external `http(s)` stylesheet/script links**. Math is
-  rendered offline by `inline-katex.js` (see below) — never add a CDN `<script>`.
-- **Preserve every `file:line` citation verbatim** from the Reuse decisions.
-- **Status markers stay `[]` and status chips stay `idle`.** The build has not run at design time.
-- **Standing gates are render-only.** Read
-  `.claude/skills/moose-build/references/standing-gates.md` (from this file:
-  `../../moose-build/references/standing-gates.md`) at authoring time — every time — and render
-  the `#work-plan` gate strips from what it says right now, **verbatim**. It is the gates' one
-  home and it grows; a retyped snapshot goes stale and the reviewer then reviews gates that no
-  longer exist. Gates never appear in the JSON island, and a blueprint cannot add, remove,
-  reorder, or alter a gate.
-
-## Contract blocks (the machine interface)
-
-`/moose-build` parses seven blocks, each identified by an exact `id` attribute. Attach each `id`
-to the template container that carries that content — placement in the visual layout is free,
-and content may additionally appear elsewhere (e.g. per-phase Testing Strategy), but the block
-carrying the `id` is the authoritative, complete copy. If the template layout has no natural
-home for a block, add a `Notes` subsection for it.
+`/moose-build` reads seven blocks through `slice_blueprint.py`, each by its exact `id`. The
+template already places them; the element carrying the `id` is the complete, authoritative
+copy, and content may repeat elsewhere.
 
 | id | Complete content required |
 | --- | --- |
-| `#summary` | prose (what / why / user-facing knob) + **Repo** (`moose` \| `moose/modules/<m>` \| `blackbear` \| `isopod`) + **Object kind** (Kernel / BC / Material / Postprocessor / Action / UserObject / …) + **Predicted files to touch**, split new vs existing — source, `test/`, `unit/` (when unit tests were agreed), and doc paths |
-| `#physics` | equation (LaTeX or plain math, every symbol defined) + **validParams shape** (param name, `Type`, description; `coupled("var")` entries) + one-line **residual / contribution form** (`computeQpResidual`, `computeValue`, `execute`, …) |
-| `#reuse-decisions` | one entry per scout finding: `file_path:line` — `ClassName`, what it does (one sentence), **Decision** (Reuse / Extend / Parallel — for Parallel include the user's justification), why; if none: the negative record ("Searched for X, Y, Z — nothing matched."); failed scouts noted as "Scout failed: <reason>" |
-| `#test-plan` | one entry per test: name, Tester kind (`Exodiff` / `CSVDiff` / `RunException` / … — or `gtest` for unit tests under `unit/`), asserted behavior (an observable consequence, not "runs without error"), mutation rationale (if `<line of new code>` were no-op'd, this test fails because …) |
-| `#doc-plan` | **Needed:** yes / no; page path (`<repo>/doc/content/source/<area>/<NewClass>.md`); public surface (which params/behaviors are documented API); **Existing coverage:** every page already documenting the feature, plus the placement/consolidation the user chose |
-| `#out-of-scope` | explicit non-goals, one per line |
-| `#work-plan` | work units + dependency edges + JSON island `#work-plan-data`, per [`work-plan-format.md`](work-plan-format.md) — grouped unit cards / chips / read-only standing-gate strips |
+| `#summary` | prose (what, why, user-facing knob) + `Repo:` (`moose` \| `moose/modules/<m>` \| `blackbear` \| `isopod`) + `Object kind:` (Kernel, BC, Material, Postprocessor, Action, UserObject, ...) + predicted files to touch as `<code>` paths, split new vs existing: source, `test/`, `unit/` when unit tests were agreed, and doc paths |
+| `#physics` | the equation with every symbol defined + validParams shape (param name, `Type`, description; `coupled("var")` entries) + a one-line residual or contribution form (`computeQpResidual`, `computeValue`, `execute`, ...) |
+| `#reuse-decisions` | a table with a Decision column, one row per scout finding: `file_path:line`, `ClassName`, what it does in one sentence, Decision (Reuse, Extend, or Parallel with the user's justification), why. No finding: one row with the negative record ("Searched for X, Y, Z; nothing matched"). A failed scout: "Scout failed: <reason>" |
+| `#test-plan` | a table, one row per test: name in `<code>`, Tester kind (`Exodiff`, `CSVDiff`, `RunException`, ..., or `gtest` for tests under `unit/`), asserted behavior (an observable consequence, not "runs without error"), mutation rationale (if this line of new code were a no-op, this test fails because ...) |
+| `#doc-plan` | `Needed: yes` or `Needed: no`; page path in `<code>` (`<repo>/doc/content/source/<area>/<NewClass>.md`); public surface (which params and behaviors are documented API); `Existing coverage:` every page already documenting the feature and the placement or consolidation the user chose |
+| `#out-of-scope` | explicit non-goals, one `<li>` each |
+| `#work-plan` | unit cards, chips, gate strips, and the `#work-plan-data` JSON island per [`work-plan-format.md`](work-plan-format.md) |
 
-## Template slot mapping
+The parser reads the `Repo:`, `Object kind:`, and `Needed:` labels literally, takes test names
+and file paths from `<code>`, and reads the reuse and test blocks as tables. Keep the template's
+labels and columns.
 
-| Content | `blueprint` template target |
-| --- | --- |
-| Feature name | `{{PLAN_TITLE}}` |
-| Summary prose | `Purpose` (one-line intent) + `Problem` (why needed / what's missing) + `Solution` (the object + approach) |
-| Repo + Object kind | stated in `Solution`; also reflected in the title |
-| Predicted files to touch | `Relevant Files` — split: files that already exist and are reused/templated (the Reuse-decision files, with their `file:line`) → **Existing**; brand-new files this feature creates → **New** |
-| Equation | `Notes` → "Physics & signature". Keep LaTeX/plain math verbatim; define each symbol. |
-| validParams shape | `Notes` → "Physics & signature" → params list/table |
-| Residual / contribution form | `Notes` → "Physics & signature" |
-| Reuse decisions (one per finding) | `Notes` → "Reuse decisions": `file:line`, class, what it does, Decision, Why — citations verbatim. Cited files also appear under Relevant Files → Existing. |
-| Test plan (one per test) | the `#test-plan` block, placement per **Contract blocks** |
-| Doc plan | the `doc` unit in `#work-plan`; note in `Solution` if `Needed: yes` |
-| Out of scope | `Notes` → "Out of scope" |
-| Work plan | its own section, directly after `#summary` |
+## Rules
 
-## Code ↔ math pairing (Physics & signature)
+- Every `file:line` citation appears verbatim as the scout reported it.
+- The page is self-contained: no external `http(s)` stylesheet or script, and no CDN math
+  script; `inline-katex.js` strips any such link it finds.
+- Status markers: `[]` idle, `[wip]` running, `[x]` done, `[f]` failed; chips use the same four states. Everything is idle at design time; `/moose-build` flips them.
+- Gate strips are render-only. Read
+  `<meta-root>/.claude/skills/moose-build/references/standing-gates.md` at write time and
+  render each row for the strip's gate verbatim (id, criterion, check). Gates never appear in
+  the JSON island, and a blueprint does not add, remove, reorder, or alter a gate.
+- The template has no per-phase task checklist; `#work-plan` is the build plan.
 
-When the physics content supplies **both** a MOOSE pseudocode form (a `computeQpResidual` /
-`computeQpJacobian` / contribution expression, e.g. `_test[_i][_qp] * (...)`) **and** a math form,
-render them together as a `.physics-pair` block so the reader sees implementation ↔ equation:
+## Physics pairing
 
-```html
-<div class="physics-pair">
-  <div class="pp-code"><div class="pp-label">intended computeQpResidual()</div>
-    <pre><code>R_k = _test[_i][_qp] * (...);</code></pre></div>
-  <div class="pp-math"><div class="pp-label">residual form</div>
-    $$ R_k = \psi_i\,[\,\rho\,c_p\,(\mathbf{n}\cdot\mathbf{v})\,n_k + \dots\,] $$</div>
-</div>
-```
+When `#physics` holds both a MOOSE pseudocode form (a `computeQpResidual`,
+`computeQpJacobian`, or contribution expression) and its math form, render them side by side in
+the template's `.physics-pair` block so the reader sees implementation beside equation. Pair only
+residual, Jacobian, and contribution overrides; `validParams`, registration, constructor
+member-init, and plumbing are never paired. When only one half exists, render that half alone
+and do not invent the other.
 
-with this CSS in the `<style>` block:
+## Math
 
-```css
-.physics-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: stretch; margin: 1rem 0; }
-@media (max-width: 760px) { .physics-pair { grid-template-columns: 1fr; } }
-.physics-pair .pp-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; margin-bottom: .35rem; }
-.physics-pair pre { margin: 0; height: 100%; }
-.physics-pair .pp-math { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: .7rem .9rem; display: flex; flex-direction: column; justify-content: center; }
-```
-
-**When it makes sense:** residual / Jacobian / contribution-computing overrides only. **Never** pair
-`validParams`, registration, ctor member-init, or plumbing. If only one half exists (math
-without a code sketch, or vice versa), render that half normally — **do not fabricate** the other.
-
-## KaTeX rendering (self-contained, no install)
-
-Write math as `$$…$$` (display) / `\(…\)` (inline) **in prose, never inside `<pre>`/`<code>`**. After
-authoring + saving the HTML, run:
+Write `$$...$$` (display) and `\(...\)` (inline) in prose only, never inside `<pre>`, `<code>`,
+`<script>`, or `<style>`. After saving, run:
 
 ```
-node <skill-dir>/references/inline-katex.js <worktree-root>/specs/blueprint.html
+node <meta-root>/.claude/skills/moose-blueprint/references/inline-katex.js <worktree-root>/specs/blueprint.html
 ```
 
-It `require()`s MOOSE's vendored KaTeX 0.13.5 (`<worktree>/moose/framework/doc/content/contrib/katex/`,
-no npm install), pre-renders each equation to static HTML, and base64-inlines the woff2 fonts —
-leaving one offline, self-contained file that renders even with JS disabled, matching the MOOSE docs.
-Graceful degrade: if KaTeX isn't found, LaTeX is left as plain text (still a valid blueprint).
+It renders each equation with MOOSE's vendored KaTeX
+(`<worktree-root>/moose/framework/doc/content/contrib/katex/`, no npm install) and inlines the
+fonts, so the page renders offline and matches the MOOSE docs. When KaTeX is absent, the LaTeX
+stays as plain text and the blueprint is still valid. It is safe to re-run after a resume.
 
-## Metadata header
+## Metadata
 
-- Every field except `created` is an append-only comma-separated list — append on resume, never overwrite
-- `created` = `date -u +%Y-%m-%dT%H:%M:%SZ` at generation time; `modified` = same (initial)
-- `commits` = — (none at design time)
-- `agent name` = e.g. `Claude via /moose-blueprint`
-- `session id` = current session id
-- `back refs` = —
-- `forward refs` = —
+`created` = `date -u +%Y-%m-%dT%H:%M:%SZ` at first write and is never overwritten. `modified`
+starts equal to `created`; `commits`, `back refs`, and `forward refs` start as `-` (nothing
+exists at design time); `agent name` is `Claude via /moose-blueprint`. On resume, append to the
+`modified`, `commits`, and `agent name` lists (comma-separated). There is no session id field.
 
-## Work plan (replaces the template's "Implementation Phases" checklist)
+## Validation commands
 
-The `#work-plan` block IS the build plan — author it per
-[`work-plan-format.md`](work-plan-format.md), which owns unit derivation, edges, cards, chips,
-and gate strips. Do **not** also author the template's per-phase task checklists: drop the
-template's `#phases` section entirely.
-
-## Global Validation Commands
-
-From the Test plan: the run commands / Testers that prove the feature end-to-end (e.g.
-`./run_tests --re=<names>`) plus "build clean". Markers `[]`.
+From `#test-plan`: the `./run_tests --re=<names>` commands that prove the feature end to end,
+plus build clean. Markers `[]`.
 
 ## Questionables
 
-Surface each explicit open question, deferred item, or "parked pending …" decision from the
-grill in the Questionables section. `QUESTIONABLE` defaults true in the blueprint skill, so
-the section is included.
+One `<details>` per open question, deferred item, or parked decision from the grill, with the
+assumption or rationale in the answer. When there are none, one entry that says so.

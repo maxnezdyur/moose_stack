@@ -1,92 +1,94 @@
 ---
 name: moose-blueprint
-description: Takes a vague feature idea, grills the user against MOOSE-specific axes (object kind, inputs/outputs, physics/math), spawns `moose-scout` agents to scout for reusable code, and writes a structured, self-contained `specs/blueprint.html` that `/moose-build` consumes.
+description: Turns a feature idea into specs/blueprint.html for /moose-build. Grills the user through moose-grill, scouts moose, blackbear, and isopod for reusable code with moose-scout agents, halts on near-matches, and writes the seven-block blueprint. Use for "/moose-blueprint <idea>", "plan this MOOSE feature", "write a blueprint", "spec this kernel, material, or postprocessor".
 disable-model-invocation: true
+argument-hint: "<feature idea>"
+effort: high
 ---
 
 # /moose-blueprint
 
-Convert a vague feature idea into a concrete `specs/blueprint.html` for `/moose-build`: grill the user, scout the codebase for reuse, halt on near-matches, stop at a written blueprint. Does NOT auto-build — the human review pass on the blueprint is load-bearing.
+Goal: a `specs/blueprint.html` that a human can review in a browser and that `/moose-build`
+can parse. The blueprint is the only file this skill writes; it edits no code, runs no builds,
+tests, or formatters, does not commit or push, and does not invoke `/moose-build`. The human
+review of the written blueprint is the hand-off.
 
-## Usage
+`$ARGUMENTS` is the idea. When it is empty, ask for it with `AskUserQuestion`.
+
+## Preconditions
+
+This skill runs inside a `/new-feature` worktree: walk up from the cwd to a directory whose
+`.git` is a file (a worktree, not a clone) beside `moose/`, `blackbear/`, and `isopod/`.
+Outside one, refuse with "Run /new-feature first; this skill only runs inside a feature
+worktree." That directory is `<worktree-root>` below. It owns its own `.claude/`, so it is
+also `<meta-root>` for every script path here.
+
+When `<worktree-root>/specs/blueprint.html` exists, ask with `AskUserQuestion`: Resume (keep
+it, grill only the blocks that are empty or placeholders), Restart (overwrite at the write
+step), or Cancel. Placeholder blocks are what Resume grills, so the validator's "is a
+placeholder" lines are expected on an unfinished blueprint. A blueprint whose contract ids are
+missing or whose `#work-plan-data` island does not parse is restarted with a warning.
+
+## Grill
+
+`Skill(moose-grill)` with the idea. It returns the base class, required overrides, validParams
+shape, coupling, residual math, pitfalls, and predicted files. Consume that plan as given and
+do not ask the user what the codebase can answer. If it returns `Base class: undetermined`,
+grill three axes yourself for that round: object kind and base class, inputs and outputs,
+physics and math. Re-invoke it only when a scout finding contradicts the plan (a better base
+class, for example); otherwise carry the plan forward and grill the remaining gaps directly.
+
+Decomposition into work-plan units is this skill's job: one `implement` unit per new class
+from the predicted files, edges only for hard dependencies (derives from, consumes a property
+another new unit declares, or touches the same file), and ambiguous edges confirmed with the
+user during the grill.
+
+## Scout
+
+Spawn one `moose-scout` per independent search angle (`subagent_type: "moose-scout"`,
+`run_in_background: true`, all `Agent` calls in one message), at most four per round; queue
+further angles for the next round. Each brief carries the artifact kind (`cpp`, `test`,
+`unit`, `doc`), the operator or equation in full, the distinguishing properties that separate
+it from name-cousins (coefficient rank, AD vs non-AD, subdomain vs whole mesh), the scope (a
+repo or the worktree), negative criteria (what does not count, including grill findings already
+ruled out), and the sibling angles other scouts cover. An angle briefed by keywords alone comes
+back with naming false positives. Tell the user in one line which angles are running, keep
+grilling while they run, and merge findings as they land.
+
+## Reuse halt
+
+An exact or near match stops the loop: surface `file:line` and one line of what it does, then
+decide with `AskUserQuestion` between reuse as-is, extend, write parallel (the user gives a
+one-sentence justification that goes in the blueprint), or abandon the idea. A close but
+indirect match is recorded and the next round asks extend or write fresh. No match is recorded
+as a negative result naming what was searched. When the plan restructures only one side of an
+AD/non-AD pair, record the divergence, the unification follow-up, and the existing users that
+follow-up would migrate. Findings are advisory; the user owns every reuse decision. A scout
+that returns BLOCKED or nothing is noted as "Scout failed: <reason>" under reuse decisions and
+never filled in from memory.
+
+## Converge and write
+
+Repeat grill, scout, halt with tighter questions until each of the seven contract blocks
+(`references/blueprint-format.md`) can be filled with at least one specific fact. Then offer
+with `AskUserQuestion`: write it, keep grilling about a named section, or cancel ("No blueprint
+saved. Re-run when ready.").
+
+Writing is formatting, not exploring: fill `references/plan-template.html` per
+`references/blueprint-format.md` and `references/work-plan-format.md` from the grill plan, the
+scout findings, and the user's decisions. The only file read outside this skill at write time
+is `<meta-root>/.claude/skills/moose-build/references/standing-gates.md`, for the gate strips.
+`mkdir -p <worktree-root>/specs`, save, render the math with
+`node <meta-root>/.claude/skills/moose-blueprint/references/inline-katex.js <worktree-root>/specs/blueprint.html`,
+then validate:
 
 ```
-/moose-blueprint <freeform idea>
+python3 <meta-root>/.claude/skills/moose-build/scripts/slice_blueprint.py --check <worktree-root>/specs/blueprint.html
 ```
 
-e.g. `/moose-blueprint postprocessor that integrates strain energy over a subdomain`. If the argument is empty, ask via `AskUserQuestion`.
+Fix each reported problem and re-run until it prints `OK`.
 
-Requires a `/new-feature` worktree: walk up from CWD to a `.git` **file** (submodule worktrees have a `.git` *file*, not directory) beside a `moose/`+`blackbear/`+`isopod/` layout; otherwise refuse: *"Run /new-feature first; this skill only runs inside a feature worktree."*
+## Done
 
-## 1. Bootstrap
-
-If `<worktree-root>/specs/blueprint.html` already exists, `AskUserQuestion`: **Resume** (load it, grill only the sections whose contract blocks are empty or placeholder) / **Restart** (overwrite at step 6) / **Cancel**. A malformed blueprint on resume → restart with a warning.
-
-## 2. Grill — delegate to `/moose-grill`
-
-Invoke `Skill(moose-grill)` with the user's idea. It explores MOOSE's class hierarchy with codegraph and returns a structured plan: `Repo`, `Base class`, `Reference subclass(es)`, `Required overrides`, `validParams shape`, `Coupling`, `Residual / contribution math`, `Pitfalls considered`, `Predicted files to touch`. Multi-class decomposition into `#work-plan` units is THIS skill's job, not the grill's: derive one implement unit per class from the predicted files, draw hard dependency edges only (derives-from / consumes a property another new unit declares / same file), and confirm ambiguous edges with the user during the grill loop. Consume that plan directly — don't re-grill those axes, and don't ask the user things the codebase can answer. If it returns `Base class: undetermined`, fall back to a three-axis grill (object kind + base class, inputs/outputs, physics/math) for that round only.
-
-## 3. Scout — parallel moose-scouts
-
-Decompose the feature into independent **search angles** and spawn one background `moose-scout` per angle (`subagent_type: "moose-scout"`, `run_in_background: true`, all `Agent` calls in one message). Separate angles when the feature spans multiple object kinds, multiple repos, distinct vocabularies (mathematical vs user-facing name — they live in different parts of the tree), or independent implementation-side vs test-side questions; one scout suffices for a single-kind, single-repo, no-synonym or tiny feature. Cap at ~4 — beyond that findings overlap and you can't hold them all in context when they return; queue extras for the next round.
-
-Build each prompt from [`references/scout-prompt.md`](references/scout-prompt.md) — it owns the three jobs every prompt must do; a prompt that skips them comes back with naming false positives.
-
-Tell the user in one line which angles are fanning out, then keep grilling while they run. Merge findings as each scout lands; block on them only at the reuse-halt check.
-
-## 4. Reuse halt
-
-When scouts report:
-
-- **Exact or near-exact match** → STOP the loop. Surface it (file:line + one-line description) and force a decision via `AskUserQuestion`:
-  - **Reuse as-is** — no new code; blueprint captures only test/doc work
-  - **Extend** — add a parameter, derived class, template specialization, virtual hook
-  - **Write parallel** — user must give a one-sentence justification (recorded in the blueprint)
-  - **Abandon idea** — feature already exists, no work needed
-- **Close but not direct** → record it; next round asks "extend X or write fresh?"
-- **No match** → record the negative result ("searched for X, Y, Z — nothing found") so the blueprint proves the search happened.
-- **Counterpart on the other side of an AD/non-AD pair** → if the plan restructures only one side, record the divergence, the unification follow-up, and the existing users that follow-up would migrate.
-
-Scout findings are advisory — the user owns reuse decisions, recorded in the blueprint. If a scout returns BLOCKED or empty, continue without it that round and note "Scout failed: <reason>" under Reuse decisions; don't fabricate findings.
-
-## 5. Loop until converged
-
-Repeat grill→scout→halt with progressively tighter questions. Re-invoke `moose-grill` only if a scout finding contradicts the plan (e.g. reuse-halt found a better `IntegratedBC` base than the picked `Kernel`); otherwise carry the plan forward and grill the math/inputs gaps directly. Ready = every one of the seven contract blocks (below) can be filled with at least one specific fact — if a block would be a placeholder, keep grilling.
-
-Then present a draft summary via `AskUserQuestion`: **Looks good — write it** / **Keep grilling about X** (user names the section) / **Cancel** (nothing written; tell the user "No blueprint saved. Re-run when ready.").
-
-## 6. Write `<worktree-root>/specs/blueprint.html`
-
-`mkdir -p <worktree-root>/specs`. The blueprint is the single deliverable — a self-contained HTML page that is both the human review artifact and the machine input to `/moose-build`.
-
-**Machine contract** — `/moose-build` parses seven blocks, each an element with this exact `id` (placement in the visual layout is free; the ids are what's load-bearing):
-
-| id | Content |
-| --- | --- |
-| `#summary` | prose (what/why/knob) + **Repo**, **Object kind**, **Predicted files to touch** (new vs existing) |
-| `#physics` | equation with symbols defined + **validParams shape** + **residual / contribution form** |
-| `#reuse-decisions` | per scout finding: `file:line` — class, what it does, Decision (Reuse / Extend / Parallel), why — or the negative-search record |
-| `#test-plan` | per test: name, Tester kind, asserted behavior, mutation rationale |
-| `#doc-plan` | **Needed:** yes/no, page path, public surface + **Existing coverage:** every page already documenting the feature and the placement/consolidation the user chose |
-| `#out-of-scope` | explicit non-goals |
-| `#work-plan` | work units + dep edges, rendered as grouped unit cards with status chips + read-only standing-gate strips, plus the machine JSON island `#work-plan-data` — full spec in [`references/work-plan-format.md`](references/work-plan-format.md) |
-
-The `Content` column is the grill-time checklist step 5 converges against; the full authoring schema and template-slot mapping are in `references/blueprint-format.md`, which wins on any disagreement.
-
-Authoring — a pure formatter over the grill plan, scout findings, and user decisions; **never re-explores the codebase** (codegraph already ran via grill + scout; the blueprint skill's generic Explore/Design/Build workflows would bypass it):
-
-1. Read the HTML skeleton from this skill's own [`references/plan-template.html`](references/plan-template.html) — a pinned copy of the global blueprint template; the only cross-skill read at authoring time is `/moose-build`'s `references/standing-gates.md`, per `blueprint-format.md`. If it's missing, warn and author a plain self-contained HTML page instead — the seven contract blocks are the deliverable; the template is only the visual identity.
-2. Fill it per [`references/blueprint-format.md`](references/blueprint-format.md) — the authoritative contract-block schema, template slot mapping, `.physics-pair` code↔math pairing, metadata header, and offline KaTeX rendering (`node <this skill's dir>/references/inline-katex.js <worktree-root>/specs/blueprint.html`; uses MOOSE's vendored KaTeX, degrades gracefully to plain-text LaTeX). The `#work-plan` block follows [`references/work-plan-format.md`](references/work-plan-format.md): units derived from the grill plan's predicted files, `#test-plan`, and `#doc-plan`.
-3. Save to `<worktree-root>/specs/blueprint.html`. Self-check: all seven contract `id`s present and non-placeholder, no `{{` outside image-slot comments, no external `http(s)` stylesheet/script links, every `file:line` citation verbatim, plus the five self-checks at the end of `references/work-plan-format.md`.
-
-## 7. Stop
-
-Tell the user:
-
-> Blueprint written to `<worktree-root>/specs/blueprint.html` — open it in a browser to review. Edit if needed, then run:
->
-> ```
-> /moose-build specs/blueprint.html
-> ```
-
-Never edit code, run builds/tests/formatters, commit, push, or auto-invoke `/moose-build`. This skill writes only into `<worktree-root>/specs/`; the hand-off is manual.
+Tell the user: "Blueprint written to `<worktree-root>/specs/blueprint.html`; open it in a
+browser to review. Edit if needed, then run `/moose-build specs/blueprint.html`."

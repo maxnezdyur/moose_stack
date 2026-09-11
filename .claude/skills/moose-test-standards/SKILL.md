@@ -1,35 +1,18 @@
 ---
 name: moose-test-standards
-description: MOOSE regression test standards — tests spec HIT syntax, SQA traceability fields, the Tester catalog (Exodiff/CSVDiff/RunException/...), directory layout, gold conventions, parametrization patterns (AD/non-AD, refinement, recover, multiapp), and anti-patterns. Auto-loads when authoring or editing a tests spec or .i test input in moose, blackbear, or isopod.
+description: MOOSE regression test standards: tests spec syntax, SQA traceability fields, the Tester catalog (Exodiff, CSVDiff, RunException, ...), gold naming, .i input conventions, parametrization patterns, and anti-patterns. Loads when authoring or editing a tests spec or a .i test input in moose, blackbear, or isopod.
 user-invocable: false
 ---
 
 # MOOSE Regression Test Standards
 
-Reference for authoring tests in `moose`, `moose/modules/<m>`, `blackbear`, `isopod`: the `tests` HIT spec, the `.i` input, `gold/` outputs, and SQA traceability. For running, debugging, or regenerating golds see **moose-run-tests** (flags) and **moose-test-workflows** (procedure router — `references/failure-diagnosis.md`, `references/gold-regeneration.md`, `references/ci-and-debugging.md`).
+Authoring conventions for the `tests` HIT spec, the `.i` input, `gold/` outputs, and SQA traceability in `moose`, `moose/modules/<m>`, `blackbear`, and `isopod`. Running, diagnosing, and regenerating golds is the `moose-run-tests` skill.
 
 ## File layout
 
-A test is a directory under `<repo>/test/tests/<area>/<feature>/`:
+A test is a directory under `<repo>/test/tests/<area>/<feature>/` holding `tests` (the HIT spec), one or more `.i` inputs, and `gold/` (reference outputs, required by every diff Tester).
 
-```
-tests              # HIT spec
-<feature>.i        # input(s)
-gold/<...>         # reference outputs (required for diff Testers)
-```
-
-Test scope per repo:
-
-| Scope | cd here | Binary |
-|---|---|---|
-| moose framework | `moose/test/` | `moose_test-opt` |
-| module | `moose/modules/<m>/` | `<m>-opt` (production app) |
-| blackbear | `blackbear/` | `blackbear-opt` |
-| isopod | `isopod/` | `isopod-opt` |
-
-Module tests run on the production `<m>-opt` binary. `<Module>TestApp.C` is a class that registers test-only objects (not a separate binary); downstream apps link it with `--allow-test-objects`.
-
-## Spec HIT skeleton
+## Spec skeleton
 
 ```hit
 [Tests]
@@ -44,35 +27,25 @@ Module tests run on the production `<m>-opt` binary. `<Module>TestApp.C` is a cl
 []
 ```
 
-- **Block delimiters: `[name]` opens, `[]` closes. Never `[./name]` / `[../]` in new tests.** The `./` and `../` tokens are vestigial HIT path navigation; they parse identically but are legacy. ~800 framework/module specs still carry them — see below.
-- Strings: single or double quotes; adjacent quoted fragments concatenate.
-- Lists: space-separated tokens in one quoted string.
-- Six SQA params on `[Tests]` propagate to leaves: `design`, `issues`, `verification`, `validation`, `deprecated`, `collections`. **Tester params do NOT inherit** (no `[GlobalParams]` analog).
+A block opens with `[name]` and closes with `[]`. The legacy `[./name]` / `[../]` form parses identically, but new blocks do not use it; `.claude/hooks/check-added-lines.sh` flags it on added lines of a `tests` file.
 
-### Editing a legacy spec
+About 800 existing specs still use the legacy form. When you add a block to one, write the new block in modern syntax and leave the legacy siblings as they are: converting the file inflates the diff and destroys blame. Mixed-syntax files are the expected outcome (`moose/modules/chemical_reactions/test/tests/aqueous_equilibrium/tests` is the canonical example) and match upstream's opportunistic migration. A rename is a new block: re-typing `[./old]` as `[./new]` re-introduces the legacy form.
 
-Many existing specs are entirely `[./name]` / `[../]`. When you add a block to one:
-
-- Write the **new** block in modern syntax. Do **not** pattern-match the legacy siblings.
-- Leave the existing legacy blocks alone. Converting the whole file inflates the diff with unrelated churn and destroys blame.
-
-Mixed-syntax files are the expected outcome and are fine — `modules/chemical_reactions/test/tests/aqueous_equilibrium/tests` is the canonical example (original blocks legacy, later additions modern). This is the same opportunistic migration upstream MOOSE follows; there is no bulk-reformat commit.
-
-Renames count as new blocks: re-typing `[./old]` as `[./new]` re-introduces the legacy form. Use `[new]` / `[]`.
+Six SQA params set on `[Tests]` propagate to every leaf: `design`, `issues`, `verification`, `validation`, `deprecated`, `collections`. Tester params do not inherit; there is no `[GlobalParams]` analog.
 
 ## SQA traceability
 
-Required (or inherited):
+Required on every leaf, directly or inherited:
 
 | Field | Convention |
 |---|---|
-| `requirement` | One unambiguous "shall" sentence of observable behavior: `'The <system\|app> shall <verb> <object> [<condition>].'` Error tests: `'shall report an error when <condition>'`. Never "will"/"should". Canonical guidance: `moose/framework/doc/content/sqa/what_is_a_requirement.md`. |
-| `design` | Space-separated `.md` filenames; suffix-matched against `git ls-files`. |
-| `issues` | `#NNNN`, `repo#NNNN`, or 6+ hex SHA. **`#000` is anti-pattern.** A NEW test must cite the issue that motivated it (the PR's issue). Multiple citations are fine — append the new issue to any existing list (`'#7840 #33415'`), never replace. Inheriting an older file-level `issues` alone is NOT sufficient for a new test: give the leaf its own `issues` line that includes the motivating issue. |
+| `requirement` | One unambiguous "shall" sentence of observable behavior: `'The <system\|app> shall <verb> <object> [<condition>].'` Error tests: `'shall report an error when <condition>'`. "will" and "should" are wrong. Canonical guidance: `moose/framework/doc/content/sqa/what_is_a_requirement.md`. |
+| `design` | Space-separated `.md` filenames, suffix-matched against `git ls-files`. |
+| `issues` | `#NNNN`, `repo#NNNN`, or a 6+ hex SHA. `#000` is an anti-pattern. A new test cites the issue that motivated it (the PR's issue) on its own leaf; an inherited file-level `issues` alone is not sufficient. Append to an existing list (`'#7840 #33415'`) rather than replacing it. |
 
-Optional: `detail` (sub-req text), `collections` (one of `FUNCTIONAL`/`USABILITY`/`PERFORMANCE`/`SYSTEM`/`FAILURE_ANALYSIS`), `verification`/`validation` (`.md`), `deprecated = true` (cannot coexist with other SQA fields).
+Optional: `detail` (sub-requirement text), `collections` (one of `FUNCTIONAL`, `USABILITY`, `PERFORMANCE`, `SYSTEM`, `FAILURE_ANALYSIS`), `verification` and `validation` (`.md`), `deprecated = true` (cannot coexist with the other SQA fields).
 
-### Hierarchical pattern (one requirement, multiple cases)
+### Hierarchical pattern (one requirement, several cases)
 
 ```hit
 [ad]
@@ -92,28 +65,14 @@ Optional: `detail` (sub-req text), `collections` (one of `FUNCTIONAL`/`USABILITY
 []
 ```
 
-Children of a requirement-grouping parent must use `detail`, NOT their own `requirement`/`design`/`issues` (triggers `log_extra_*`).
+Children of a requirement-grouping parent carry `detail` and no `requirement`, `design`, or `issues` of their own (those trigger `log_extra_*`).
 
-## Universal Tester params
+## Tester params that authors get wrong
 
-| Param | Use |
-|---|---|
-| `type`, `input` | Required. `input` is relative to spec dir. |
-| `cli_args` | Mix MOOSE syntax (`Outputs/exodus=false`) + raw PETSc flags (`-pc_type hypre`). |
-| `prereq` | Tests that must run first; `ALL` = run last. |
-| `should_execute = false` | Skip exec, run post-checks only. |
-| `max_parallel`/`min_parallel`, `max_threads`/`min_threads` | MPI / thread bounds. |
-| `mesh_mode = REPLICATED`/`DISTRIBUTED` | Restrict mesh mode. |
-| `valgrind = NONE`/`NORMAL`/`HEAVY` | Default `NONE`. |
-| `heavy = true` | Only with `--heavy`. |
-| `recover = false` | Opt out of recovery (steady, `--mesh-only`, `--check-input`, custom-pp). |
-| `restep = false` | Opt out of restep. |
-| `capabilities` | Boolean expr on build caps (`'petsc>=3.18 & vtk'`, `'method=opt'`). **Use this — NOT legacy `petsc_version`/`method`/`mumps`/`slepc_version`.** |
-| `allow_test_objects = true` | Required for test-only objects on module/app binaries. |
-| `working_directory` | chdir before running. |
-| `max_time` | Wall seconds (default 300). Raise it (or set `heavy = true`) for long tests. |
-
-`RunApp`-derived also: `expect_out`/`absent_out`/`match_literal`/`errors`/`allow_warnings`/`allow_unused`/`allow_deprecated`. `FileTester`-derived (Exodiff/CSVDiff/CheckFiles/ImageDiff/AnalyzeJacobian): `gold_dir` (default `gold`), `abs_zero` (1e-10), `rel_err` (5.5e-6).
+- `capabilities = '<expr>'` gates on build capabilities (`'petsc>=3.18 & vtk'`, `'method=opt'`). The legacy `petsc_version`, `method`, `mumps`, and `slepc_version` params are not used in new tests.
+- `allow_test_objects = true` is required for test-only objects on module, blackbear, and isopod binaries.
+- `recover = true` is the default. Set `recover = false` for steady, `--mesh-only`, `--check-input`, custom-postprocessor, and multiapp-move tests. `restep = false` opts out of restep. `--recover` and `--test-restep` are incompatible, so the first leg of a manual checkpoint chain sets both to false.
+- `RunApp`-derived Testers also take `expect_out`, `absent_out`, `match_literal`, `errors`, `allow_warnings`, `allow_unused`, `allow_deprecated`. `FileTester`-derived Testers (Exodiff, CSVDiff, CheckFiles, ImageDiff, AnalyzeJacobian) take `gold_dir` (default `gold`), `abs_zero` (1e-10), `rel_err` (5.5e-6).
 
 ## Tester catalog
 
@@ -131,58 +90,45 @@ Children of a requirement-grouping parent must use `detail`, NOT their own `requ
 | `PetscJacobianTester` | `-snes_test_jacobian` | `ratio_tol`, `difference_tol`, `state`, `run_sim` |
 | `AnalyzeJacobian` | Standalone Jacobian script | `expect_out`, `off_diagonal`. Forces `max_parallel = 1`. |
 | `PythonUnitTest` | Python `unittest` | `input='test.py'`, `test_case` |
-| `MMSTest` | MMS convergence | Extends `PythonUnitTest`; auto-requires pandas+matplotlib+`method=opt`. |
+| `MMSTest` | MMS convergence | Extends `PythonUnitTest`; auto-requires pandas, matplotlib, `method=opt`. |
 | `CSVValidationTester` | CSV vs measured data | `mean_limit`, `std_limit` |
 | `SignalTester` | Signal mid-run | `signal = 'SIGUSR1'` |
 
-**No `should_crash` on Exodiff** — expected failures are `RunException`.
+There is no `should_crash` on Exodiff; an expected failure is a `RunException`.
 
 ## Gold conventions
 
-- No `Outputs/file_base` set → `gold/<input_basename>_out.<ext>`.
-- `cli_args = 'Outputs/file_base=foo'` → `gold/foo.<ext>` (no `_out`).
-- Symlink in `gold/` when two inputs share output.
-- Multiapp: `<parent_base>_<multiapp_block><idx>.e`. Multilevel chains levels. List every level in `exodiff = '...'`.
-- **Gold MUST be committed** — binary blobs and all.
+- No `Outputs/file_base` set: `gold/<input_basename>_out.<ext>`.
+- `cli_args = 'Outputs/file_base=foo'`: `gold/foo.<ext>` (no `_out`).
+- Two inputs that share output share one gold through a symlink inside `gold/`.
+- Multiapp: `<parent_base>_<multiapp_block><idx>.e`. Multilevel chains the levels. List every level in `exodiff = '...'`.
+- Gold files are committed, binary blobs included.
 
 ## Input file conventions
 
-- **Nearly commentless.** No comments on the first lines of a `.i` — no header block of any size. Rationale (physics, derivation, expected result, path-dependence essays, literature citations, ASCII matrices, why the test exists) belongs in the spec's `requirement`/`detail` (and the class `.md`), not the input; a non-obvious tolerance or mutation guard is explained in the `tests` spec next to the parameter it justifies.
+- Nearly commentless. No comments on the first lines of a `.i`, and no header block of any size. Rationale (physics, derivation, expected result, path-dependence essays, literature citations, ASCII matrices, why the test exists) belongs in the spec's `requirement`/`detail` (and the class `.md`), not the input; a non-obvious tolerance or mutation guard is explained in the `tests` spec next to the parameter it justifies.
 - Tiny mesh (4x4 to 10x10).
-- Small `num_steps` (5–20).
+- Small `num_steps` (5-20).
 - `[Outputs]` last; `exodus = true` default.
 - No explicit `Outputs/file_base` unless parametrizing.
-- Mesh-only: `cli_args = '--mesh-only out.e'` + `recover = false`.
+- Mesh-only: `cli_args = '--mesh-only out.e'` plus `recover = false`.
 - `--check-input`: `recover = false`.
 
 ## Parametrization patterns
 
 | Pattern | Mechanism |
 |---|---|
-| **AD vs non-AD** | Two inputs share one gold; noAD writes it, AD `prereq`s noAD; add `PetscJacobianTester` triple. |
-| **Mesh refinement** | One input, sweep `Mesh/uniform_refine=N` + `Outputs/file_base` via `cli_args`. |
-| **Time-integrator sweep** | `cli_args = 'Executioner/TimeIntegrator/type=Heun ... Outputs/file_base=heun_0'`; usually `restep = false`. |
-| **PETSc sweep** | `cli_args` mixes MOOSE syntax + raw `-pc_type ...`. |
-| **2D ↔ 3D** | `cli_args = 'Mesh/dim=3 Mesh/nz=1'`. |
-| **Material swap** | `cli_args = 'Materials/foo/type=ADFoo'`. |
-
-## Recover and restart
-
-`recover = true` is default. The harness clones each spec into:
-1. `<test>_part1` — `--test-checkpoint-half-transient`, no checks.
-2. `<test>` — `--recover --recoversuffix cpr`, prereq part1.
-
-You write only the "normal" run. **Opt out** (`recover = false`) for: steady, `--mesh-only`, `--check-input`, custom-pp, multiapp move.
-
-`--recover` is incompatible with `--test-restep`. On the first leg of a manual checkpoint chain, set both `recover = false` and `restep = false`.
-
-Manual restart: one spec runs steady; the next reads `Mesh/file = steady_out.e` and `Variables/u/initial_from_file_var = u`, with `prereq = steady_1`.
+| AD vs non-AD | Two inputs share one gold; noAD writes it, AD `prereq`s noAD; add a `PetscJacobianTester` triple. |
+| Mesh refinement | One input, sweep `Mesh/uniform_refine=N` plus `Outputs/file_base` via `cli_args`. |
+| Time-integrator sweep | `cli_args = 'Executioner/TimeIntegrator/type=Heun ... Outputs/file_base=heun_0'`; usually `restep = false`. |
+| PETSc sweep | `cli_args` mixes MOOSE syntax (`Outputs/exodus=false`) and raw PETSc flags (`-pc_type hypre`). |
+| 2D vs 3D | `cli_args = 'Mesh/dim=3 Mesh/nz=1'`. |
+| Material swap | `cli_args = 'Materials/foo/type=ADFoo'`. |
+| Restart chain | One spec runs steady; the next reads `Mesh/file = steady_out.e` and `Variables/u/initial_from_file_var = u` with `prereq = <steady test>`. |
 
 ## Test-only objects
 
-Live under `<app>/test/src/`, register to `<App>TestApp` (not `<App>App`). `--allow-test-objects` is OFF by default everywhere except `MooseTestApp`. Tests using test-only objects on module/blackbear/isopod must set `allow_test_objects = true`.
-
-Module tests cannot use `MooseTestApp` test objects — only those from their own module + its `DEPEND_MODULES` chain.
+Test-only objects live under `<app>/test/src/` and register to `<App>TestApp`, not `<App>App`. `<Module>TestApp.C` is a class compiled into the production `<m>-opt` binary, not a separate binary. `--allow-test-objects` is off by default everywhere except `MooseTestApp`, hence `allow_test_objects = true` on module, blackbear, and isopod specs. Module tests can use only the test objects of their own module and its `DEPEND_MODULES` chain, not those of `MooseTestApp`.
 
 ## Reference test files
 
@@ -202,9 +148,9 @@ Module tests cannot use `MooseTestApp` test objects — only those from their ow
 
 ## Anti-patterns beyond the rules above
 
-- Per-leaf `requirement` when a parent + N `detail` children would do; `detail` on a top-level leaf with no parent requirement.
+- Per-leaf `requirement` when a parent plus N `detail` children would do; `detail` on a top-level leaf with no parent requirement.
 - Duplicate `requirement` text across specs; re-stating `design`/`issues` on children the `[Tests]` block already covers.
 - Vague, passive `requirement` wording.
-- `design` pointing at a deleted/renamed `.md` — grep specs whenever renaming doc pages.
+- `design` pointing at a deleted or renamed `.md`; grep the specs whenever renaming doc pages.
 - Fabricated `input` paths.
-- A `RunException` test cementing a restriction a small code change would remove — fix the code instead of testing the limitation as intended behavior.
+- A `RunException` test cementing a restriction a small code change would remove; fix the code instead of testing the limitation as intended behavior.

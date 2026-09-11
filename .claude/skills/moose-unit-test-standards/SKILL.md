@@ -1,90 +1,79 @@
 ---
 name: moose-unit-test-standards
-description: MOOSE gtest unit test standards for moose, blackbear, and isopod. Auto-loads when authoring or editing files under unit/ or files matching *Test.{C,h}. Covers fixtures (MooseObjectUnitTest, MFEMObjectUnitTest), the build system, the _throw_on_error pattern, MooseUnitUtils helpers, factory-based object construction, common pitfalls, and the unit-vs-regression decision.
+description: MOOSE gtest unit test standards for moose, blackbear, and isopod. Auto-loads when authoring or editing files under unit/ or files matching *Test.{C,h}. Covers the two fixtures (MooseObjectUnitTest, MFEMObjectUnitTest), factory-based object construction, the _throw_on_error pattern, MooseUnitUtils helpers, the build and run recipe, and the unit-vs-regression decision.
 user-invocable: false
 ---
 
 # MOOSE Unit Test Standards
 
-Reference for authoring gtest-based unit tests in `moose/unit/`, `moose/modules/<m>/unit/`, `blackbear/unit/`, and `isopod/unit/`. For *regression* tests (`tests` HIT specs + `.i` inputs + gold), see **moose-test-standards**. For running anything, see **moose-run-tests**.
+Standards for gtest unit tests in `moose/unit/`, `moose/modules/<m>/unit/`, `blackbear/unit/`,
+and `isopod/unit/`. Regression tests (`tests` HIT specs, `.i` inputs, gold files) follow
+`moose-test-standards`; `moose-run-tests` covers only the TestHarness `./run_tests` and does not
+apply to unit binaries.
 
-## Layout
+## Layout and naming
 
-```
-<repo>/unit/
-  Makefile         # builds <name>-unit-opt
-  run_tests        # shell wrapper around the binary
-  src/             # *.C — one file per logical unit
-    main.C
-    base/<Name>UnitApp.C
-    LinearInterpolationTest.C, MooseUtilsTest.C, ParsedFunctionTest.C, ...
-  include/         # *.h — only when a fixture class is needed
-    base/<Name>UnitApp.h
-    ParsedFunctionTest.h, RankTwoTensorTest.h, ...
-  files/           # CSV/JSON data fixtures
-```
+- One source file per class or area: `<repo>/unit/src/<ThingUnderTest>Test.C`.
+- A fixture class lives in the matching header `<repo>/unit/include/<ThingUnderTest>Test.h`;
+  a header exists only when a fixture is needed.
+- `TEST(<ThingUnderTest>Test, <action>)`: the suite name matches the file base, so
+  `--gtest_filter=<ThingUnderTest>Test.*` selects the file.
+- CSV and JSON data fixtures go in `<repo>/unit/files/`.
+- Module unit trees have the same shape under `moose/modules/<m>/unit/` and build
+  `<m>-unit-opt`. `blackbear/unit/` and `isopod/unit/` currently hold only a stub `SampleTest.C`.
+- A test in `<m>/unit/` can only include types from modules its `unit/Makefile` enables; check
+  the flags before adding a cross-module dependency.
 
-Module unit tests follow the same shape under `moose/modules/<m>/unit/` and produce `<m>-unit-opt`. `blackbear/unit/` and `isopod/unit/` exist but currently ship only stub `SampleTest.C` files.
+## Build and run
 
-### Naming
+    bash <meta-root>/scripts/conda-run.sh -C <repo>/unit -- make -j 2
+    bash <meta-root>/scripts/conda-run.sh -C <repo>/unit -- ./run_tests --gtest_filter=<Suite>.*
+    bash <meta-root>/scripts/conda-run.sh -C <repo>/unit -- ./run_tests            # everything
+    METHOD=dbg ... ./run_tests                                                     # dbg binary
 
-- One source file per class/area: `<ThingUnderTest>Test.C`. e.g. `LinearInterpolationTest.C`, `MathUtilsTest.C`.
-- Fixture class lives in matching `.h` (e.g. `ParsedFunctionTest.h` declares `class ParsedFunctionTest : public MooseObjectUnitTest`).
-- `TEST(<ThingUnderTest>Test, <action>)` — first arg matches the file base (mismatches make `--gtest_filter` confusing).
+On INL HPC hostnames run the same commands bare. `unit/run_tests` is a shell wrapper that
+`exec`s `./<app>-unit-$METHOD` with its arguments; it is not the TestHarness, there is no `tests`
+HIT spec under `unit/`, and gtest discovers tests at runtime. Build internals are in
+`moose/unit/Makefile` and `moose/modules/heat_transfer/unit/Makefile`.
 
-## Build system
+## Error handling in tests
 
-`moose/unit/Makefile` differs from a regular MOOSE app Makefile:
+`unit/src/main.C` sets `Moose::_throw_on_error` and `Moose::_throw_on_warning` after
+`InitGoogleTest`, which turns `mooseError` and `mooseWarning` into `MooseRuntimeError` exceptions
+instead of `abort()`. That is what makes `EXPECT_THROW` and the `MOOSEERROR` macros work.
+`mooseAssert` is not affected: it is debug-only and aborts, so an assert-guarded path is tested
+with `EXPECT_DEATH` (rare in MOOSE) or not at all.
 
-- Adds `-DMOOSE_UNIT_TEST` to `ADDITIONAL_CPPFLAGS`.
-- Adds `gtest` to `ADDITIONAL_INCLUDES` and links against `framework/contrib/gtest/libgtest.la`.
-- `APPLICATION_NAME` ends in `-unit` (binary becomes `moose-unit-opt`, not `moose-opt`).
-- `app_BASE_DIR :=` is intentionally blank.
+| Form | When |
+|---|---|
+| `EXPECT_THROW(stmt, MooseException)` | Negative path where the exception type is fixed |
+| `EXPECT_THROW(stmt, MooseRuntimeError)` | A `mooseError` path |
+| `EXPECT_MOOSEERROR_MSG_CONTAINS(stmt, "substr")` | A `mooseError` path with a message check (preferred) |
 
-Module `unit/Makefile` enables specific modules then includes `modules.mk`:
+`moose/framework/include/utils/MooseUnitUtils.h` provides `Moose::UnitUtils::assertThrows<Ex>(action,
+"substring")`, the macros `EXPECT_THROW_MSG`, `EXPECT_THROW_MSG_CONTAINS`, `EXPECT_MOOSEERROR_MSG`,
+`EXPECT_MOOSEERROR_MSG_CONTAINS` (each with an `ASSERT_` twin), and `Moose::UnitUtils::TempFile`
+(RAII temp file). The `MOOSEERROR_*` macros wrap the statement in `Moose::ScopedThrowOnError`,
+so they also work in code that does not run through `main.C`. Prefer them over try/catch plus
+`ASSERT_NE(msg.find(...), npos)`.
 
-```make
-HEAT_TRANSFER := yes
-include $(MOOSE_DIR)/modules/modules.mk
-APPLICATION_NAME := heat_transfer-unit
-```
+Tests that flip global state (`Registry`, `AppFactory`, `CapabilityRegistry`,
+`Moose::_throw_on_error`, `Moose::_throw_on_warning`) restore it, or use
+`Moose::ScopedThrowOnError`; that state outlives the test.
 
-Meta-app Makefiles (`blackbear/unit/Makefile`) flag-flip every module they depend on.
+## Fixtures
 
-### Building & running
+There are two fixtures and no `GtestApp` class; the convention is `<Name>UnitApp` plus one of:
 
-    cd moose/unit && make -j2                       # builds moose-unit-opt
-    ./run_tests                                     # invokes ./moose-unit-$METHOD
-    ./moose-unit-opt --gtest_filter=MooseUtils.*    # direct gtest call
-    METHOD=dbg ./run_tests                          # use dbg binary
+- `MooseObjectUnitTest` (`moose/framework/include/base/MooseObjectUnitTest.h`): builds a 3D
+  2x2x2 `GeneratedMesh`, an `FEProblem` named `"problem"`, Gauss quadrature, and wires the
+  problem into the app's `ActionWarehouse`. Exposes `_app`, `_factory`, `_mesh`, `_fe_problem`.
+  Use it when the SUT is a `MooseObject` constructed through the factory.
+- `MFEMObjectUnitTest` (`moose/unit/include/MFEMObjectUnitTest.h`): same shape, builds an
+  `MFEMMesh` and `MFEMProblem` from a real `.mesh` file; gated by `#ifdef MOOSE_MFEM_ENABLED`.
 
-`unit/run_tests` is a tiny shell wrapper that just `exec`s the binary — it is NOT the TestHarness Python `run_tests`, and there is no `tests` HIT spec in `unit/`; gtest discovers tests at runtime.
-
-## `main.C` — every unit binary has one
-
-```cpp
-GTEST_API_ int main(int argc, char ** argv)
-{
-  testing::InitGoogleTest(&argc, argv);   // must precede MooseInit
-  MooseInit init(argc, argv);
-  registerApp(MooseUnitApp);
-  Moose::_throw_on_error = true;          // makes mooseError catchable
-  Moose::_throw_on_warning = true;
-  return RUN_ALL_TESTS();
-}
-```
-
-The two flag flips are load-bearing: they turn `mooseError` and `mooseWarning` into exceptions (`MooseRuntimeError`) so `EXPECT_THROW`/`EXPECT_MOOSEERROR_MSG_CONTAINS` work. Without them, `mooseError` would `abort()` the process.
-
-`mooseAssert` is **not** affected by these flags — it's debug-only and aborts, so an `mooseAssert`-protected path can't be tested with `EXPECT_THROW`. Use `EXPECT_DEATH` (rare in MOOSE) or skip the negative-path test.
-
-## Fixtures — two of them, no others
-
-### `MooseObjectUnitTest`
-
-`moose/framework/include/base/MooseObjectUnitTest.h`. Inherits `::testing::Test`. Constructor builds a real `GeneratedMesh` (3D 2x2x2), an `FEProblem` named `"problem"`, gauss quadrature, and wires the problem into the app's `ActionWarehouse`. Exposes `_app`, `_factory`, `_mesh`, `_fe_problem`.
-
-Use when the SUT is a `MooseObject` you need to construct via the factory.
+Both expose `addObject<T>(type, name, params)`, which calls `_fe_problem->addObject<T>` and returns
+the single created object.
 
 ```cpp
 class ParsedFunctionTest : public MooseObjectUnitTest
@@ -94,41 +83,13 @@ public:
 };
 ```
 
-Pass the registered MOOSE app name to the base ctor (`"MooseUnitApp"`, `"FluidPropertiesApp"`, `"HeatTransferApp"`, ...) — a typo is a runtime error, not a compile error.
+The base constructor takes the registered app name (`"MooseUnitApp"`, `"HeatTransferApp"`,
+`"FluidPropertiesApp"`, ...); a typo fails at runtime, not at compile time.
 
-### `MFEMObjectUnitTest`
+`TYPED_TEST` is not used in the tree. AD and non-AD variants are separate overloads of the same
+test body (`Real` and `ADReal`).
 
-`moose/unit/include/MFEMObjectUnitTest.h`. Same shape but builds an `MFEMMesh` + `MFEMProblem` from a real `.mesh` file. Gated `#ifdef MOOSE_MFEM_ENABLED`.
-
-Both fixtures expose `addObject<T>(type, name, params)` which calls `_fe_problem->addObject<T>` and returns the singleton.
-
-There is **no `GtestApp` class**. The convention is `<Name>UnitApp` + one of these two fixtures.
-
-## gtest patterns used
-
-| Form | When |
-|---|---|
-| `TEST(suite, name)` | Pure utility class, no MOOSE state |
-| `TEST_F(Fixture, name)` | Need mesh/FEProblem/factory |
-| `EXPECT_THROW(stmt, MooseException)` | Negative path, exception type fixed |
-| `EXPECT_THROW(stmt, MooseRuntimeError)` | mooseError path (works because of `_throw_on_error`) |
-| `EXPECT_MOOSEERROR_MSG_CONTAINS(stmt, "substr")` | mooseError + substring check (preferred) |
-| `EXPECT_DOUBLE_EQ(a, b)` / `EXPECT_NEAR(a, b, tol)` | Floating point |
-| `EXPECT_EQ` / `ASSERT_EQ` | Integer / discrete |
-
-`TYPED_TEST` is **not** in use anywhere in the tree. AD vs non-AD type variation uses manual overloads (Real / ADReal versions of the same test) instead.
-
-## `MooseUnitUtils.h` helpers
-
-`moose/framework/include/utils/MooseUnitUtils.h` ships:
-
-- `Moose::UnitUtils::assertThrows<Ex>(action, "substring")` — function form. Used in `InputParametersTest.C`.
-- Macros: `EXPECT_THROW_MSG`, `ASSERT_THROW_MSG`, `EXPECT_THROW_MSG_CONTAINS`, `ASSERT_THROW_MSG_CONTAINS`, `EXPECT_MOOSEERROR_MSG`, `ASSERT_MOOSEERROR_MSG`, `EXPECT_MOOSEERROR_MSG_CONTAINS`, `ASSERT_MOOSEERROR_MSG_CONTAINS`. The `MOOSEERROR_*` variants auto-wrap with `Moose::ScopedThrowOnError` so they work even when not running through `main.C`.
-- `Moose::UnitUtils::TempFile` — RAII temp file for tests touching disk.
-
-Prefer `EXPECT_MOOSEERROR_MSG_CONTAINS(stmt, "substr")` over the older try/catch + `ASSERT_NE(msg.find(...), npos)` pattern.
-
-## Constructing a MOOSE object — the canonical pattern
+## Constructing a MOOSE object
 
 ```cpp
 InputParameters params = _factory.getValidParams("ParsedFunction");
@@ -139,30 +100,34 @@ _fe_problem->addFunction("ParsedFunction", "test0", params);
 auto & f = _fe_problem->getFunction("test0");
 ```
 
-Steps: `getValidParams(type)` from the factory → mutate → `_fe_problem->addX(type, name, params)` → fetch via `getX<T>(name)`. Same shape for `addUserObject`/`getUserObject<T>`, and for kernels via `addObject<T>`.
+The shape is `getValidParams(type)`, set params, `_fe_problem->add<X>(type, name, params)`, then
+`get<X>(name)`; the same holds for `addUserObject`/`getUserObject<T>` and, for kernels,
+`addObject<T>`. The private `_fe_problem` and `_fe_problem_base` params are required: classes read
+them from `InputParameters`, and omitting them null-derefs at runtime instead of erroring. The
+warehouse owns every object, so a test does not `new` a `MooseObject` directly.
 
-- The `_fe_problem`/`_fe_problem_base` private params are load-bearing: many classes (parsed functions, etc.) read them from `InputParameters`, and omitting them null-derefs at runtime instead of erroring cleanly.
-- **Don't `new MooseObject(...)` directly** — the warehouse owns the object; direct construction breaks registration and lifecycle.
+## Reference unit tests
 
-## Reference unit tests — read one before authoring
+Read one of the same kind before authoring.
 
 | Pattern | Reference |
 |---|---|
 | Pure utility class, no fixture | `moose/unit/src/LinearInterpolationTest.C` |
-| Fixture exercising MOOSE object via factory | `moose/unit/include/ParsedFunctionTest.h` + `moose/unit/src/ParsedFunctionTest.C` |
+| Fixture exercising a MOOSE object via the factory | `moose/unit/include/ParsedFunctionTest.h` + `moose/unit/src/ParsedFunctionTest.C` |
 | `SetUp()` + tensor data | `moose/unit/include/RankTwoTensorTest.h` + `moose/unit/src/RankTwoTensorTest.C` |
-| Module fluid-property / AD chain rule | `moose/modules/fluid_properties/unit/src/ADFluidPropsTest.{h,C}` |
+| Module fluid-property / AD chain rule | `moose/modules/fluid_properties/unit/include/ADFluidPropsTest.h` + `.../unit/src/ADFluidPropsTest.C` |
 | Negative path with `EXPECT_THROW` | `moose/unit/src/MatrixToolsTest.C` |
 | MFEM kernel type-mapping | `moose/unit/src/MFEMKernelTest.C` |
-| Substring error-msg assertion | `moose/unit/src/InputParametersTest.C` |
-| Module Makefile pattern | `moose/modules/heat_transfer/unit/Makefile` |
+| Substring error-message assertion | `moose/unit/src/InputParametersTest.C` |
+| Module `unit/Makefile` | `moose/modules/heat_transfer/unit/Makefile` |
 
-## Pitfalls
+## Unit vs regression
 
-1. **`SetUp()` spelling.** gtest looks for `void SetUp() override;`. `setUp` (camelCase) silently disables the hook. Always include `override`.
-2. **Tests that mutate global state.** `Registry`, `AppFactory`, `CapabilityRegistry`, `Moose::_throw_on_error`/`_throw_on_warning` outlive any single test. Tests that flip them must restore (or use `Moose::ScopedThrowOnError`).
-3. **Module unit binary scope.** A test in `heat_transfer/unit/` cannot include solid_mechanics types unless the module Makefile enables them. Check the Makefile's module flags before adding cross-module dependencies.
-
-## Unit vs regression — when to write which
-
-Unit-test whatever runs in milliseconds without an executioner: pure utility classes (math, interpolation, parsing), AD chain-rule correctness on a material property or UserObject, `validParams` edge cases, a specific `mooseError` message, factory wiring (does `<Type>` register? does `getValidParams` work?). Reach for a regression test only once a residual genuinely has to be assembled — time integration, multiphysics coupling, convergence behavior, MPI/threading correctness on a real solve, a kernel/BC/material whose behavior depends on quadrature or neighboring elements or boundary integration, or an assertion that the integrated solution matches a CSV/Exodus gold file.
+Unit-test whatever runs in milliseconds without an executioner: pure utility classes (math,
+interpolation, parsing), AD chain-rule correctness on a material property or UserObject,
+`validParams` edge cases, a specific `mooseError` message, and factory wiring (does `<Type>`
+register, does `getValidParams` work). Write a regression test only once a residual has to be
+assembled: time integration, multiphysics coupling, convergence behavior, MPI or threading
+correctness on a real solve, a kernel, BC, or material whose behavior depends on quadrature,
+neighboring elements, or boundary integration, or a check of the integrated solution against a
+CSV or Exodus gold file.

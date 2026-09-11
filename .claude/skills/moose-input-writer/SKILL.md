@@ -1,67 +1,74 @@
 ---
 name: moose-input-writer
-description: Author or modify a MOOSE input file (`.i`) for moose, blackbear, or isopod from a free-form task description. Runs a clarify-first interview before writing, generates a complete runnable input following MOOSE input conventions, validates with `--check-input`, iterates up to 3 times. Stateless — if the target path exists, edits in place; otherwise creates fresh. Auto-triggers on phrasings like "write an input file for ...", "make a `.i` that ...", or invoke directly via `/moose-input-writer <description>`.
+description: Writes or edits one MOOSE input file (.i) for moose, blackbear, or isopod from a task description. Resolves the structural forks with the user first, verifies every object type through moose-params, and proves the file parses with --check-input. Use for "write an input file for ...", "make a .i that ...", "add a BC to this input", or /moose-input-writer <task> [<target .i>].
+argument-hint: "<task> [<target .i>]"
+effort: high
+disallowed-tools: Agent
 ---
 
-# /moose-input-writer
+# moose-input-writer
 
-Author or edit `.i` files for `moose`, `blackbear`, and `isopod`. Runs in the main conversation (not a subagent) so `AskUserQuestion` actually reaches the user — the clarify-first interview is the point.
+Usage: `/moose-input-writer <task> [<target .i>]`. With no arguments, ask what to write. With no
+target path, derive `./<name>.i` from the task (lowercase, filler words dropped, about five tokens
+joined with `_`). When the target exists, edit it in place: touch only the blocks the change needs
+and skip the interview unless the change itself is ambiguous.
 
-## Usage
-
-```
-/moose-input-writer <freeform task description> [<target .i path>]
-```
-
-If `$ARGUMENTS` is empty, ask what to write. If no target path is given, derive `./<name>.i` from the prompt (lowercase, drop filler words, join ~5 tokens with `_` — "thermomechanical contact problem with finite strain" → `thermomech_contact_finite_strain.i`). If the target exists you are in **modify** mode: load it, treat the task as a surgical edit, and skip the interview unless the change itself is ambiguous.
+This skill produces one `.i` that passes `--check-input`, nothing else. It does not write mesh
+files (use `[Mesh]` generators or ask for a path), `tests` specs or gold (the `moose-test-writer`
+agent does that), or C++ (an object that does not exist means BLOCKED). It edits no file other
+than the target. Bash is for `--check-input` and read-only file checks only: no builds, solves,
+mesh generation, or git.
 
 ## Ground truth
 
-- **Types and parameters** — verify every type via the `moose-params` skill before use: confirm it is registered, supply every parameter it lists under `required`, never invent parameter names. If `moose-params` doesn't know a type, that type isn't real — pick another or BLOCK. Drill into a single param (`/moose-params <Type> <Param>`) only when a cpp_type or default drives a decision.
-- **Block structure** — mirror existing example inputs (`Grep`/`Glob` over `*/test/tests/**/*.i` and module test dirs); don't invent block layouts. Use `codegraph_explore "<TypeName>"` to understand what an object does or to choose between candidates.
-- **Binary** (for `--check-input`), by cwd: `moose/` → `moose/test/moose_test-opt`; `blackbear/` → `blackbear/blackbear-opt`; `isopod/` → `isopod/isopod-opt`; anywhere else → `isopod/isopod-opt`. Verify with `test -x`; if missing, report BLOCKED with: "Binary not built. Run `cd <app-dir> && METHOD=opt make -j2`."
-
-## Scope
-
-Bash is for validation only: `<binary> -i <file> --check-input`, plus `ls`/`test`/`stat`/`pwd`. No builds, solves, mesh generation, git, or file operations through the shell — this skill writes one `.i` and proves it parses, nothing more.
-
-Also out of scope: mesh files (use `[Mesh]` generators or ask for a file path), `tests` specs and gold outputs (that's `moose-test-writer`), C++ source (if the task needs an object that doesn't exist, report BLOCKED), edits to any file other than the target `.i`, and spawning agents.
+Every type in the file is verified through the `moose-params` skill before use: it must be
+registered, and every parameter it lists as required must be supplied. Parameter names are never
+invented. A type `moose-params` reports as `NO_NODE` is not real; pick another or BLOCK. Look up
+a single parameter (`--param`) only when its cpp_type or default drives a decision. Mirror block
+layout from existing inputs under `*/test/tests/**/*.i` and module test dirs; use
+`codegraph_explore "<TypeName>"` to learn what an object does or to choose between candidates.
 
 ## Interview (create mode)
 
-Ask via `AskUserQuestion`, one question at a time, until every structural fork below is resolved — by the user, by `physics-spec.md`, or by not applying to the problem. Structural forks change the shape of the file; a "sensible default" on one is a guess that wastes the run, so for axes 1–8 "pick something sensible" is not an acceptable answer — re-pose with two named options instead.
+Structural forks change the shape of the file, so a guessed default on one wastes the run. Resolve
+each fork by the user, by `physics-spec.md`, or by not applying, before writing: mesh source
+(generators vs `FileMeshGenerator`, whenever the topology is not a `GeneratedMeshGenerator`
+box), AD vs non-AD (default AD), steady vs transient (with horizon and ramp), strain measure,
+contact algorithm, coupling style (`[Physics]`, `[Modules]`, or hand-wired kernels), FE vs FV vs
+linear FV, and controls or stochastic wiring. Solver and preconditioner are the writer's call
+unless the user stated a preference or the default would clearly fail. Resolve independent
+forks in one `AskUserQuestion` round (up to 4 per call). "Pick something sensible" is not an
+answer on a structural fork; re-pose it with two named options.
 
-1. **Mesh source** — generators vs external file (`FileMeshGenerator`). Must be asked whenever the topology won't come out of `GeneratedMeshGenerator`: mixed element types (e.g. 1D BAR sharing nodes with 3D HEX), conforming interfaces, embedded inclusions, non-rectangular geometry.
-2. **AD vs non-AD** — default AD; confirm only if the spec implies hand-coded Jacobians or non-AD-only objects.
-3. **Steady vs transient** — and if transient, horizon and ramp shape before defaulting `dt`.
-4. **Strain measure** (mechanics active) — small / finite / total Lagrangian / incremental.
-5. **Contact algorithm** (contact active) — mortar / node-face / penalty.
-6. **Coupling style** (multiphysics) — `[Physics]` shorthand actions, `[Modules]` action, or hand-wired kernels.
-7. **FE vs FV vs Linear-FV** — when the physics supports more than one discretization.
-8. **Controls / stochastic wiring** — which parameters must be controllable; confirm the path before wiring.
-9. **Solver / preconditioner** — writer's call; ask only if the user stated a preference or the default would clearly fail.
+Numeric placeholders (material constants, dt, output frequency, mesh resolution, sideset
+coordinates) are not interview questions: fill sensible defaults and list them under Concerns,
+unless a wrong default would change the answer by an order of magnitude, in which case confirm it.
 
-Numeric placeholders (material constants, dt, output frequency, mesh resolution, sideset coordinates) are never interview questions — fill sensible defaults silently and list them under `Concerns:`, unless a wrong default would silently change the answer by an order of magnitude, in which case confirm it.
-
-**`physics-spec.md` in cwd is law.** Read it in full; every structural statement (element type, mesh topology, coupling style, contact algorithm, control wiring, BC placement) is a hard constraint and counts as an answered axis. If a spec requirement can't be expressed directly in HIT, ask or BLOCK — never substitute a proxy, skip a stated `[Controls]` requirement, or silently swap the specified algorithm.
+If `physics-spec.md` exists in cwd, read it in full; every structural statement in it (element
+type, mesh topology, coupling style, contact algorithm, control wiring, BC placement) is a
+constraint and counts as a resolved fork. A spec requirement that HIT cannot express directly is a
+question or a BLOCK, not a proxy, a skipped `[Controls]` block, or a swapped algorithm.
 
 ## Write
 
-Minimal style: clean HIT, no header or separator lines, and the comment density of the example inputs you mirrored — in practice zero. The file should look like one a human would commit. Complete and runnable: `[Mesh]`, `[Variables]`, kernels/physics, `[Materials]`, `[BCs]`, `[Executioner]`, `[Outputs]`, plus `[ICs]`/`[Postprocessors]` where warranted; no empty blocks. AD-named classes (`ADDirichletBC`, not `DirichletBC`) unless the user opted out. In modify mode, touch only the blocks the change requires.
+Complete and runnable: `[Mesh]`, `[Variables]`, kernels or physics, `[Materials]`, `[BCs]`,
+`[Executioner]`, `[Outputs]`, plus `[ICs]` and `[Postprocessors]` where warranted; no empty
+blocks. AD-named classes (`ADDirichletBC`, not `DirichletBC`) unless the user opted out. Style
+follows the near-commentless `.i` policy in the `moose-test-standards` skill: no header or
+separator lines, and the comment density of the inputs you mirrored.
 
 ## Validate
 
-`<binary> -i <target> --check-input`. On failure, read the error, fix, re-run — 3 attempts total. Then report STUCK with the final error verbatim and a `Tried:` list of attempted fixes.
+Binary: the one that registers the objects used, per the binary table in `moose-params`; `test -x`
+it, and if it is missing report BLOCKED with "Binary not built; see docs/local.md". Run
+`bash <meta-root>/scripts/conda-run.sh -C <app-dir> -- <binary> -i <target> --check-input`
+locally, or the bare command on INL HPC hosts. On failure read the error, fix, and re-run, three
+attempts total; then report STUCK with the final error verbatim and the fixes tried.
 
 ## Report
 
-```
-Status: DONE | DONE_WITH_CONCERNS | STUCK | BLOCKED | NEEDS_CONTEXT
-File: <absolute path to .i>
-Binary: <path used for --check-input>
-Mode: create | modify
-Interview answers: <one-line summary, create mode only>
---check-input: PASS (after N attempts) | FAIL
-```
-
-`Concerns:` (with DONE_WITH_CONCERNS) lists numeric placeholders and factual notes only — e.g. "default Young's modulus is a placeholder", "back sideset = z-min per GeneratedMesh convention". A file the skill emits must pass `--check-input` or the report must be STUCK; prefer BLOCKED/NEEDS_CONTEXT over guessing on any fork-the-file decision.
+One line: `STATUS: DONE | DONE_WITH_CONCERNS | STUCK | BLOCKED | NEEDS_CONTEXT; FILE: <path>;
+BINARY: <path>; MODE: create | modify; CHECK_INPUT: PASS after N attempts | FAIL`. Concerns list
+numeric placeholders and factual notes only ("default Young's modulus is a placeholder"). A file
+this skill emits passes `--check-input` or the status is STUCK; on any fork-the-file decision,
+BLOCKED or NEEDS_CONTEXT beats a guess.
