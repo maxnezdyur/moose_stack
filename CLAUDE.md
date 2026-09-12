@@ -36,7 +36,3 @@ Check `hostname` before any env, build, or test command:
 
 - Local machine (conda): [`docs/local.md`](docs/local.md). Run commands through `scripts/conda-run.sh -C <path> -- <command>`.
 - INL HPC (container modules; hostnames `sawtooth*`, `lemhi*`, `bitterroot*`, `hoodoo*`, `teton*`): [`docs/hpc.md`](docs/hpc.md). Run bare commands inside the container.
-
-## Codex mirror
-
-Codex reads this tree through the tracked symlink `.agents -> .claude`. A skill with `disable-model-invocation: true` has `agents/openai.yaml` beside it with `allow_implicit_invocation: false`. Codex ignores the `skills:` preload on agents, so each agent names its preloaded skills in its body.
