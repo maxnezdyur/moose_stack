@@ -1,0 +1,33 @@
+<script>
+// Draw unit cards, status chips, and gate strips from the fenced JSON under "Work plan".
+// The JSON stays the single source; this script only renders it. Fails silently if absent.
+(function () {
+  var h2 = document.getElementById('work-plan'); if (!h2) return;
+  var pre = null, n = h2.nextElementSibling;
+  while (n && n.tagName !== 'H2') { if (n.tagName === 'PRE' || (n.tagName === 'DIV' && n.querySelector('pre'))) { pre = n.tagName === 'PRE' ? n : n.querySelector('pre'); break; } n = n.nextElementSibling; }
+  if (!pre) return;
+  var wp; try { wp = JSON.parse(pre.textContent); } catch (e) { return; }
+  var byId = {}; (wp.units || []).forEach(function (u) { byId[u.id] = u; });
+  function chip(s) { s = s || 'idle'; return '<span class="chip ' + s + '">' + s + '</span>'; }
+  function card(u) {
+    var name = u.class || u.test || (u.kind === 'doc' ? 'doc pages' : u.id);
+    var deps = (u.deps && u.deps.length) ? u.deps.join(', ') : 'none';
+    return '<div class="unit ' + u.kind + '"><div class="uhead"><span class="uid">' + u.id + '</span>' + chip(u.status) + '</div>' +
+      '<div class="uname">' + name + '</div><div class="uagent">' + (u.agent || '') + '</div><div class="udeps">deps: ' + deps + '</div></div>';
+  }
+  function group(label, kinds) {
+    var us = (wp.units || []).filter(function (u) { return kinds.indexOf(u.kind) >= 0; });
+    if (!us.length) return '';
+    return '<div class="wp-group"><div class="wp-label">' + label + ' (' + us.length + ')</div><div class="wp-units">' + us.map(card).join('') + '</div></div>';
+  }
+  function gates(ids) {
+    var g = wp.gates || {}; var items = ids.filter(function (k) { return g[k]; });
+    if (!items.length) return '';
+    return '<div class="gatebar"><span class="glabel">Standing gates</span>' + items.map(function (k) { return chip(g[k].status) + ' <b>' + k + '</b> ' + (g[k].criterion || ''); }).join('') + '</div>';
+  }
+  var html = '<div class="wp-groups">' + group('Implementation', ['implement']) + gates(['A1']) + group('Tests and docs', ['test', 'doc']) + gates(['B2', 'B3', 'B4', 'B5', 'B6']) + '</div>';
+  var wrap = document.createElement('div'); wrap.innerHTML = html;
+  var det = document.createElement('details'); det.className = 'wp-json'; det.innerHTML = '<summary>work-plan JSON (source)</summary>';
+  pre.parentNode.insertBefore(wrap, pre); pre.parentNode.insertBefore(det, pre); det.appendChild(pre);
+})();
+</script>

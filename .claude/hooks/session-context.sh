@@ -54,10 +54,10 @@ echo "## moose_stack session context (re-injected after compaction)"
 echo "meta-root: $root ($kind)"
 echo "meta-repo branch: $(branch_of "$root")"
 echo "moose/ branch: $(branch_of "$root/moose")"
-if [ -f "$root/specs/blueprint.html" ]; then
-  echo "blueprint: specs/blueprint.html present"
+if [ -f "$root/specs/blueprint.md" ]; then
+  echo "blueprint: specs/blueprint.md present"
 else
-  echo "blueprint: specs/blueprint.html absent"
+  echo "blueprint: specs/blueprint.md absent"
 fi
 
 # Last run record: /moose-build writes .claude/cache/moose-build-<label>.json

@@ -1,7 +1,8 @@
 # Standing gates
 
-The checks every `/moose-build` run passes, whatever the blueprint asked for. A blueprint renders these rows
-as its gate strips (id, criterion, check, verbatim) and cannot add, remove, reorder, or alter one. Gate A
+The checks every `/moose-build` run passes, whatever the blueprint asked for. A blueprint's work-plan JSON
+carries a `gates` object with these ids and criteria, and the rendered page draws them as strips; a blueprint
+cannot add, remove, reorder, or alter one. Gate A
 runs inside the loop; Gate B runs after `GOAL_MET`. Each row's criterion is its entry in `/moose-build`'s
 goal ledger, and a gate passes when its rows are green. Row ids are stable and `/moose-build` addresses Gate
 B rows by number; B1 (the consistency sweep) was retired because the code and dry lenses of the clean-context
@@ -12,7 +13,7 @@ CIVET rejection becomes a gate there plus a row here, once, and every later run 
 | --- | --- | --- |
 | **A1** Build clean | C1 | The loop's `moose-test-runner` round whose build exits 0 (`make -j 6` in the scope). |
 | **B2** Suites green + gold staged | C2, C3 | Evidenced by the loop's runner on the registered names (`--re=<names>`, gold captured and staged per `/moose-build`'s gold policy); re-run only when a later row changed a file. |
-| **B3** Reuse / out-of-scope audit | C4 | Main-thread diff check against the slice's `reuse_decisions` and `out_of_scope`. |
+| **B3** Reuse / out-of-scope audit | C4 | Main-thread diff check against the blueprint's reuse decisions and `out_of_scope`. |
 | **B4** SQA | C5 | `gates.sh <repo> sqa`: every touched runnable `tests` block carries `requirement`, `design`, and `issues` at its own level or on an ancestor, then `moosedocs.py check` with errors filtered to in-diff files. |
 | **B5** ASCII | C6 | `gates.sh <repo> ascii`: added lines of code files (not `.md`, `.bib`, gold) hold only 7-bit ASCII; added `.md` lines carry no invisible character. |
 | **B6** Docs smoke | DG | `docs.sh <repo> smoke --diff devel`: the `docs` line of `gates.sh <repo> all`, or the docs-writer's SMOKE line when it authored pages. Skipped by `--core`. |

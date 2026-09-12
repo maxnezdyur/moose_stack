@@ -60,7 +60,7 @@ Four facts:
    ```bash
    mkdir -p ~/projects/moose-worktrees   # shared home for all feature worktrees
    git -C ~/projects/moose_stack worktree add ~/projects/moose-worktrees/<feature> -b <feature> main
-   mkdir -p ~/projects/moose-worktrees/<feature>/specs   # home for blueprint.html (see /moose-blueprint)
+   mkdir -p ~/projects/moose-worktrees/<feature>/specs   # home for blueprint.md (see /moose-blueprint)
    cp ~/projects/moose-worktrees/<feature>/moose_stack.code-workspace ~/projects/moose-worktrees/<feature>/<feature>.code-workspace
    ```
 

@@ -1,6 +1,6 @@
 ---
 name: moose-blueprint
-description: Turns a feature idea into specs/blueprint.html for /moose-build. Grills the user through moose-grill, scouts moose, blackbear, and isopod for reusable code with moose-scout agents, halts on near-matches, and writes the seven-block blueprint. Use for "/moose-blueprint <idea>", "plan this MOOSE feature", "write a blueprint", "spec this kernel, material, or postprocessor".
+description: Turns a feature idea into specs/blueprint.md for /moose-build (the HTML view renders itself). Grills the user through moose-grill, scouts moose, blackbear, and isopod for reusable code with moose-scout agents, halts on near-matches, and writes the seven-block blueprint. Use for "/moose-blueprint <idea>", "plan this MOOSE feature", "write a blueprint", "spec this kernel, material, or postprocessor".
 disable-model-invocation: true
 argument-hint: "<feature idea>"
 effort: high
@@ -8,8 +8,9 @@ effort: high
 
 # /moose-blueprint
 
-Goal: a `specs/blueprint.html` that a human can review in a browser and that `/moose-build`
-can parse. The blueprint is the only file this skill writes; it edits no code, runs no builds,
+Goal: a `specs/blueprint.md` that agents read whole and that the render hook turns into
+`specs/blueprint.html` for the human to review in a browser. The blueprint is the only file this
+skill writes; it edits no code, runs no builds,
 tests, or formatters, does not commit or push, and does not invoke `/moose-build`. The human
 review of the written blueprint is the hand-off.
 
@@ -23,11 +24,10 @@ Outside one, refuse with "Run /new-feature first; this skill only runs inside a 
 worktree." That directory is `<worktree-root>` below. It owns its own `.claude/`, so it is
 also `<meta-root>` for every script path here.
 
-When `<worktree-root>/specs/blueprint.html` exists, ask with `AskUserQuestion`: Resume (keep
-it, grill only the blocks that are empty or placeholders), Restart (overwrite at the write
-step), or Cancel. Placeholder blocks are what Resume grills, so the validator's "is a
-placeholder" lines are expected on an unfinished blueprint. A blueprint whose contract ids are
-missing or whose `#work-plan-data` island does not parse is restarted with a warning.
+When `<worktree-root>/specs/blueprint.md` exists, ask with `AskUserQuestion`: Resume (keep
+it, grill only the sections that are empty or placeholders), Restart (overwrite at the write
+step), or Cancel. A blueprint whose headings are missing or whose fenced JSON does not parse
+is restarted with a warning.
 
 ## Grill
 
@@ -69,26 +69,23 @@ never filled in from memory.
 
 ## Converge and write
 
-Repeat grill, scout, halt with tighter questions until each of the seven contract blocks
-(`references/blueprint-format.md`) can be filled with at least one specific fact. Then offer
+Repeat grill, scout, halt with tighter questions until each section of
+`references/blueprint-format.md` can be filled with at least one specific fact and every
+`## Needs clarification` item is answered. Then offer
 with `AskUserQuestion`: write it, keep grilling about a named section, or cancel ("No blueprint
 saved. Re-run when ready.").
 
-Writing is formatting, not exploring: fill `references/plan-template.html` per
-`references/blueprint-format.md` and `references/work-plan-format.md` from the grill plan, the
-scout findings, and the user's decisions. The only file read outside this skill at write time
-is `<meta-root>/.claude/skills/moose-build/references/standing-gates.md`, for the gate strips.
-`mkdir -p <worktree-root>/specs`, save, render the math with
-`node <meta-root>/.claude/skills/moose-blueprint/references/inline-katex.js <worktree-root>/specs/blueprint.html`,
-then validate:
-
-```
-python3 <meta-root>/.claude/skills/moose-build/scripts/slice_blueprint.py --check <worktree-root>/specs/blueprint.html
-```
-
-Fix each reported problem and re-run until it prints `OK`.
+Writing is formatting, not exploring: write `<worktree-root>/specs/blueprint.md` per
+`references/blueprint-format.md`, in the shape of `references/example-blueprint.md`, from the
+grill plan, the scout findings, and the user's decisions. The only file read outside this skill
+at write time is `<meta-root>/.claude/skills/moose-build/references/standing-gates.md`, whose
+rows seed the `gates` object of the work-plan JSON. `mkdir -p <worktree-root>/specs` and save;
+the `render-blueprint.sh` hook writes `specs/blueprint.html` (pandoc, MathML). Then run the
+"Checks before you stop" list in `blueprint-format.md` against the file you wrote and fix what
+fails.
 
 ## Done
 
-Tell the user: "Blueprint written to `<worktree-root>/specs/blueprint.html`; open it in a
-browser to review. Edit if needed, then run `/moose-build specs/blueprint.html`."
+Tell the user: "Blueprint written to `<worktree-root>/specs/blueprint.md`; open
+`specs/blueprint.html` in a browser to review. Edit the markdown if needed (the page re-renders
+on save), then run `/moose-build`."

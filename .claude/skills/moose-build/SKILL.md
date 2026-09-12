@@ -1,8 +1,8 @@
 ---
 name: moose-build
-description: Drives one MOOSE feature from specs/blueprint.html to a green tree with the standing gates passed, docs gated, and a clean-context review; execution is the moose-feature-loop agent. Use for "/moose-build [blueprint.html] [--core]", "build the blueprint", "build this feature". Manual invoke only; ends at a suggested commit message and never commits.
+description: Drives one MOOSE feature from specs/blueprint.md to a green tree with the standing gates passed, docs gated, and a clean-context review; execution is the moose-feature-loop agent. Use for "/moose-build [blueprint.md] [--core]", "build the blueprint", "build this feature". Manual invoke only; ends at a suggested commit message and never commits.
 disable-model-invocation: true
-argument-hint: "[blueprint.html] [--core]"
+argument-hint: "[blueprint.md] [--core]"
 effort: medium
 ---
 
@@ -15,23 +15,25 @@ agent to do the work, runs Gate B, drives the docs pass and the review, and repo
 routes fixes, commits, pushes, or runs a formatter (the pre-commit hook owns style); worktrees, branches, and
 conda envs are `/new-feature`'s job. Say in a line what is about to happen before each stage and close with a
 recap that stands on its own; only you see script output, so the report carries what the user needs.
-`<repo>` below is the slice's `repo` (`moose`, `blackbear`, `isopod`, or `moose/modules/<m>`), `<scope>` its
+`<repo>` below is the blueprint's `repo` (`moose`, `blackbear`, `isopod`, or `moose/modules/<m>`), `<scope>` its
 top-level submodule, and `<meta-root>` the worktree root (the directory holding `.clangd`).
 
 ## Usage and refusals
 
-`$ARGUMENTS` is `[blueprint.html] [--core]`; the blueprint defaults to `<worktree-root>/specs/blueprint.html`.
+`$ARGUMENTS` is `[blueprint.md] [--core]`; the blueprint defaults to `<worktree-root>/specs/blueprint.md`.
 Refuse when there is no blueprint ("No blueprint found. Run `/moose-blueprint` first."), when the current
 directory is not inside a `/new-feature` worktree (walk up to a `.git` file beside `moose/`, `blackbear/`, and
-`isopod/`), or when `--core` is given and the slice's `doc_plan.needed` is true. `--core` skips only the docs
+`isopod/`), or when `--core` is given and the doc plan says `Needed: yes`. `--core` skips only the docs
 gate (DG); every other gate runs in full.
 
-## Slice
+## Read the blueprint
 
-`python3 <meta-root>/.claude/skills/moose-build/scripts/slice_blueprint.py --check --slice <blueprint>`
-validates the seven contract blocks and the `#work-plan-data` island, then prints one JSON object with the
-block text as plain text (TeX recovered) plus `units` and `deps`. A failing check prints its problems instead
-and exits 1: show them verbatim and stop; the user fixes the blueprint.
+Read `blueprint.md` whole (format: `<meta-root>/.claude/skills/moose-blueprint/references/blueprint-format.md`).
+The frontmatter gives `repo`, `scope`, and `object_kind`; the fenced `json` block under `## Work plan` gives
+`units`, `deps`, and every `status`. Before spawning anything, confirm the file passes the "Checks before you
+stop" list in that format document (headings present, JSON parses, deps resolve and are acyclic, edge-free
+units own disjoint files, test units name test headings, `status: approved`). A failing check is shown
+verbatim and the run stops; the user fixes the blueprint.
 
 ## Goal ledger
 
@@ -44,11 +46,12 @@ it at the start of every run, since the list grows.
 ## Execution
 
 Caps: `impl_iters` 5 with `--core`, else 10; `no_progress` 2. `run_label` is the worktree directory name.
-Spawn one `moose-feature-loop` (Agent, background) with the slice JSON, `caps`, and `run_label`; tell the
-user the goal and the criteria in a few lines, then let it run. The loop posts a one-line SendMessage at each
-round boundary: drive the blueprint's unit chips from those and the gate chips from your own gate runs, edit
-only the chip spans (markup in `<meta-root>/.claude/skills/moose-blueprint/references/work-plan-format.md`),
-and reconcile every chip at the end.
+Spawn one `moose-feature-loop` (Agent, background) with the blueprint path, `caps`, and `run_label`; set the
+frontmatter `status:` to `building`; tell the user the goal and the criteria in a few lines, then let it run.
+The loop posts a one-line SendMessage at each round boundary: on each one edit the matching unit's `"status"`
+in the fenced JSON (`idle`, `running`, `done`, `failed`), and edit the `gates` entries from your own gate runs.
+Edit nothing else in the file; saving re-renders `blueprint.html` through the hook. Reconcile every status at
+the end and set the frontmatter `status:` to `built` on success.
 
 On `GOAL_MET`, run Gate B: `bash <meta-root>/.claude/skills/moose-build/scripts/gates.sh <repo> all --base
 devel [--core]`, in the background with Monitor (the SQA check takes minutes). Pass `--core` when the run is
@@ -59,7 +62,7 @@ the diff against `reuse_decisions` and `out_of_scope`. A BLOCKED gate is surface
 
 ## Repair
 
-Never route fixes yourself. Wake the loop with SendMessage in repair mode: the slice, `caps`, `repair: true`,
+Never route fixes yourself. Wake the loop with SendMessage in repair mode: the blueprint path, `caps`, `repair: true`,
 the ledger state (criteria met, with their evidence), and the failure evidence (the gate hits or the B3
 finding, with the owning unit). One repair pass per failure; on `GOAL_MET` re-run only the failed check.
 
@@ -81,9 +84,9 @@ regression goes through repair instead.
 
 ## Docs (DG; skipped by `--core`)
 
-Docs on (`doc_plan.needed`): spawn `moose-docs-writer` with the scope (`<repo>`), base branch `devel`, the
-public surface (the objects and syntax the implementer's FILES register), and the doc paths (`doc_plan.pages`
-and the work plan's `doc` unit); it authors the pages and runs the `docs.sh` smoke itself. `DOCS_GREEN`:
+Docs on (`Needed: yes` in the doc plan): spawn `moose-docs-writer` with the scope (`<repo>`), base branch
+`devel`, the public surface (the objects and syntax the implementer's FILES register), and the doc paths
+(the doc plan's pages and the work plan's `doc` unit); it authors the pages and runs the `docs.sh` smoke itself. `DOCS_GREEN`:
 report. `NEEDS_CPP_CHANGE`: one hop only, a one-shot `moose-implementer` for the named change, a one-shot
 `moose-test-runner` on the registered tests, then wake the writer. `DONE_WITH_CONCERNS`: `AskUserQuestion`:
 extend the doc budget, escalate to the implementer, or ship as-is. `NEEDS_CONTEXT`: one-shot `moose-scout`
@@ -115,4 +118,4 @@ commit message; then "run `/moose-ship` when satisfied". Write the same report t
 `<meta-root>/.claude/cache/moose-build-<run_label>.json` as
 `{"runId": "<run_label>", "status": "<terminal status>", "report": "<text>"}`; the session-context hook
 shows the newest record after a compaction. The run is interruptible at any point: the loop's SendMessages
-and the chips show where it is.
+and the status fields in the blueprint show where it is.
