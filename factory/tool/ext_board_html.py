@@ -142,6 +142,11 @@ SAFE_SCHEMES = ("obsidian://", "file://", "https://github.com/")
 #: Board.html's own ``app://`` resource URL, which is the vault directory.
 GALLERY_HREF_PREFIX = "Gallery/"
 
+#: Our own reader, the one plugin this vault expects. Its ``main.js`` is
+#: gitignored like any plugin code, so the doctor row that names this id
+#: carries the recipe to rebuild it.
+BOARD_READER_ID = "moose-board-reader"
+
 # There is no webfont. The page is a vault file and every other generated file
 # in this vault is self-contained, so the one artifact Max opens on a plane may
 # not need the network to look right: a Google Fonts stylesheet never arrives
@@ -978,21 +983,32 @@ def doctor_checks(ctx: Any) -> List[Tuple[str, bool, str]]:
             "run `factory board`; the page is generated on every run",
         )
     )
-    plugin = Path(cfg.vault) / ".obsidian" / "plugins" / "obsidian-html-plugin" / "main.js"
+    # The reader is ours, not a community release. `manifest.json` is committed and
+    # is the record that the plugin is expected; `main.js` is gitignored like any
+    # plugin code, so this row is the only thing in git that names it. Say enough
+    # here to rebuild it: the whole plugin points an iframe at
+    # `vault.getResourcePath(file)`, which is why the board's one relative
+    # `Gallery/<feature>/<file>` src resolves with no injected `<base href>`.
+    plugin_dir = Path(cfg.vault) / ".obsidian" / "plugins" / BOARD_READER_ID
+    has_source = (plugin_dir / "main.js").is_file()
+    has_manifest = (plugin_dir / "manifest.json").is_file()
     enabled = False
     data, ok = probe._read_json(Path(cfg.vault) / ".obsidian" / "community-plugins.json")
     if ok and isinstance(data, list):
-        enabled = "obsidian-html-plugin" in data
+        enabled = BOARD_READER_ID in data
     out.append(
         (
-            "Obsidian HTML Reader plugin installed and listed",
-            plugin.is_file() and enabled,
-            "install HTML Reader from Obsidian's own community-plugin browser "
-            "(Settings, Community plugins, Browse): the plugin code is "
-            "gitignored on purpose, because a vendored main.js runs inside "
-            "Obsidian with no recorded provenance. Obsidian also needs "
-            "Restricted mode off, which it keeps in its own localStorage, not "
-            "in the vault. Board.html opens in any browser without this",
+            f"{BOARD_READER_ID} present and listed",
+            has_source and has_manifest and enabled,
+            f"the board reader is ours. `main.js` is gitignored on purpose, so a "
+            f"fresh clone has the manifest and not the code. Write "
+            f".obsidian/plugins/{BOARD_READER_ID}/main.js: a FileView whose "
+            f"canAcceptExtension takes 'html', registered with "
+            f"registerExtensions(['html'], ...), whose onLoadFile points an "
+            f"iframe src at this.app.vault.getResourcePath(file) with "
+            f"sandbox='allow-same-origin'. Obsidian also needs Restricted mode "
+            f"off, which it keeps in its own localStorage, not in the vault. "
+            f"Board.html opens in any browser without this",
         )
     )
     return out
