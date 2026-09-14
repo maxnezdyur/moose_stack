@@ -1,0 +1,6 @@
+# The probe cache, the session registry, the gh cache, the manifest and the
+# locks. `rm -rf factory/state && factory board` is a complete repair.
+state/
+__pycache__/
+*.pyc
+.ps

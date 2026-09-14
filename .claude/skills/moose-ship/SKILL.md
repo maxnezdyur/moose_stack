@@ -39,4 +39,10 @@ git -C <worktree> commit -m "Bump <sub> to <short sha>"
 
 ## Report
 
-The PR URL, the submodule commit (short sha and subject), the meta-repo bump commit, the files committed, and any step skipped or failed with its output. The PR stays a draft; the user marks it ready in the GitHub UI.
+The PR URL, the submodule commit (short sha and subject), the meta-repo bump commit, the files committed, and any step skipped or failed with its output. The PR stays a draft; the user marks it ready in the GitHub UI. Then run
+`~/projects/moose_stack/factory/factory board` (absolute path; no `factory/` exists in this worktree) so the
+board picks up the new PR, and say in one line that the card moved.
+Finally append the PR URL to `## State` in `<worktree>/specs/handoff.md` (one sentence, after what is
+already there) and one `## Sessions` line, `- <date> <time> <label> /moose-ship: opened <PR URL>`, and
+bump `sessions`. Rewrite nothing else in that file: its other sections are append-only or belong to
+`/moose-build`.

@@ -84,8 +84,20 @@ the `render-blueprint.sh` hook writes `specs/blueprint.html` (pandoc, MathML). T
 "Checks before you stop" list in `blueprint-format.md` against the file you wrote and fix what
 fails.
 
+Then seed the handoff, the file the next session reads first: when `<worktree-root>/specs/handoff.md`
+is absent, copy `<meta-root>/.claude/skills/handoff/references/handoff-template.md` to it, substitute
+`feature` and today's date, set `sessions: 1`, and fill `## Map` from the files this blueprint names
+(the `## Summary` list and each unit's `files`), one row per file with why it is touched. Leave the
+other six sections as the template wrote them; `/handoff` and `/moose-build` own them from here.
+A worktree's `.claude/` is frozen at the day it was created, so that template is often absent there:
+fall back to `~/projects/moose_stack/.claude/skills/handoff/references/handoff-template.md`, which is
+canonical. `factory refresh-pipeline <feature>` is the real repair.
+
 ## Done
 
 Tell the user: "Blueprint written to `<worktree-root>/specs/blueprint.md`; open
 `specs/blueprint.html` in a browser to review. Edit the markdown if needed (the page re-renders
-on save), then run `/moose-build`."
+on save), then run `/moose-build`." Add that `/moose-build` is gated on the `blueprint_approved` gate,
+which only the user grants: set the frontmatter `status: approved`, then tick `blueprint_approved` in
+`~/projects/moose-factory/Features/<feature>.md` or run
+`~/projects/moose_stack/factory/factory grant <feature> blueprint_approved`.

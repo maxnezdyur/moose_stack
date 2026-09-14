@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# No-install launcher for the moose-factory projector.
+#
+# Runs the CLI as a package (`python -m tool.cli`) with this directory on
+# PYTHONPATH, so relative imports resolve without `pip install`. Mirrors
+# analysis/analysis, including its interpreter search.
+#
+# Nothing here names a user, a home directory or a machine. Every
+# machine-specific value comes from the same file tool/config.py reads:
+#
+#   ~/.config/moose-factory/config.toml      ($MOOSE_FACTORY_CONFIG overrides)
+#
+# Interpreter selection (first that imports yaml wins):
+#   1. $FACTORY_PYTHON, if set
+#   2. `python` in config.toml, if set
+#   3. /opt/homebrew/bin/python3
+#   4. python3 / python on PATH
+#   5. the conda `moose` env python
+#
+# The first statement is the hostname guard: on a refused host (an INL cluster
+# by default) there is no vault, `gh` may be unauthenticated, and a dispatch
+# would land on a login node.
+#
+# Usage:  ./factory <command> [args...]
+set -euo pipefail
+
+CONFIG="${MOOSE_FACTORY_CONFIG:-$HOME/.config/moose-factory/config.toml}"
+
+# One key out of the config file, without a TOML parser. Handles the two shapes
+# this file uses: `key = "value"` and `key = ["a", "b"]`. Absent file, absent
+# key or a comment line all print nothing, and every caller has a default.
+# A leading "~" is expanded here, once, for every key, because tool/config.py
+# expands it too (coerce(), kind "path"). A shell reader that took the tilde
+# literally would silently discard a value the Python side accepts, and then
+# blame the user for a key the config file already carries.
+cfg_get() {
+  [ -r "$CONFIG" ] || return 0
+  local v
+  v="$(sed -n -e 's/[[:space:]]*#.*$//' \
+              -e "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONFIG" \
+       | head -1 | tr -d '"' | tr -d "[],")"
+  [ -n "$v" ] || return 0
+  printf '%s\n' "${v/#\~/$HOME}"
+}
+
+# The short hostname and the globs are both lowercased before they meet, because
+# config.on_hpc lowercases both (tool/config.py). macOS capitalises a hostname by
+# default, so a case-sensitive guard and the Python guard disagreed on "Teton-MBP":
+# the shell let it through and every python entry point then exited 3.
+HOSTS="$(cfg_get refuse_hosts | tr 'A-Z' 'a-z')"
+[ -n "$HOSTS" ] || HOSTS="sawtooth* lemhi* bitterroot* hoodoo* teton*"
+HOST_RAW="$(hostname -s 2>/dev/null || true)"
+SHORT_HOST="$(printf '%s' "$HOST_RAW" | tr 'A-Z' 'a-z')"
+for glob in $HOSTS; do
+  # shellcheck disable=SC2254
+  case "$SHORT_HOST" in
+    $glob)
+      echo "factory: not on $HOST_RAW (no vault here). Run it on the local machine." >&2
+      exit 3 ;;
+  esac
+done
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+has_yaml() { "$1" -c 'import yaml' >/dev/null 2>&1; }
+
+pick_python() {
+  if [ -n "${FACTORY_PYTHON:-}" ]; then echo "$FACTORY_PYTHON"; return; fi
+  local from_cfg
+  from_cfg="$(cfg_get python)"
+  if [ -n "$from_cfg" ] && [ -x "$from_cfg" ] && has_yaml "$from_cfg"; then
+    echo "$from_cfg"; return
+  fi
+  for c in /opt/homebrew/bin/python3 python3 python; do
+    if command -v "$c" >/dev/null 2>&1 && has_yaml "$c"; then echo "$c"; return; fi
+  done
+  base=""
+  command -v conda >/dev/null 2>&1 && base="$(conda info --base 2>/dev/null || true)"
+  for p in ${base:+"$base/envs/moose/bin/python"} \
+           "$HOME/miniforge/envs/moose/bin/python" \
+           "$HOME/miniconda3/envs/moose/bin/python" \
+           "$HOME/anaconda3/envs/moose/bin/python"; do
+    if [ -x "$p" ] && has_yaml "$p"; then echo "$p"; return; fi
+  done
+  echo ""
+}
+
+PY="$(pick_python)"
+if [ -z "$PY" ]; then
+  echo "factory: no python with PyYAML found. Set FACTORY_PYTHON=/path/to/python" >&2
+  # Name the config file's own answer when it has one. Without this line a
+  # `python` key that is mistyped, uninstalled or missing PyYAML reads as "you
+  # configured nothing", and the one file that carries the answer is never named.
+  CFG_PY="$(cfg_get python)"
+  if [ -n "$CFG_PY" ]; then
+    echo "  $CONFIG names python = $CFG_PY, which is not executable or cannot import yaml." >&2
+  else
+    echo "  $CONFIG names no python key." >&2
+  fi
+  echo "  (needs: pip install PyYAML), or activate the moose conda env." >&2
+  exit 3
+fi
+
+# -P keeps the current working directory off sys.path, so a second checkout on
+# this machine can never shadow this one's `tool` package. Without it, running
+# checkout B's launcher from inside checkout A imports A and reports A's
+# meta_repo. Both interpreters here are 3.11 or newer, where -P exists.
+exec env PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$PY" -P -m tool.cli "$@"

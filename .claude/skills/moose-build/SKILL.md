@@ -24,7 +24,11 @@ top-level submodule, and `<meta-root>` the worktree root (the directory holding 
 Refuse when there is no blueprint ("No blueprint found. Run `/moose-blueprint` first."), when the current
 directory is not inside a `/new-feature` worktree (walk up to a `.git` file beside `moose/`, `blackbear/`, and
 `isopod/`), or when `--core` is given and the doc plan says `Needed: yes`. `--core` skips only the docs
-gate (DG); every other gate runs in full.
+gate (DG); every other gate runs in full. Refuse also when `<meta-root>/.factory-lease` exists and its
+`{bg_id, session_id, pid}` names a live session that is not this one: print that the workspace is held
+and stop, because two builds in one worktree fight over `specs/blueprint.md`, one conda env and one git
+index (a lease whose owner process is gone is reported as stale, never stolen; the user clears it with
+`~/projects/moose_stack/factory/factory release <feature>`).
 
 ## Read the blueprint
 
@@ -104,7 +108,9 @@ surfaced. The smoke gates the build, not doc quality.
 When every gate is green, spawn one fresh `moose-pr-reviewer` (foreground) with `mode: local`,
 `repo_root: <worktree-root>/<scope>`, `base_branch: devel`, `label: <run_label>`. It has seen none of this
 build, which is the point. Report-only: its summary block and `/tmp/moose-review-<run_label>.md` go into the
-final report verbatim, and zero findings is a valid result. Offer once to apply the mechanical findings;
+final report verbatim, and zero findings is a valid result. Copy that findings file to
+`<meta-root>/specs/review-<run_label>.md` as well, since `/tmp` is purged at boot and the worktree copy is
+what the board rescues and links. Offer once to apply the mechanical findings;
 otherwise the user decides before committing.
 
 ## Final report
@@ -119,3 +125,16 @@ commit message; then "run `/moose-ship` when satisfied". Write the same report t
 `{"runId": "<run_label>", "status": "<terminal status>", "report": "<text>"}`; the session-context hook
 shows the newest record after a compaction. The run is interruptible at any point: the loop's SendMessages
 and the status fields in the blueprint show where it is.
+
+Then write the handoff, `<meta-root>/specs/handoff.md`, seeding it from
+`<meta-root>/.claude/skills/handoff/references/handoff-template.md` when it is absent: rewrite
+`## State`, `## Next` and `## Map`; append one `## Do not repeat` line per failed unit and per failed
+gate from the rounds (`- <date>: tried X; failed because Y; evidence <path>; retry only if Z`), one
+`## Decisions` line per AskUserQuestion outcome, and one `## Sessions` line; then bump `sessions` and
+set `updated`. Never delete or edit a line already in an append-only section (the disciplines are in
+`.claude/skills/handoff/references/handoff-rules.md`). A worktree's `.claude/` is frozen at the day it
+was created, so both reference files are often absent there: fall back to
+`~/projects/moose_stack/.claude/skills/handoff/references/`, which is canonical, and if the seven
+headings are still out of reach write them from the table in `/handoff`. `factory refresh-pipeline
+<feature>` is the real repair. On `STALLED` or `BLOCKED` write the handoff from the loop's `HANDOFF:`
+block before reporting, because that is the moment the next session needs it.

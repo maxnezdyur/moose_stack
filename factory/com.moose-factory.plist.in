@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template. factory/install.sh substitutes __LABEL__, __TICK_SCRIPT__ and __LOG__
+     and writes the result to ~/Library/LaunchAgents/<label>.plist. The repository
+     holds no absolute path and no user name. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>__LABEL__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>__TICK_SCRIPT__</string>
+  </array>
+  <!-- Background: the tick is a projector, never interactive, and must lose to a build. -->
+  <key>ProcessType</key><string>Background</string>
+  <key>Nice</key><integer>5</integer>
+  <key>SoftResourceLimits</key><dict><key>NumberOfFiles</key><integer>65536</integer></dict>
+  <!-- No MaterializeDatalessFiles: the vault is deliberately outside iCloud, so there are no
+       dataless placeholders to fault in and no EDEADLK to avoid. -->
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>120</integer>
+  <key>StandardOutPath</key><string>__LOG__</string>
+  <key>StandardErrorPath</key><string>__LOG__</string>
+</dict>
+</plist>

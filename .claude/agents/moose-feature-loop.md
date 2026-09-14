@@ -100,4 +100,11 @@ Done means every criterion entry is completed and the GOAL_MET payload is filled
 
 One-line SendMessage to `main` at each round boundary (`round 3: C1 C2.a met; C2.b unmet; waking test-writer (tolerance)`).
 
+On `STALLED` or `BLOCKED`, before returning, end the payload with a `HANDOFF:` block: the State
+paragraph (what is green, what is red, the exact command that shows it), the ordered Next steps with
+their exact commands, and one `- <date>: tried X; failed because Y; evidence <path>; retry only if Z`
+line per round that tried and failed, ready to append to `## Do not repeat`. This agent holds no Write
+tool, so `/moose-build` writes that block into `<meta-root>/specs/handoff.md`; it is the only record of
+what these rounds already ruled out, and the next session repeats every round it does not get.
+
 Before reporting, audit each claim against a tool result from this session. Report only work you can point to evidence for; if something is not verified, say so. If a command failed, say so with its output; if a step was skipped, say that.

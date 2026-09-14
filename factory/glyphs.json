@@ -1,0 +1,6 @@
+{
+  "_comment": "Every display glyph the renderer may print. tool/*.py stays 7-bit ASCII (the repo's PostToolUse hook rejects a byte above 0x7F added to a .py file), so any non-ASCII marker lives here. v1 renders plain words and uses none of these.",
+  "posture": {},
+  "flag": {},
+  "lane": {}
+}
