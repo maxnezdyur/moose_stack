@@ -130,7 +130,7 @@ PR_DERIVED_FLAGS = frozenset({"ci-red", "conflicting", "changes-requested"})
 
 #: Only these three schemes may appear in an href. Anything else is rendered as
 #: text, because a vault page that can reach an arbitrary scheme is a hole.
-SAFE_SCHEMES = ("obsidian://", "file://", "https://github.com/")
+SAFE_SCHEMES = ("obsidian://", "vscode://file/", "https://github.com/")
 
 #: The one relative URL on the page, and it is an ``img src`` rather than an
 #: href, so :func:`safe_href` does not apply to it. It is kept to exactly one
@@ -210,6 +210,20 @@ def obsidian_url(cfg: Any, target: str) -> str:
         urllib.parse.quote(vault_name(cfg), safe=""),
         urllib.parse.quote(target, safe=""),
     )
+
+
+def vscode_uri(path: Any) -> str:
+    """``vscode://file/<abs path>``, for a workspace the board offers to open.
+
+    Not ``file://``. A page may not navigate to ``file://`` from any other
+    origin: a browser refuses it outright, and inside Obsidian the board is a
+    document on ``app://``, so the workspace links did nothing when clicked. VS
+    Code declares the ``vscode`` scheme in its Info.plist, and a custom scheme
+    is handed to the OS rather than blocked, so the same href works in a browser
+    and in the reader. ``.code-workspace`` is not the thing to open by path: the
+    scheme carries the intent, which is that VS Code opens the workspace.
+    """
+    return "vscode://file" + urllib.parse.quote(str(path))
 
 
 def safe_href(url: Any) -> str:
@@ -452,7 +466,7 @@ def links_row(card: Any, cfg: Any) -> str:
         ):
             path = Path(wt) / name
             if path.is_file():
-                out.append(link(render.file_uri(path), label))
+                out.append(link(vscode_uri(path), label))
     out.append(link(obsidian_url(cfg, "Features/" + card.id), "note"))
     pr = card.primary_pr()
     if pr and safe_href(pr.get("url")):
