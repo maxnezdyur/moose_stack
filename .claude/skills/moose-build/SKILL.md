@@ -44,7 +44,8 @@ verbatim and the run stops; the user fixes the blueprint.
 Standing criteria, every run: C1 build clean, C4 reuse decisions honored and no out-of-scope edits, C5 specs
 SQA-complete, C6 code ASCII-clean, DG docs smoke (unless `--core`). Blueprint-derived: one `C2.<name>` (test
 exists and passes) per `test_plan` entry, and C3 (unit tests exist and pass) when `unit_on`. A blueprint adds
-criteria; it never removes or weakens a standing one. The gate table is `references/standing-gates.md`; read
+criteria; it never removes or weakens a standing one. A `showcase` unit is not a criterion: it rides along
+with the loop and is reported on its own line, never as a gate. The gate table is `references/standing-gates.md`; read
 it at the start of every run, since the list grows.
 
 ## Execution
@@ -103,6 +104,16 @@ registered syntax) gets one implementer hop and a `moose-test-runner` re-run of
 `bash <meta-root>/.claude/skills/moose-docs/scripts/docs.sh <repo> smoke --diff devel`; a doc-side FAIL is
 surfaced. The smoke gates the build, not doc quality.
 
+## Showcase
+
+A blueprint with a `## Showcase` section carries `showcase` units, which the loop dispatches to `moose-figure`
+like any other unit; the evidence is that every file the unit names exists in `<meta-root>/specs/gallery/` and
+`specs/gallery/gallery.md` has a `## Figure` section for each. Check that yourself with Read and Glob when the loop
+returns, since nothing else does. A showcase unit never blocks C1 to C6 and never gates the run: a figure that
+did not render is a `SHOWCASE:` line saying which file is missing and the agent's reason, and the build still
+reports its real status. The files are gitignored, so they never reach the PR; the board links them from the
+feature's card through `~/projects/moose-factory/Gallery/<feature>`.
+
 ## Clean-context review
 
 When every gate is green, spawn one fresh `moose-pr-reviewer` (foreground) with `mode: local`,
@@ -117,7 +128,8 @@ otherwise the user decides before committing.
 
 Files created or edited per unit; the exact runner commands with final counts; gold files with observed
 values; each gate's result and what repair changed; the docs result (smoke line and log path, or "docs
-skipped (--core)"); the review summary and findings file; any CONCERNS carried; a diff attribution audit that
+skipped (--core)"); one `SHOWCASE:` line naming each gallery file with its caption, or "no showcase in the
+blueprint"; the review summary and findings file; any CONCERNS carried; a diff attribution audit that
 groups the diff into change classes and traces each to the blueprint's purpose (`moose/AGENTS.md` section 3,
 Surgical Changes), flagging unattributable hunks to drop, split out, or justify in the PR body; a suggested
 commit message; then "run `/moose-ship` when satisfied". Write the same report to

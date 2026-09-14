@@ -42,7 +42,7 @@ Task tools are the ledger when the harness provides them: one entry per criterio
 
 ## Dispatching from units
 
-Dispatch from the work-plan `units`: one implementer per `implement` unit (its `class`, `base`, and `files`, plus its physics subsection) and one writer per `test` unit (`agent` names which; the test's `###` section is its brief). A `deps` edge means order: the two units never run in the same round. Edge-free units own disjoint files by construction and fan out in one round. Units are a decomposition, not a schedule: a unit whose criterion already holds needs no dispatch. Without units, split the work yourself: the implementer first, the writers fanned out once it reports DONE, the runner once code and tests exist.
+Dispatch from the work-plan `units`: one implementer per `implement` unit (its `class`, `base`, and `files`, plus its physics subsection) and one writer per `test` unit (`agent` names which; the test's `###` section is its brief). A `showcase` unit dispatches `moose-figure` once its `deps` are done and C1 holds, with the worktree root, the unit's `example`, the `## Showcase` bullets as the figure list, and the gallery size cap; its evidence is that every file the unit names exists in `specs/gallery/` and that `specs/gallery/gallery.md` has a `## Figure` section for each, which Read and Glob settle. A `deps` edge means order: the two units never run in the same round. Edge-free units own disjoint files by construction and fan out in one round. Units are a decomposition, not a schedule: a unit whose criterion already holds needs no dispatch. Without units, split the work yourself: the implementer first, the writers fanned out once it reports DONE, the runner once code and tests exist.
 
 ## The loop
 
@@ -58,6 +58,8 @@ Each round: assess every criterion against the evidence in hand, select the most
 | gate line `"status":"FAIL"` | route each hit to the child that owns the file kind: implementer for source, test-writer for `tests` specs and `.i`, unit-test-writer for `unit/`; a hit in a `.md` has no owner here and goes in the payload for `/moose-build`'s docs pass |
 | gate line `"status":"BLOCKED"` | return BLOCKED with its `hint` verbatim |
 | a test is missing (C2 or C3 with no writer report) | writers fan out, one per `test_plan` entry or `test` unit |
+| figure `FIGURES_DONE` | the showcase unit is done; carry its FIGURES and CAPTIONS lines into the payload |
+| figure `BLOCKED` or `NEEDS_CONTEXT` | a showcase unit never blocks a criterion: mark it failed, carry its QUESTION into the payload as a `SHOWCASE:` line, and keep going |
 | child `NEEDS_CONTEXT` | one-shot `moose-scout` with the QUESTION, then wake the child with the scout's MATCHES |
 | child `BLOCKED` | return BLOCKED with its QUESTION verbatim |
 | child `DONE_WITH_CONCERNS` naming a C++ change | implementer; if the change is unsatisfiable, NEEDS_DESIGN; otherwise carry the CONCERNS into the GOAL_MET payload |
@@ -80,10 +82,11 @@ MISSING GOLD or a structural diff on a newly authored test is first-time capture
 
 - `moose-implementer`: `summary`, `physics`, `reuse_decisions`, `out_of_scope`, and its unit payload on round 1; the runner's FAILURES lines or the gate hits later.
 
-These four are the only agents this loop spawns.
+These five are the only agents this loop spawns.
 - `moose-test-writer` and `moose-unit-test-writer`: `summary`, the one `test_plan` entry, `out_of_scope`.
 - `moose-test-runner`: `repo`, the registered test names and filters, the build authorization, and the gate request.
 - `moose-scout`: a child's QUESTION, one-shot and read-only.
+- `moose-figure`: the worktree root, the showcase unit's `example` and `files`, the `## Showcase` bullets, and the gallery size cap; only for a `showcase` unit, and never for a criterion.
 
 No docs here: `/moose-build` runs `moose-docs-writer` after GOAL_MET.
 
@@ -93,7 +96,7 @@ Done means every criterion entry is completed and the GOAL_MET payload is filled
 
 | Status | When | Payload |
 |---|---|---|
-| `GOAL_MET` | every criterion completed | files changed per child, exact runner commands, final COUNTS, gold files with observed values, any CONCERNS carried |
+| `GOAL_MET` | every criterion completed | files changed per child, exact runner commands, final COUNTS, gold files with observed values, one `SHOWCASE:` line per gallery file with its caption (or per figure that did not render, with the reason), any CONCERNS carried |
 | `NEEDS_DESIGN(reason)` | a criterion is unsatisfiable as specified (wrong base class, a reuse halt that should have fired) | what is wrong and which design decision must change |
 | `BLOCKED(reason)` | env, missing binary, missing dependency, or a child's blocker | the blocker and the exact command or fix |
 | `STALLED(state)` | no new criterion met for `caps.no_progress` rounds with the same failure recurring, or `caps.impl_iters` implementer rounds spent | unmet criteria, what each round tried, the best next human action |

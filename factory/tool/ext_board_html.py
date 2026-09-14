@@ -34,8 +34,12 @@ Five rules, the first three inherited from the rest of the package:
    :func:`urllib.parse.quote`, so no input can close a tag. The three strings
    that come from markdown a human wrote go through :func:`esc_md`, which
    escapes first and only then turns paired backticks into ``<code>``.
-4. **Nothing remote.** No webfont, no script, no image. Every other generated
-   file in this vault is self-contained and this one is not the exception: it
+4. **Nothing remote.** No webfont, no script, and no image the network has to
+   fetch. The gallery thumbnails are the one ``<img>`` on the page and they are
+   a relative vault path, ``Gallery/<feature>/<file>``, which is a symlink into
+   the worktree: the page still renders whole with no network at all. Every
+   other generated file in this vault is self-contained and this one is not the
+   exception: it
    has to look right offline and inside Obsidian's HTML Reader.
 5. **Per card, not per page.** Every row renders inside its own ``try``, and a
    row that raises becomes a placeholder card plus one log line. A note
@@ -60,7 +64,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from . import config, probe, render, snapshot
+from . import config, ext_gallery, probe, render, snapshot
 from .model import DONE, NEEDS_YOU, PARKED, POSTURE, READY, RUNNING, WAITING
 
 BOARD_NAME = "Board.html"
@@ -127,6 +131,16 @@ PR_DERIVED_FLAGS = frozenset({"ci-red", "conflicting", "changes-requested"})
 #: Only these three schemes may appear in an href. Anything else is rendered as
 #: text, because a vault page that can reach an arbitrary scheme is a hole.
 SAFE_SCHEMES = ("obsidian://", "file://", "https://github.com/")
+
+#: The one relative URL on the page, and it is an ``img src`` rather than an
+#: href, so :func:`safe_href` does not apply to it. It is kept to exactly one
+#: shape -- ``Gallery/<feature>/<file>``, no scheme, no host, no ``..`` -- by
+#: :func:`thumb_src`, which refuses anything else. That shape is what the
+#: HTML Reader plugin resolves: the plugin prepends
+#: ``<base href="<vault.getResourcePath(Board.html)>">`` to the document before
+#: it hands it to the iframe as ``srcdoc``, so a relative path resolves against
+#: Board.html's own ``app://`` resource URL, which is the vault directory.
+GALLERY_HREF_PREFIX = "Gallery/"
 
 # There is no webfont. The page is a vault file and every other generated file
 # in this vault is self-contained, so the one artifact Max opens on a plane may
@@ -441,6 +455,64 @@ def links_row(card: Any, cfg: Any) -> str:
     return '<p class="links">%s</p>' % (" ".join(out),)
 
 
+def thumb_src(feature: Any, name: Any) -> str:
+    """``Gallery/<feature>/<file>``, percent-encoded, or ``""``.
+
+    The only relative URL on the page. It is refused unless both halves are the
+    plain names the gallery extension already validated, so no input can turn
+    an ``img src`` into a scheme, a host or a path that climbs out of the vault.
+    ``quote`` with an empty safe set, so a space or a ``#`` in a filename is
+    encoded rather than read as a fragment.
+    """
+    feat, file_name = str(feature or ""), str(name or "")
+    if not config.is_safe_id(feat):
+        return ""
+    if not ext_gallery.SAFE_NAME.match(file_name):
+        return ""
+    return GALLERY_HREF_PREFIX + "%s/%s" % (
+        urllib.parse.quote(feat, safe=""),
+        urllib.parse.quote(file_name, safe=""),
+    )
+
+
+def gallery_strip(card: Any, ctx: Any) -> str:
+    """Up to ``gallery_thumbs`` thumbnails, or ``""`` when there is no gallery.
+
+    In the order ``specs/gallery/gallery.md`` puts them in, with the figure's
+    own heading as its label: the page decides which figure leads, and a card
+    that shows a different first figure than the note disagrees with the note.
+    A file the page does not mention comes after the ones it does, labelled by
+    its filename.
+
+    Images only: a CSV has no thumbnail, and a broken image icon for one states
+    something false. The label is both ``alt`` and ``title``, so the strip reads
+    the same to a screen reader and to a pointer. Every heading was clipped and
+    marker-escaped by ``ext_gallery`` before it got here, and :func:`esc` closes
+    the HTML half of the same hole.
+    """
+    limit = ext_gallery.thumbs(ctx)
+    if limit <= 0:
+        return ""
+    rows = [row for row in ext_gallery.files(ctx, card) if row.get("image")]
+    if not rows:
+        return ""
+    out: List[str] = []
+    for row in rows[:limit]:
+        src = thumb_src(card.id, row.get("name"))
+        if not src:
+            continue
+        label = str(row.get("title") or row.get("name") or "")
+        out.append(
+            '<img src="%s" alt="%s" title="%s" loading="lazy">'
+            % (esc(src), esc(label), esc(label))
+        )
+    if not out:
+        return ""
+    more = len(rows) - len(out)
+    tail = '<span class="more">+%d</span>' % (more,) if more > 0 else ""
+    return '<p class="shots">%s%s</p>' % ("".join(out), tail)
+
+
 def feature_card(card: Any, ctx: Any, compact: bool = False) -> str:
     cfg = ctx.config
     cls = ["card"]
@@ -477,6 +549,10 @@ def feature_card(card: Any, ctx: Any, compact: bool = False) -> str:
     )
     if na.command:
         out.append('<p class="cmd"><code>%s</code></p>' % (esc(na.command),))
+
+    shots = gallery_strip(card, ctx)
+    if shots:
+        out.append(shots)
 
     hand = handoff_next(card, ctx)
     if hand:
@@ -790,6 +866,17 @@ h1 small code { background: transparent; padding: 0; }
   letter-spacing: .06em; color: var(--ink-3); margin-right: 4px;
 }
 .card .why { margin-top: 5px; font-size: 13px; color: var(--ink-2); }
+.card .shots {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px;
+}
+.card .shots img {
+  width: 74px; height: 52px; object-fit: cover; border-radius: 4px;
+  border: 1px solid var(--line); background: var(--surface-2); display: block;
+}
+.card .shots .more {
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+  align-self: flex-end; padding-bottom: 2px;
+}
 .card .links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .card .links a, .card .links span {
   font-size: 12px; color: var(--ink-2); text-decoration: none;

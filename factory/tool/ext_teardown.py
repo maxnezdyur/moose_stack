@@ -22,6 +22,17 @@ The conda env is removed only when ``<worktree>/specs/.factory-env`` says
 every worktree on that pin), so with no such file the env is left alone and the
 recipe says why.
 
+Before the first destructive command, teardown copies the size-capped gallery
+out of ``<worktree>/specs/gallery/`` into ``<vault>/Artifacts/<feature>/gallery/``
+and repoints ``<vault>/Gallery/<feature>`` at the copy. That is the only copy
+this design ever makes of a gallery: everywhere else the vault links. It has to
+happen here, because the figures are the one artifact of the work that survives
+nowhere else once the checkout is gone, and every ``![[Gallery/...]]`` embed on
+the feature note would otherwise resolve to nothing. The copy is idempotent and
+never overwrites a differing file; that one gets a numbered suffix. Print mode
+shows the step as the first line of the recipe, so the reader knows a copy
+happens before anything is removed.
+
 Reclaimable bytes are the only thing that actually motivates teardown, so the
 note carries them whenever the ``teardown`` gate is pending or the checkout is
 foreign. The number comes from ``factory board --du`` and is then cached in
@@ -360,9 +371,13 @@ def plan(card: Any, ctx: Any, force: bool = False, measure: bool = True) -> Dict
     total = sum(v for v in (sizes["worktree_kb"], sizes["env_kb"]) if isinstance(v, int))
     sizes["total_kb"] = total or None
 
+    # ---- the gallery, measured now and copied before the first command ---
+    gallery = _gallery_plan(card, ctx)
+
     return {
         "feature": feature,
         "worktree": card.worktree,
+        "gallery": gallery,
         "commands": commands,
         "blockers": blockers,
         "warnings": warnings,
@@ -371,6 +386,58 @@ def plan(card: Any, ctx: Any, force: bool = False, measure: bool = True) -> Dict
         "sizes": sizes,
         "merged": merged,
     }
+
+
+def _gallery(card: Any, ctx: Any) -> Dict[str, Any]:
+    """The gallery listing for one card, or an empty record.
+
+    Imported inside the function on purpose: two extensions that import each
+    other at module scope are one edit away from a circular import, and
+    ``render.extensions()`` loads both in alphabetical order regardless.
+    """
+    try:
+        from . import ext_gallery
+
+        return ext_gallery.record(ctx, card)
+    except Exception as exc:
+        ctx.log("teardown: cannot read the gallery for %s: %s" % (card.id, exc))
+        return {}
+
+
+def _gallery_plan(card: Any, ctx: Any) -> Dict[str, Any]:
+    """``{files, kb, dest, over_cap}``: what the copy step will move."""
+    rec = _gallery(card, ctx)
+    out: Dict[str, Any] = {"files": 0, "kb": 0, "dest": None, "over_cap": []}
+    if not rec or rec.get("source") != "worktree":
+        # Already rescued, or there is no gallery. Either way nothing to copy:
+        # the copy reads the worktree, which is the thing about to disappear.
+        return out
+    out["files"] = int(rec.get("count") or 0)
+    out["kb"] = int(rec.get("total_kb") or 0)
+    out["over_cap"] = [str(row.get("name")) for row in (rec.get("over_cap") or [])]
+    try:
+        from . import ext_gallery
+
+        out["dest"] = str(ext_gallery.artifacts_gallery(ctx, card.id))
+    except Exception:
+        out["dest"] = None
+    return out
+
+
+def preserve_gallery(card: Any, ctx: Any) -> Dict[str, Any]:
+    """Run the copy. Called once, immediately before the first removal.
+
+    Never raises and never blocks the teardown: a figure that could not be
+    copied is a line on the terminal, not a reason to leave a merged worktree
+    on disk forever.
+    """
+    try:
+        from . import ext_gallery
+
+        return ext_gallery.preserve(ctx, card.id, card.worktree)
+    except Exception as exc:
+        ctx.log("teardown: the gallery copy for %s failed: %s" % (card.id, exc))
+        return {"failed": 1, "files": 0, "copied": 0, "same": 0, "suffixed": 0}
 
 
 def _registered_paths(repo_dir: str) -> Tuple[List[str], bool]:
@@ -429,12 +496,40 @@ def format_plan(planned: Dict[str, Any], cfg: config.Config) -> List[str]:
             "  merged       %s"
             % (", ".join("%s #%s" % (p.get("repo"), p.get("number")) for p in planned["merged"]),)
         )
+    gallery = planned.get("gallery") or {}
+    if gallery.get("files"):
+        out.append(
+            "  gallery      %d file(s), %s -> %s   (copied before anything is removed)"
+            % (
+                gallery["files"],
+                _gb(gallery.get("kb")),
+                config.display_path(gallery.get("dest")),
+            )
+        )
+        if gallery.get("over_cap"):
+            out.append(
+                "               over the size cap, not copied: %s"
+                % (", ".join(gallery["over_cap"]),)
+            )
     for line in planned["warnings"]:
         out.append("  note         %s" % (line,))
     for line in planned["blockers"]:
         out.append("  BLOCKED      %s" % (line,))
     out.append("")
     out.append("  # the recipe, in order")
+    if gallery.get("files"):
+        out.append(
+            "  # step 0: copy %d gallery file(s) into %s and repoint Gallery/%s at the copy"
+            % (
+                gallery["files"],
+                config.display_path(gallery.get("dest")),
+                planned["feature"],
+            )
+        )
+        out.append(
+            "  #         `factory teardown %s --yes` does this itself; there is no "
+            "command to paste." % (planned["feature"],)
+        )
     for label, argv in planned["commands"]:
         out.append("  %s   # %s" % (" ".join(argv), label))
     out.append(
@@ -542,6 +637,29 @@ def run_teardown(rest: List[str], ctx: Any) -> int:
         print("aborted: %r is not %r" % (answer, feature))
         return REFUSED
 
+    # The gallery is copied out first, and only then does anything get removed.
+    # Reversing these two loses every figure the feature produced: the worktree
+    # copy is the only one, and `git worktree remove` takes the directory with
+    # it. The copy is idempotent, so a teardown re-run after a failed command
+    # copies nothing a second time.
+    kept = preserve_gallery(card, ctx)
+    if kept.get("files"):
+        print(
+            "ok    gallery: %d copied, %d unchanged, %d suffixed, %d failed -> %s"
+            % (
+                int(kept.get("copied") or 0),
+                int(kept.get("same") or 0),
+                int(kept.get("suffixed") or 0),
+                int(kept.get("failed") or 0),
+                config.display_path(kept.get("dest")),
+            )
+        )
+        if kept.get("link_status") in ("created", "repaired", "same"):
+            print(
+                "ok    Gallery/%s now points at the rescued copy (%s)"
+                % (feature, kept.get("link_status"))
+            )
+
     failed = 0
     for label, argv in planned["commands"]:
         out, ok = _run(argv, timeout=600)
@@ -554,6 +672,8 @@ def run_teardown(rest: List[str], ctx: Any) -> int:
         "at": ctx.now,
         "event": "teardown" if not failed else "teardown-failed",
         "reclaimable_kb": planned["sizes"].get("total_kb"),
+        "gallery_kept": int(kept.get("copied") or 0) + int(kept.get("same") or 0)
+        + int(kept.get("suffixed") or 0),
         "why": "worktree and branches removed" if not failed else "a command failed",
     }
     if ctx.timeline is not None:

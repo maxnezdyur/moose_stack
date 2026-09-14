@@ -226,6 +226,11 @@ KEYS: Tuple[Tuple[str, str, str], ...] = (
     ("needs_you_cap", "MOOSE_FACTORY_NEEDS_YOU_CAP", "int"),
     ("head_churn_budget", "MOOSE_FACTORY_HEAD_CHURN_BUDGET", "int"),
     ("timeline_on_home", "MOOSE_FACTORY_TIMELINE_ON_HOME", "int"),
+    # The gallery: the per-file size cap in megabytes, and how many
+    # thumbnails one Board.html card shows. Both are display policy, so
+    # they live beside the other caps rather than inside the extension.
+    ("gallery_max_mb", "MOOSE_FACTORY_GALLERY_MAX_MB", "int"),
+    ("gallery_thumbs", "MOOSE_FACTORY_GALLERY_THUMBS", "int"),
 )
 
 KEY_NAMES: Tuple[str, ...] = tuple(k for k, _e, _t in KEYS)
@@ -303,6 +308,8 @@ def _defaults() -> Tuple[Dict[str, Any], Dict[str, str]]:
         "needs_you_cap": NEEDS_YOU_TABLE_CAP,
         "head_churn_budget": HEAD_CHURN_BUDGET,
         "timeline_on_home": TIMELINE_ON_HOME,
+        "gallery_max_mb": GALLERY_MAX_MB,
+        "gallery_thumbs": GALLERY_THUMBS,
     }
     why = {k: "default" for k in values}
     why["meta_repo"] = meta_why
@@ -479,6 +486,9 @@ GH_PARALLEL = 10                 # xargs -P for pass B
 SUBPROCESS_TIMEOUT = 25          # seconds, per git or gh call
 STALE_REF_DAYS = 14              # a FETCH_HEAD older than this is worth saying
 
+GALLERY_MAX_MB = 5               # per file, in specs/gallery/; bigger is listed, never linked
+GALLERY_THUMBS = 3               # thumbnails one Board.html card shows
+
 NEEDS_YOU_TABLE_CAP = 5          # the rest become one "Backlog" line
 HEAD_CHURN_BUDGET = 520          # bytes: Obsidian's diff-match-patch limit
 TIMELINE_ON_HOME = 5             # lines under "Since yesterday"
@@ -592,6 +602,8 @@ class Config:
     stale_ref_days: int = STALE_REF_DAYS
     head_churn_budget: int = HEAD_CHURN_BUDGET
     timeline_on_home: int = TIMELINE_ON_HOME
+    gallery_max_mb: int = GALLERY_MAX_MB
+    gallery_thumbs: int = GALLERY_THUMBS
 
     # ---- where each value came from, for `factory config` and `doctor` ---
     config_file: Optional[Path] = None
@@ -715,6 +727,8 @@ def load(offline: bool = False) -> Config:
         needs_you_cap=int(values["needs_you_cap"]),
         head_churn_budget=int(values["head_churn_budget"]),
         timeline_on_home=int(values["timeline_on_home"]),
+        gallery_max_mb=int(values["gallery_max_mb"]),
+        gallery_thumbs=int(values["gallery_thumbs"]),
         config_file=path,
         sources=dict(sources),
         unknown_keys=tuple(unknown),

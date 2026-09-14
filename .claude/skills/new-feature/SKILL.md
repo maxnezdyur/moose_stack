@@ -61,7 +61,25 @@ Four facts:
    mkdir -p ~/projects/moose-worktrees   # shared home for all feature worktrees
    git -C ~/projects/moose_stack worktree add ~/projects/moose-worktrees/<feature> -b <feature> main
    mkdir -p ~/projects/moose-worktrees/<feature>/specs   # home for blueprint.md (see /moose-blueprint)
+   mkdir -p ~/projects/moose-worktrees/<feature>/specs/gallery   # figures for a human to look at
    cp ~/projects/moose-worktrees/<feature>/moose_stack.code-workspace ~/projects/moose-worktrees/<feature>/<feature>.code-workspace
+   # Ignore the gallery whatever commit this worktree was branched from.
+   EXCLUDE=$(git -C ~/projects/moose-worktrees/<feature> rev-parse --git-path info/exclude)
+   grep -qxF 'specs/gallery/' "$EXCLUDE" || echo 'specs/gallery/' >> "$EXCLUDE"
+   ```
+   `specs/gallery/` holds anything this feature produces for a human to look at (PNG, SVG, GIF, a
+   small MP4, a CSV, a small HTML page). The `info/exclude` line above keeps it out of `git status`
+   and out of `git add -A`, so a figure never reaches a PR. The meta-repo `.gitignore` carries the
+   same pattern, but a worktree branched from a commit older than that line does not inherit it.
+   `info/exclude` resolves to the meta-repo's common git directory, so it is never committed and
+   one write covers every worktree: the `grep -qxF` guard makes the second and later runs no-ops.
+   Verify with `git -C ~/projects/moose-worktrees/<feature> check-ignore -v specs/gallery/x.png`,
+   which must name either `.gitignore` or `info/exclude`. Seed the figure page, which the projector
+   transcludes into the feature note and whose `## Figure` headings become the board thumbnails:
+   ```bash
+cat > ~/projects/moose-worktrees/<feature>/specs/gallery/gallery.md <<'EOF'
+# Gallery: <feature>
+EOF
    ```
    Then write `specs/.factory-env`, the env provenance no later probe can recover (`combined-opt` alone
    cannot tell skipped from failed). Write it here with what preflight knows, and rewrite the four
@@ -128,6 +146,6 @@ EOF
 
 ## Report
 
-Workspace path; the `<feature>.code-workspace` file to open in VS Code; env name and whether it was reused or created; the four branches created; CodeGraph status (or skipped); clangd DB/index status (seeded or skipped); donor SHA/lease; objects reused versus rebuilt locally; hydration timing/validation; a reminder to `conda activate <env-name>`. State that BlackBear and Isopod were worktreed but not hydrated or built. Point to `docs/local.md` if the branch later bumps `moose`. Then run `~/projects/moose_stack/factory/factory board` (absolute path; the new worktree has no `factory/`) so the board adopts the workspace, and say that the card is now on `~/projects/moose-factory/Home.md`. Next steps: `/moose-blueprint` in the worktree, then `/moose-build`, then `/moose-ship`.
+Workspace path; the `specs/gallery/` folder and its `gallery.md`, where figures for a human go; the `<feature>.code-workspace` file to open in VS Code; env name and whether it was reused or created; the four branches created; CodeGraph status (or skipped); clangd DB/index status (seeded or skipped); donor SHA/lease; objects reused versus rebuilt locally; hydration timing/validation; a reminder to `conda activate <env-name>`. State that BlackBear and Isopod were worktreed but not hydrated or built. Point to `docs/local.md` if the branch later bumps `moose`. Then run `~/projects/moose_stack/factory/factory board` (absolute path; the new worktree has no `factory/`) so the board adopts the workspace, and say that the card is now on `~/projects/moose-factory/Home.md`. Next steps: `/moose-blueprint` in the worktree, then `/moose-build`, then `/moose-ship`.
 
 Host: !`hostname`

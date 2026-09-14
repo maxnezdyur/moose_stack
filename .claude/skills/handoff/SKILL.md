@@ -39,7 +39,7 @@ session knows. When it is present, read it whole, then:
 | `## Do not repeat` | append: `- YYYY-MM-DD: tried X; failed because Y; evidence <path>; retry only if Z` |
 | `## Decisions` | append: `- YYYY-MM-DD: chose A over B because C` |
 | `## Gotchas` | append: env, build and test quirks (times, gold regeneration, flaky tests) |
-| `## Map` | rewrite: files touched and why, tests and gold, the review file, the build record path |
+| `## Map` | rewrite: files touched and why, tests and gold, every file in `specs/gallery/` with its `gallery.md` section heading, the review file, the build record path |
 | `## Sessions` | append: `- YYYY-MM-DD HH:MM <session-id or label> <skill or mode>: one line of what it did` |
 
 Then bump `sessions` by one and set `updated` to today's date. Append exactly one `## Sessions` line

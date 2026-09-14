@@ -33,6 +33,7 @@ factory/
   tool/ext_refresh.py    refresh-pipeline: the canonical .claude against a worktree's frozen copy
   tool/ext_studies.py    read-only adapter over analysis/studies/*/card.yaml; Studies/<id>.md
   tool/ext_handoff.py    rescue specs/handoff.md into Artifacts/; the ## Handoff card section; handoff-stale
+  tool/ext_gallery.py    the specs/gallery/ listing, the Gallery/<feature> symlink, the ## Gallery card section
   tool/ext_teardown.py   teardown and archive, plus the reclaimable-bytes number
   tool/ext_tick.py       the loop's policy: change gate, notifier, tick-status, doctor checks
   install.sh             install or remove the launchd agent; --status, --uninstall
@@ -134,6 +135,8 @@ factory doctor              # the same block, above the checks
 | `refuse_hosts` | the five INL families | hostname globs every entry point refuses, matched lowercased |
 | `studies_dir` | `<meta_repo>/analysis/studies` | the analysis studies the `studies` verb reads; not the vault's `Studies/` |
 | `path_extra` | `""` | extra PATH prefixes the launchd tick prepends, colon separated |
+| `gallery_max_mb` | `5` | the per-file cap in `specs/gallery/`; a bigger file is named on the note and never linked |
+| `gallery_thumbs` | `3` | how many thumbnails one `Board.html` card shows |
 | the caps and thresholds | the values in `tool/config.py` | `max_concurrent_sessions`, `max_builds_per_day`, `min_free_gb`, `stall_seconds`, `nag_days`, `park_idle_days`, `triage_dirty`, `gh_cache_ttl`, `gh_limit`, `gh_parallel`, `subprocess_timeout`, `stale_ref_days`, `needs_you_cap`, `head_churn_budget`, `timeline_on_home` |
 
 Every key has an environment variable: `MOOSE_FACTORY_VAULT`, `FACTORY_WORKTREE_ROOT`,
@@ -191,6 +194,8 @@ The code is shared and the state is not. Follow these steps on the second Mac.
    needs_you_cap = 5
    head_churn_budget = 520
    timeline_on_home = 5
+   gallery_max_mb = 5
+   gallery_thumbs = 3
    ```
 
 4. Install the tick:
@@ -394,6 +399,7 @@ current assignments, each with the duplicate that was removed:
 | the pipeline doctor row | `tool/ext_refresh.py` | core's `no worktree has a frozen pipeline`, a third row about the same nine worktrees |
 | `Board.html` | `tool/ext_board_html.py`, through the `outputs` hook | nothing: the page is new, and it reuses `render.atomic_write`, `render.guard_path` and `snapshot.Store.stamp` rather than copying them |
 | `Artifacts/<feature>/handoff.md` | `tool/ext_handoff.py`, in `collect` | nothing: the skills write the worktree copy and this extension only rescues it |
+| `Gallery/<feature>` | `tool/ext_gallery.py`, in `collect` | nothing: the symlink is new, and `Artifacts/<feature>/gallery/` is written only by `factory teardown`, through `ext_gallery.preserve` |
 
 A note has **two** human regions, not one: the `## Notes` section between `head:end` and
 `body:begin`, and the tail after `body:end`. A cursor at the end of the file lands in the tail,
@@ -593,6 +599,109 @@ The first `## Next` step is published as `handoff_next`, beside `handoff_state`,
 `ctx.meta["handoff"][<feature>]` and in `ctx.obs[<feature>]["handoff"]`. Read it through
 `ext_handoff.handoff_next(ctx, card_or_feature)`, which falls back to a direct read when a verb runs
 without a probe round. `card_flags` copies the same five keys into `card.extra`.
+
+## The gallery
+
+`<worktree>/specs/gallery/` holds anything a session makes for a human to look at: a PNG, an SVG, a
+GIF, a small MP4, a CSV, a small HTML page. Large outputs stay where the example wrote them; an
+exodus file and a checkpoint never belong here.
+
+`specs/gallery/gallery.md` is the figure page, and it is the source of truth. The `moose-figure`
+agent writes it. It has this format:
+
+```
+# Gallery: <feature>
+## Figure 1. <title>
+![](<file.png>)
+<one or two sentences: what it shows>
+Look at: <one sentence>
+Source: <input, test or gold path>; rendered with <tool>.
+```
+
+Write one `## ` section per figure. The heading text is the figure title. The first image embed in
+the section names the figure file. Both spellings work: `![](file)` and `![[file]]`. The page sets
+the order of the figures.
+
+`captions.md` is retired. The projector ignores it and never reads it. A gallery filename starts
+with a letter or a digit and carries only letters, digits, dot, underscore, space and hyphen, at
+most 96 characters; the projector spells it into a wikilink, an `img src` and a path, so it refuses
+anything else. `specs/gallery/` is gitignored in the meta-repo, and `/new-feature` also writes the
+pattern into the meta-repo's `info/exclude`, so a worktree branched from a commit older than that
+`.gitignore` line is covered too and a figure never reaches a pull request by accident.
+
+`tool/ext_gallery.py` reads that directory and never writes it. `collect` records the listing in
+`ctx.obs[<feature>]["gallery"]`: the figures in page order first, then every eligible file the page
+does not mention. It also maintains `<vault>/Gallery/<feature>` as a **symlink** into the
+worktree folder. It creates the link, repairs a link that points at the wrong place, and removes a
+dangling link whose worktree is gone. A feature that loses its card entirely is swept separately,
+after the per-card loop: the loop only reaches features the probe still sees, so without the sweep
+the one link the removal rule exists for would be the one link nothing revisits. `Artifacts/<feature>/gallery/` is the one exception: when the
+worktree is gone and that rescued copy exists, the link points there instead. A real directory at
+`Gallery/<feature>` is never touched; the note says so and a doctor row FAILs. `Gallery/` is
+gitignored in the vault, so the board's git history stays text.
+
+The cap is `gallery_max_mb`, five by default, per file. A bigger file is named on the note, is never
+linked and is never copied. A zero byte file is refused the same way: an interrupted render leaves
+the file and its page section behind, and publishing it would embed a broken image under a title
+that claims it shows something. Two more files are refused for safety: a symlink inside the gallery,
+which the projector will not follow, and a name no wikilink can spell. Each refusal prints one line
+on the note, so nothing disappears in silence, and every name on those lines is escaped on the way
+out: a filename is chosen by a session, it reaches the note before any validator has passed it, and
+an unescaped one that spelled a body fence would make the note grow by its own length every run.
+
+A gallery directory that resolves outside its worktree is refused whole, and the note says which
+directory was refused and why rather than offering the "there is none, make one" placeholder.
+
+The feature note gets `## Gallery` (order 45, between `## Handoff` and `## Build and review`). The
+section prints one header line, which says how many files were read, their size, which directory
+they came from and where they are linked. Below it the note transcludes the page itself, with
+`![[Gallery/<feature>/gallery.md]]`. The page is the one writer of the order, the titles and the
+prose, so the note never states a second, staler version of what a figure shows. Obsidian follows
+the symlink, so the transclusion and every embed inside it resolve with no copy anywhere.
+
+Without a `gallery.md` the note falls back to a plain listing: each image embeds as
+`![[Gallery/<feature>/<file>]]` with its filename on the line below, each other file is a link, and
+one muted line says that a figure page would be shown there instead. The skipped-file lines print in
+both forms.
+
+`Board.html` shows up to `gallery_thumbs` image thumbnails on a card, under the next move, with the
+**relative** `src` `Gallery/<feature>/<file>`. The thumbnails are in page order and each one carries
+its figure heading as the `alt` and the `title`. A file the page does not mention comes after the
+ones it does, labelled by its filename. The relative form is correct, and it is the only form
+that works. The HTML Reader plugin prepends `<base href="<vault.getResourcePath(Board.html)>">`
+before it hands the page to its iframe, and Obsidian registers `app:` as a standard scheme, so
+Chromium resolves the relative path against the vault directory and the handler serves the file
+through the symlink. Two of the plugin's modes would still refuse the image: HighRestricted sets
+`img-src 'self' data:` and TextMode sets `img-src 'none'`. Neither is the default, and a `file://`
+`src` would not rescue either one.
+
+`factory teardown` makes the one copy that is ever made. Before it removes anything, it copies the
+capped gallery into `Artifacts/<feature>/gallery/` and repoints the symlink at the copy. The copy is
+idempotent: identical bytes report `same`, and a differing figure gets a numbered suffix, so a
+rescued figure is never overwritten. The index files are the exception, because an index is not an
+exhibit: `gallery.md` always lands at `gallery.md`, a differing older one is moved aside to
+`gallery-<n>.md` to keep its text, and every embed on the page is rewritten to the name its figure
+landed under. A suffixed index would otherwise sit unread beside the stale one, and every rescued
+figure would carry the title of whatever it replaced. A retired `captions.md` is rescued by the same
+rule, because teardown is the last moment the worktree copy exists; no `gallery*.md` and no
+`captions*.md` is ever listed as a gallery file. `factory archive` is unchanged. `factory doctor` carries two gallery
+rows: every `Gallery/<feature>` is a link and not a directory, and no link dangles.
+
+The pipeline that fills the folder runs beside the build. A blueprint may carry an optional
+`## Showcase` section that names the example to build and one bullet per figure. It produces a
+work-plan unit of kind `showcase` with agent `moose-figure`, whose `files` are the gallery outputs.
+`/moose-build` and `moose-feature-loop` dispatch that unit like any other, and its evidence is that
+the files exist and that `gallery.md` names them. **A showcase unit gates nothing.** It is not a
+criterion, it cannot block C1 to C6, and a figure that fails to render is a `SHOWCASE:` line, not a
+build failure.
+
+`moose-figure` renders the figures for one feature and writes `gallery.md`. It runs the
+example only when the output is missing, and only through an app binary that is already built; it
+never builds. Exodus rendering has three paths, tried in order: `moose/python/chigger`, which needs
+`vtk` and therefore does not import in the pinned conda env today; ParaView's
+`pvpython --force-offscreen-rendering`; and `scipy.io.netcdf_file` with matplotlib on the Agg
+backend, which needs no VTK and draws 2D meshes only. The agent probes chigger first every run, so
+it switches back to the MOOSE-native renderer on the day `vtk` joins the env pin, with no edit.
 
 ## Board.html
 

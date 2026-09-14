@@ -11,3 +11,4 @@ compile_commands.json
 !moose_stack.code-workspace
 *.err
 *.out
+specs/gallery/

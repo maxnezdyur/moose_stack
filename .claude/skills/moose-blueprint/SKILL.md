@@ -38,6 +38,15 @@ grill three axes yourself for that round: object kind and base class, inputs and
 physics and math. Re-invoke it only when a scout finding contradicts the plan (a better base
 class, for example); otherwise carry the plan forward and grill the remaining gaps directly.
 
+Ask once during the grill whether this feature needs a showcase: a figure a human can look at to
+see it work. Most do, and the question is cheap - "which example should we build, and which
+picture proves the claim?" A yes writes the optional `## Showcase` section (the `Example:` input
+and one bullet per figure, `<file>: <what it shows and which claim it proves>`) and one
+`showcase` unit with agent `moose-figure`, whose `files` list those gallery outputs and whose
+`deps` are the implement units the figures show. A no omits the heading and the unit; do not
+invent figures to fill the section. The figures land in `<worktree-root>/specs/gallery/`, which
+`/new-feature` created, and the board shows them on the feature's card.
+
 Decomposition into work-plan units is this skill's job: one `implement` unit per new class
 from the predicted files, edges only for hard dependencies (derives from, consumes a property
 another new unit declares, or touches the same file), and ambiguous edges confirmed with the
