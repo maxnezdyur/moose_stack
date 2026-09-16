@@ -1,6 +1,6 @@
 ---
 name: moose-build
-description: Drives one MOOSE feature from specs/blueprint.md to a green tree with the standing gates passed, docs gated, and a clean-context review; execution is the moose-feature-loop agent. Use for "/moose-build [blueprint.md] [--core]", "build the blueprint", "build this feature". Manual invoke only; ends at a suggested commit message and never commits.
+description: Drives one MOOSE feature from specs/blueprint.md to a green tree with the standing gates passed, docs gated, and a clean-context review whose findings are applied before it stops; execution is the moose-feature-loop agent. Use for "/moose-build [blueprint.md] [--core]", "build the blueprint", "build this feature". Manual invoke only; ends at a suggested commit message and never commits.
 disable-model-invocation: true
 argument-hint: "[blueprint.md] [--core]"
 effort: medium
@@ -9,7 +9,7 @@ effort: medium
 # /moose-build
 
 Turns a blueprint from `/moose-blueprint` into a build that compiles, whose new regression tests are green,
-whose standing gates pass, and whose diff has been reviewed cold, then stops at a suggested commit message;
+whose standing gates pass, and whose diff has been reviewed cold with the findings applied, then stops at a suggested commit message;
 `/moose-ship` is the next human gate. This skill compiles the goal ledger, spawns the `moose-feature-loop`
 agent to do the work, runs Gate B, drives the docs pass and the review, and reports. It never edits source,
 routes fixes, commits, pushes, or runs a formatter (the pre-commit hook owns style); worktrees, branches, and
@@ -82,7 +82,7 @@ regression goes through repair instead.
 
 | Loop returns | Action |
 |---|---|
-| `GOAL_MET` | Gate B, then docs, then review. Carry files, commands, counts, staged gold with observed values, and any CONCERNS. |
+| `GOAL_MET` | Gate B, then docs, then review and apply. Carry files, commands, counts, staged gold with observed values, and any CONCERNS. |
 | `NEEDS_DESIGN(reason)` | Stop: "The blueprint needs a design change: `<reason>`. Re-run `/moose-blueprint`, then `/moose-build`." |
 | `BLOCKED(reason)` | Stop; surface the blocker and the exact fix command (usually env: conda or a missing `*-opt`). |
 | `STALLED(state)` | Surface the unmet criteria and what was tried; `AskUserQuestion`: extend the cap, simplify the spec, or abandon. Extend re-spawns with a higher `impl_iters` and the prior state. |
@@ -118,18 +118,28 @@ feature's card through `~/projects/moose-factory/Gallery/<feature>`.
 
 When every gate is green, spawn one fresh `moose-pr-reviewer` (foreground) with `mode: local`,
 `repo_root: <worktree-root>/<scope>`, `base_branch: devel`, `label: <run_label>`. It has seen none of this
-build, which is the point. Report-only: its summary block and `/tmp/moose-review-<run_label>.md` go into the
-final report verbatim, and zero findings is a valid result. Copy that findings file to
-`<meta-root>/specs/review-<run_label>.md` as well, since `/tmp` is purged at boot and the worktree copy is
-what the board rescues and links. Offer once to apply the mechanical findings;
-otherwise the user decides before committing.
+build, which is the point. Its summary block and `/tmp/moose-review-<run_label>.md` go into the final report
+verbatim, and zero findings is a valid result. Copy that findings file to `<meta-root>/specs/review-<run_label>.md`
+the moment it exists, since `/tmp` is purged at boot and the worktree copy is what the board rescues and links.
+
+Then apply the findings. Do not ask first: the user granted the build, and a finding left for them to apply
+by hand is the review's cost with none of its value. Sort each finding once. It is *applicable* when the fix
+stays inside the blueprint: no change to `summary`, the physics, a `reuse_decisions` row, `out_of_scope`, a
+registered object or parameter name, or a `test_plan` entry. Otherwise it is *held*. Wake the loop once in
+repair mode with the ledger state and the applicable findings as the failure evidence, `required` before
+`suggested`, each with its file, line, text and the owning unit; a held finding is not sent. One pass, the
+same cap as any repair. On `GOAL_MET` re-run Gate B in full, plus the docs smoke when a `.md` file changed,
+then read the diff yourself and confirm each applied finding is present, the way B3 audits reuse; a finding
+the loop reported applied but the diff does not show goes back to held with that reason. Never spawn a
+second reviewer: the audit is the check, and a second review would review its own fixes. Append one line
+to the blueprint's `## Amendments`: the review label, how many were applied, how many held.
 
 ## Final report
 
 Files created or edited per unit; the exact runner commands with final counts; gold files with observed
 values; each gate's result and what repair changed; the docs result (smoke line and log path, or "docs
 skipped (--core)"); one `SHOWCASE:` line naming each gallery file with its caption, or "no showcase in the
-blueprint"; the review summary and findings file; any CONCERNS carried; a diff attribution audit that
+blueprint"; the review summary and findings file, the applied count, and every held finding verbatim with why it is held, so the user decides those before `/moose-ship` and nothing else waits; any CONCERNS carried; a diff attribution audit that
 groups the diff into change classes and traces each to the blueprint's purpose (`moose/AGENTS.md` section 3,
 Surgical Changes), flagging unattributable hunks to drop, split out, or justify in the PR body; a suggested
 commit message; then "run `/moose-ship` when satisfied". Write the same report to

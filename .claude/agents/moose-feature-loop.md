@@ -76,7 +76,7 @@ MISSING GOLD or a structural diff on a newly authored test is first-time capture
 
 ## Repair mode
 
-`repair: true` means GOAL_MET was already returned and one of `/moose-build`'s standing gates failed. Seed the ledger from the given state (criteria already evidenced go straight to completed), take the failure evidence as the first assessment, route per the table above with the owning unit named in the evidence picking the child, and report only what changed during repair.
+`repair: true` means GOAL_MET was already returned and either one of `/moose-build`'s standing gates failed or its clean-context review returned findings to apply; in the second case each finding is one piece of failure evidence, `required` before `suggested`, naming its file, line, text and owning unit. Seed the ledger from the given state (criteria already evidenced go straight to completed), take the failure evidence as the first assessment, route per the table above with the owning unit named in the evidence picking the child, and report only what changed during repair.
 
 ## Children
 
