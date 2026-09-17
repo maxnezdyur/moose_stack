@@ -240,6 +240,36 @@ def lease_path(worktree: Any) -> Path:
     return Path(worktree) / LEASE_DIR
 
 
+
+def _session_alive(rec: Dict[str, Any]) -> bool:
+    """True when ``~/.claude/sessions/*.json`` names this lease's session with a
+    pid that answers. Reads a handful of small files; never raises."""
+    sid = str(rec.get("session_id") or "")
+    bg = str(rec.get("bg_id") or "")
+    if not sid and not bg:
+        return False
+    try:
+        d = Path(config.settings()["claude_home"]).expanduser() / "sessions"
+        entries = list(d.glob("*.json"))
+    except Exception:
+        return False
+    for path in entries:
+        try:
+            data = json.loads(path.read_text())
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        if sid and str(data.get("sessionId") or "") == sid:
+            pass
+        elif bg and str(data.get("jobId") or "") == bg:
+            pass
+        else:
+            continue
+        if _pid_alive(data.get("pid")) is True:
+            return True
+    return False
+
 def read_lease(worktree: Any) -> Optional[Dict[str, Any]]:
     """The lease record with ``held`` and ``owner_alive``, or None.
 
@@ -253,6 +283,13 @@ def read_lease(worktree: Any) -> Optional[Dict[str, Any]]:
     rec = dict(data) if (ok and isinstance(data, dict)) else {}
     rec["held"] = True
     rec["owner_alive"] = _pid_alive(rec.get("pid"))
+    if rec["owner_alive"] is False:
+        # The recorded pid is the launcher's. The daemon respawns a background
+        # session in a new process (an auto-update did it to every one on
+        # 2026-09-17), so the session outlives that pid. A session file that
+        # carries this lease's session id or bg id, with a live pid, is the same
+        # owner in a new skin, not a stale lease.
+        rec["owner_alive"] = _session_alive(rec)
     rec["unreadable"] = not ok
     return rec
 

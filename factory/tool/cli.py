@@ -678,6 +678,12 @@ def bare_ctx(cfg: config.Config, dry_run: bool = False) -> Ctx:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    # Every git child of the projector is a read. `git status` still refreshes
+    # the index by default and takes index.lock to do it; a probe killed by its
+    # timeout on a cold worktree then leaves a zero-byte lock that blocks every
+    # later `git add` in that worktree. GIT_OPTIONAL_LOCKS=0 tells git to skip the
+    # optional write, which is the documented setting for background tooling.
+    os.environ.setdefault("GIT_OPTIONAL_LOCKS", "0")
     argv = list(sys.argv[1:] if argv is None else argv)
     ext_verbs, ext_help = extension_verbs()
 

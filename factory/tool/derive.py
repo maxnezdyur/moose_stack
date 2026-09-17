@@ -262,9 +262,17 @@ def derived_lane(obs: Dict[str, Any], now_ts: float) -> Tuple[str, str]:
         lane, proof = BUILDING, SESSION_PROOF
 
     build = obs.get("build") or {}
-    if (build.get("status") or "").upper() == "GOAL_MET":
-        if not bp.get("mtime") or (build.get("mtime") or 0) >= bp["mtime"]:
-            lane, proof = BUILT, "a build record says GOAL_MET"
+    # `/moose-build` writes its record, then edits the blueprint (unit statuses,
+    # `status: built`, an amendment line), so on a first run the record is always
+    # older than the blueprint. The blueprint's own `built` is set only on that
+    # path and `factory reset` takes it back to `approved`, so it is the second
+    # proof. A record written by a session that reports `BUILT` instead of the
+    # loop's `GOAL_MET` says the same thing.
+    build_status = (build.get("status") or "").upper().split()[0] if build.get("status") else ""
+    if build_status in ("GOAL_MET", "BUILT"):
+        record_newer = not bp.get("mtime") or (build.get("mtime") or 0) >= bp["mtime"]
+        if record_newer or (bp.get("status") or "").strip() == "built":
+            lane, proof = BUILT, "a build record says %s" % (build_status,)
 
     for pr in openp:
         if pr.get("isDraft"):
@@ -450,6 +458,20 @@ NEEDS_YOU_FLAGS = (
     "marker-missing",
 )
 
+# A built card's review is done, so the only real reasons it is not Ready are a
+# defect or a PR/branch problem -- never a session that parked itself `blocked`
+# waiting for the ship grant, which is exactly the Ready action.
+BUILT_NOT_READY_FLAGS = (
+    "review-findings",
+    "changes-requested",
+    "pr-closed-unmerged",
+    "branch-mismatch",
+    "foreign-worktree",
+    "partial-ship",
+    "invalid-blueprint",
+    "marker-missing",
+)
+
 
 def posture_of(
     card: FeatureCard,
@@ -460,10 +482,12 @@ def posture_of(
     """Derived, stored nowhere, the grouping axis of Home.md.
 
     Order is the whole content of this function. Three precedences are load
-    bearing: a live session outranks a pending gate, so a burning build shows in
-    Running instead of "act today"; ``built`` with ``ship`` pending is Ready,
-    which is the plan's first Ready rule and was unreachable while any pending
-    gate won first; and a ``scaffolded`` workspace is Parked only once it has
+    bearing: an actively working session (``burning``) outranks a pending gate,
+    so a live build shows in Running instead of "act today", but a build session
+    that has gone idle after finishing does not hold a ``built`` card out of
+    Ready; ``built`` with its review applied and ``ship`` pending is Ready, the
+    plan's first Ready rule; and a ``scaffolded`` workspace is Parked only once
+    it has
     been quiet for ``park_idle_days``, so a workspace created minutes ago reads
     as work in flight rather than settled backlog.
     """
@@ -472,6 +496,25 @@ def posture_of(
     # one of these: a merged card with `teardown` pending still needs him.
     if card.lane in (ABANDONED, CLOSED_UNMERGED):
         return DONE
+
+    # A built card whose review is applied and whose ship gate is still yours is
+    # Ready, and this is decided before the generic needs-you and running checks
+    # for one reason: the session that finishes a build does not exit. It parks
+    # in the worktree, and it reports its own state inconsistently -- `done` on
+    # one run, `blocked` with needs "grant ship" on another. Both mean the same
+    # thing, waiting for the ship grant, which is the Ready action, so neither
+    # `blocked` nor a lingering idle session should hold the card out of Ready.
+    # What still wins is a real defect (`review-findings` for an unapplied
+    # review, or a PR/branch problem) and an actively working session
+    # (`burning`); those fall through to the checks below.
+    if (
+        card.lane == BUILT
+        and card.gate_state("ship") != GRANTED
+        and not card.has("burning")
+        and not any(card.has(f) for f in BUILT_NOT_READY_FLAGS)
+    ):
+        return READY
+
     for flag in NEEDS_YOU_FLAGS:
         if card.has(flag):
             return NEEDS_YOU
@@ -486,8 +529,6 @@ def posture_of(
     if needs_triage(card, cfg):
         return NEEDS_YOU
 
-    if card.lane == BUILT and not card.has("review-findings") and card.gate_state("ship") != GRANTED:
-        return READY
     if card.lane == APPROVED and card.gate_state("blueprint_approved") == GRANTED and not card.session:
         return READY
 

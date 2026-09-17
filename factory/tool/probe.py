@@ -910,10 +910,44 @@ def lease(worktree: Optional[Path]) -> Probe:
     if isinstance(pid, int):
         lstart, lok = _ps_lstart(pid)
         alive = bool(lstart) if lok else None
+    if alive is False:
+        # The recorded pid is the launcher's. The Claude daemon respawns a
+        # background session in a new process (an auto-update did it to every
+        # one on 2026-09-17), so the session outlives that pid. A session file
+        # naming this lease's session id or bg id, with a live pid, is the same
+        # owner in a new skin, not a stale lease.
+        if _lease_session_alive(data or {}):
+            alive = True
     rec = dict(data or {})
     rec["held"] = True
     rec["owner_alive"] = alive
     return (rec, True)
+
+
+def _lease_session_alive(data: Dict[str, Any]) -> bool:
+    """True when a session file names this lease's session with a live pid."""
+    sid = str(data.get("session_id") or "")
+    bg = str(data.get("bg_id") or "")
+    if not sid and not bg:
+        return False
+    try:
+        home = Path(config.settings()["claude_home"]).expanduser() / "sessions"
+        entries = list(home.glob("*.json"))
+    except Exception:
+        return False
+    for path in entries:
+        rec, ok = _read_json(path)
+        if not ok or not isinstance(rec, dict):
+            continue
+        if (sid and str(rec.get("sessionId") or "") == sid) or (
+            bg and str(rec.get("jobId") or "") == bg
+        ):
+            spid = rec.get("pid")
+            if isinstance(spid, int):
+                lstart, lok = _ps_lstart(spid)
+                if lok and lstart:
+                    return True
+    return False
 
 
 def skills(worktree: Optional[Path]) -> Probe:

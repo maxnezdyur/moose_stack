@@ -283,7 +283,7 @@ A flag can never move a lane. CIVET colour, review decision and mergeability are
 `stalled`, `build-stale`, `invalid-blueprint`, `view-stale`, `stale-pipeline`,
 `pr-closed-unmerged`, `branch-mismatch`, `foreign-worktree`, `partial-ship`, `two-sessions`,
 `handoff-stale`,
-`lease-stale`, `marker-missing`, `probe-stale`, `signal-regression`, `burning`, `error`.
+`lease-stale`, `git-lock`, `marker-missing`, `probe-stale`, `signal-regression`, `burning`, `error`.
 
 `mergeable: UNKNOWN` is unknown, not clean and not conflicting. GitHub computes mergeability
 lazily and returns UNKNOWN on every merged or closed PR. The probe re-polls once, then records
