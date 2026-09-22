@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TITLE</title>
+<meta name="exo-root" content="WORKTREE_ROOT">
+<script src="http://127.0.0.1:8765/embed.js"></script>
+<style>
+  body { max-width: 900px; margin: 2em auto; padding: 0 16px; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #222; background: #fff; }
+  h1 { font-size: 1.6em; margin-bottom: 0.2em; }
+  h2 { font-size: 1.2em; margin-top: 1.8em; border-bottom: 1px solid #e3e6ea; padding-bottom: 0.2em; }
+  p.lead { color: #555; margin-top: 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  code { font-size: 0.9em; background: #f3f4f6; padding: 0 3px; border-radius: 3px; }
+  ul { padding-left: 1.2em; }
+</style>
+</head>
+<body>
+
+<h1>TITLE</h1>
+<p class="lead">Input <code>INPUT_PATH</code>, rendered from <code>RESULT_FILE</code>.</p>
+
+<h2>Mesh</h2>
+<p>What the mesh is, from [Mesh]: generator or file, element type, block names and what each is.</p>
+
+<exo-view file="RESULT_FILE" view="iso" height="320" png="NAME-mesh.png">
+  Caption: what is in the picture. Drag to rotate.
+</exo-view>
+
+<h2>Problem</h2>
+<ul>
+  <li>Constraints, from [BCs] / [Contact] / [Constraints].</li>
+  <li>Loads and their time functions.</li>
+  <li>Time stepping, from [Executioner].</li>
+</ul>
+<!-- only when asked: <exo-input file="INPUT_PATH"></exo-input> -->
+
+<h2>Results</h2>
+<p>One sentence saying what the main figure shows and why it matters.</p>
+
+<exo-view file="RESULT_FILE" var="VAR" warp wscale="auto" step="last" view="iso" controls="time" height="380" png="NAME-VAR.png">
+  Caption. Use the slider to step through time.
+</exo-view>
+
+<div class="grid2">
+  <exo-view file="RESULT_FILE" var="VAR_A" view="top" height="260" png="NAME-VAR_A.png">Caption A.</exo-view>
+  <exo-view file="RESULT_FILE" var="VAR_B" view="top" height="260" png="NAME-VAR_B.png">Caption B.</exo-view>
+</div>
+
+<!-- only when the file has globals worth a table:
+<h2>Postprocessors</h2>
+<exo-globals file="RESULT_FILE" step="all"></exo-globals>
+-->
+
+</body>
+</html>

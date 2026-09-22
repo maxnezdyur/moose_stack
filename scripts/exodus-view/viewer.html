@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>exodus-view</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>if (new URLSearchParams(location.search).get('embed') === '1') document.documentElement.classList.add('embed');</script>
+<style>
+  :root { --side: 320px; --fg: #e8e8e8; --dim: #9aa; --bg: #1e2126; --line: #333941; --acc: #5aa9ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font: 12px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--fg); background: #fff; }
+  #side { position: fixed; left: 0; top: 0; bottom: 0; width: var(--side); overflow-y: auto; background: var(--bg); border-right: 1px solid var(--line); padding: 8px 10px 40px; }
+  #view { position: fixed; left: var(--side); top: 0; right: 0; bottom: 0; }
+  canvas.gl { display: block; width: 100%; height: 100%; }
+  details { border-top: 1px solid var(--line); padding: 4px 0; }
+  summary { cursor: pointer; font-weight: 600; color: #cfd6e0; padding: 3px 0; user-select: none; }
+  .row { display: flex; align-items: center; gap: 6px; margin: 3px 0; flex-wrap: wrap; }
+  .row label { color: var(--dim); min-width: 52px; }
+  select, input[type=text], input[type=number] { background: #12151a; color: var(--fg); border: 1px solid var(--line); border-radius: 3px; padding: 2px 4px; font: inherit; }
+  select { max-width: 100%; }
+  input[type=number] { width: 72px; }
+  input[type=range] { flex: 1; min-width: 80px; }
+  button { background: #2b3139; color: var(--fg); border: 1px solid #444c57; border-radius: 3px; padding: 2px 8px; font: inherit; cursor: pointer; }
+  button:hover { background: #38404a; }
+  button.on { background: var(--acc); color: #000; border-color: var(--acc); }
+  .list { max-height: 180px; overflow-y: auto; }
+  .list label { display: flex; gap: 6px; align-items: center; color: var(--fg); padding: 1px 0; cursor: pointer; }
+  .list .meta { color: var(--dim); margin-left: auto; font-size: 11px; }
+  .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  #title { font-weight: 600; font-size: 13px; word-break: break-all; color: #fff; }
+  #path { color: var(--dim); font-size: 10.5px; word-break: break-all; }
+  #status { position: absolute; left: 8px; bottom: 6px; background: rgba(255,255,255,.85); color: #222; padding: 2px 6px; border-radius: 3px; font-size: 11px; max-width: 70%; }
+  #status.err { background: #ffd8d8; color: #900; }
+  #bar { position: absolute; right: 10px; bottom: 10px; }
+  #probe { position: absolute; right: 10px; top: 10px; background: rgba(30,33,38,.94); color: var(--fg); padding: 6px 8px; border-radius: 4px; max-width: 300px; max-height: 70%; overflow: auto; display: none; }
+  #probe table { border-collapse: collapse; }
+  #probe td { padding: 0 6px 0 0; font-family: ui-monospace, Menlo, monospace; font-size: 11px; white-space: nowrap; }
+  #probe h4 { margin: 4px 0 2px; font-size: 12px; }
+  #probe .x { float: right; cursor: pointer; color: var(--dim); }
+  #globals { border-collapse: collapse; width: 100%; }
+  #globals td { padding: 0 4px; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+  #globals td:last-child { text-align: right; }
+  .hint { color: var(--dim); font-size: 10.5px; }
+  kbd { background: #12151a; border: 1px solid var(--line); border-radius: 2px; padding: 0 3px; font-size: 10px; }
+  /* embed mode: no sidebar, only the rows named in ?controls= appear in a bottom bar */
+  html.embed #side { display: none; }
+  html.embed #view { left: 0; }
+  html.embed #status:not(.err) { display: none; }
+  #ebar { display: none; position: absolute; left: 0; right: 0; bottom: 0; gap: 14px; align-items: center; flex-wrap: wrap;
+          background: rgba(30,33,38,.88); color: var(--fg); padding: 4px 10px; font-size: 11px; }
+  #ebar.on { display: flex; }
+  #ebar .row { margin: 0; flex: 1 1 auto; }
+  #ebar .row label { min-width: 0; }
+  #efull { display: none; position: absolute; right: 8px; top: 6px; font-size: 11px; color: #446; background: rgba(255,255,255,.75);
+           padding: 1px 6px; border-radius: 3px; text-decoration: none; }
+  html.embed #efull { display: block; }
+  html.embed #bar { bottom: 40px; }
+</style>
+</head>
+<body>
+<div id="side">
+  <div id="title">exodus-view</div>
+  <div id="path"></div>
+  <details open>
+    <summary>File</summary>
+    <div class="row"><select id="files" style="flex:1"></select></div>
+    <div class="row"><input id="openpath" type="text" placeholder="/path/to/out.e" style="flex:1"><button id="openbtn">Open</button></div>
+    <div class="row"><button id="copyurl">Copy URL</button><button id="fit">Reset view</button><span class="hint" id="dims"></span></div>
+  </details>
+  <details open>
+    <summary>Field</summary>
+    <div class="row" id="row-var"><label>Variable</label><select id="var" style="flex:1"></select></div>
+    <div class="row"><label>Colormap</label><select id="cmap"></select>
+      <select id="rmode"><option value="step">range: step</option><option value="all">range: all time</option><option value="manual">range: manual</option></select></div>
+    <div class="row"><label>Min/Max</label><input id="rmin" type="number" step="any"><input id="rmax" type="number" step="any"></div>
+  </details>
+  <details open>
+    <summary>Time</summary>
+    <div class="row" id="row-time"><button id="play">&#9654;</button><input id="step" type="range" min="0" max="0" value="0"><input id="stepn" type="number" min="0" value="0" style="width:56px"><span id="tlabel" class="hint"></span></div>
+    <div class="row"><span style="flex:1"></span><label>fps</label><input id="fps" type="number" value="8" min="1" max="60" style="width:48px"></div>
+  </details>
+  <details open>
+    <summary>Warp by displacement</summary>
+    <div class="row" id="row-warp"><label><input id="warp" type="checkbox"> warp</label><select id="wprefix"></select><label>scale</label><input id="wscale" type="number" step="any" value="1"></div>
+  </details>
+  <details open>
+    <summary>Blocks</summary>
+    <div class="row hint"><a href="#" id="blkall">all</a> &middot; <a href="#" id="blknone">none</a></div>
+    <div id="blocks" class="list"></div>
+  </details>
+  <details>
+    <summary>Side sets</summary>
+    <div id="sidesets" class="list"></div>
+  </details>
+  <details>
+    <summary>Node sets</summary>
+    <div id="nodesets" class="list"></div>
+  </details>
+  <details open>
+    <summary>Cut (element-wise)</summary>
+    <div class="row" id="row-cut"><label><input id="cuton" type="checkbox"> cut</label><select id="cutaxis"><option>x</option><option>y</option><option>z</option></select>
+      <input id="cutpos" type="range" min="0" max="1000" value="500"><input id="cutval" type="number" step="any"><label><input id="cutflip" type="checkbox"> flip</label></div>
+    <div class="hint">Keeps elements whose centroid lies on one side, so interior element values are visible.</div>
+  </details>
+  <details open>
+    <summary>Display</summary>
+    <div class="row"><label><input id="edges" type="checkbox" checked> edges</label><label><input id="axes" type="checkbox"> axes</label><label><input id="lock2d" type="checkbox"> 2D lock</label></div>
+    <div class="row"><label>Opacity</label><input id="opacity" type="range" min="0.05" max="1" step="0.05" value="1"></div>
+    <div class="row"><label>Up</label><select id="up"><option value="z">Z</option><option value="y">Y</option></select>
+      <label>Bg</label><select id="bg"><option value="#ffffff">white</option><option value="#e9ecf0">light</option><option value="#202428">dark</option></select></div>
+  </details>
+  <details open>
+    <summary>Globals (postprocessors)</summary>
+    <table id="globals"></table>
+  </details>
+  <details open>
+    <summary>Snapshot</summary>
+    <div class="row"><input id="snapname" type="text" style="flex:1"><button id="snap">Save PNG</button></div>
+    <div class="hint" id="snapinfo"></div>
+  </details>
+  <div class="hint" style="margin-top:8px">Click: probe node/element. <kbd>&larr;</kbd><kbd>&rarr;</kbd> step, <kbd>space</kbd> play, <kbd>r</kbd> reset view, <kbd>e</kbd> edges.</div>
+</div>
+<div id="view">
+  <canvas id="gl" class="gl"></canvas>
+  <canvas id="bar" width="130" height="300"></canvas>
+  <div id="probe"></div>
+  <div id="status">loading&hellip;</div>
+  <div id="ebar"></div>
+  <a id="efull" target="_blank" title="open in the full viewer">&#x2922; full viewer</a>
+</div>
+
+<script type="importmap">
+{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+             "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---------------------------------------------------------------- colormaps
+const CMAPS = {
+  viridis: [[0.267,0.005,0.329],[0.282,0.095,0.417],[0.279,0.175,0.483],[0.259,0.252,0.525],[0.23,0.322,0.546],[0.199,0.388,0.555],[0.173,0.449,0.558],[0.149,0.508,0.557],[0.128,0.567,0.551],[0.121,0.626,0.533],[0.158,0.684,0.502],[0.246,0.739,0.452],[0.369,0.789,0.383],[0.516,0.831,0.294],[0.678,0.864,0.19],[0.846,0.887,0.1],[0.993,0.906,0.144]],
+  plasma: [[0.05,0.03,0.528],[0.193,0.018,0.59],[0.3,0.01,0.632],[0.399,0.001,0.656],[0.495,0.012,0.658],[0.584,0.069,0.633],[0.665,0.139,0.586],[0.736,0.209,0.528],[0.798,0.28,0.47],[0.853,0.352,0.414],[0.902,0.425,0.36],[0.943,0.503,0.306],[0.973,0.586,0.252],[0.991,0.675,0.198],[0.993,0.772,0.155],[0.974,0.875,0.144],[0.94,0.975,0.131]],
+  inferno: [[0.001,0.0,0.014],[0.042,0.028,0.141],[0.129,0.047,0.291],[0.238,0.037,0.396],[0.342,0.062,0.429],[0.441,0.099,0.432],[0.541,0.135,0.415],[0.64,0.171,0.381],[0.736,0.216,0.33],[0.822,0.275,0.266],[0.894,0.353,0.194],[0.947,0.449,0.115],[0.978,0.558,0.035],[0.988,0.675,0.065],[0.975,0.798,0.206],[0.948,0.917,0.411],[0.988,0.998,0.645]],
+  coolwarm: [[0.23,0.299,0.754],[0.304,0.407,0.845],[0.384,0.51,0.918],[0.468,0.606,0.969],[0.554,0.69,0.996],[0.641,0.761,0.998],[0.724,0.815,0.976],[0.801,0.85,0.93],[0.867,0.864,0.863],[0.926,0.826,0.771],[0.96,0.767,0.674],[0.97,0.69,0.575],[0.957,0.598,0.477],[0.921,0.491,0.383],[0.865,0.371,0.296],[0.791,0.231,0.216],[0.706,0.016,0.15]],
+  turbo: [[0.19,0.072,0.232],[0.251,0.252,0.634],[0.276,0.421,0.891],[0.259,0.58,0.999],[0.158,0.736,0.923],[0.093,0.866,0.762],[0.197,0.949,0.595],[0.428,0.994,0.386],[0.644,0.99,0.234],[0.805,0.925,0.205],[0.933,0.812,0.227],[0.993,0.674,0.203],[0.984,0.493,0.128],[0.921,0.315,0.055],[0.816,0.185,0.018],[0.664,0.084,0.004],[0.48,0.016,0.011]],
+  jet: [[0.0,0.0,0.5],[0.0,0.0,0.785],[0.0,0.002,1.0],[0.0,0.253,1.0],[0.0,0.504,1.0],[0.0,0.755,1.0],[0.085,1.0,0.882],[0.288,1.0,0.68],[0.49,1.0,0.478],[0.693,1.0,0.275],[0.895,1.0,0.073],[1.0,0.814,0.0],[1.0,0.582,0.0],[1.0,0.349,0.0],[1.0,0.117,0.0],[0.767,0.0,0.0],[0.5,0.0,0.0]],
+  gray: [[0.15,0.15,0.15],[0.95,0.95,0.95]],
+};
+const LUTS = {};
+function lut(name) {
+  if (LUTS[name]) return LUTS[name];
+  const stops = CMAPS[name] || CMAPS.viridis, N = 256, out = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1) * (stops.length - 1), k = Math.min(stops.length - 2, Math.floor(t)), f = t - k;
+    for (let c = 0; c < 3; c++) out[3 * i + c] = stops[k][c] * (1 - f) + stops[k + 1][c] * f;
+  }
+  return LUTS[name] = out;
+}
+const PALETTE = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990', '#dcbeff'];
+
+// ---------------------------------------------------------------- state
+const $ = s => document.querySelector(s);
+const q0 = new URLSearchParams(location.search);
+const num = (s, d) => (s === null || s === undefined || s === '' || isNaN(+s)) ? d : +s;
+const S = {
+  file: q0.get('file') || '',
+  var: q0.get('var') || '',
+  step: q0.get('step') ?? 'last',
+  cmap: q0.get('cmap') || 'viridis',
+  rmode: 'step', rmin: 0, rmax: 1,
+  warp: q0.get('warp') === '1',
+  wprefix: q0.get('wprefix') || '',
+  wscale: num(q0.get('wscale'), 1),
+  wscaleAuto: q0.get('wscale') === 'auto',
+  // block/ss/ns lists may mix ids and names; resolved to ids once the meta is known.
+  blocksRaw: q0.get('blocks') ? q0.get('blocks').split(',').filter(Boolean) : null,
+  ssRaw: (q0.get('ss') || '').split(',').filter(Boolean),
+  nsRaw: (q0.get('ns') || '').split(',').filter(Boolean),
+  blocks: null, ss: new Set(), ns: new Set(),
+  cut: null,
+  edges: q0.get('edges') !== '0',
+  axes: q0.get('axes') === '1',
+  opacity: num(q0.get('opacity'), 1),
+  up: q0.get('up') || '',
+  bg: q0.get('bg') || '#ffffff',
+  cam: q0.get('cam') || '',
+  lock2d: q0.get('lock2d'),
+  view: q0.get('view') || 'iso',
+  embed: q0.get('embed') === '1',
+  controls: new Set((q0.get('controls') || '').split(',').filter(Boolean)),
+  snapdir: q0.get('snapdir') || '',
+};
+// Named camera directions in a z-up frame (swapped for y-up in fit). Top and bottom look along
+// the up axis, where the roll is undefined, so they carry a tiny sideways offset that puts +y
+// at the top of the screen.
+const VIEWS = { iso: [1, 1, 1], top: [0, -0.002, 1], bottom: [0, 0.002, -1], front: [0, -1, 0], back: [0, 1, 0], right: [1, 0, 0], left: [-1, 0, 0] };
+{
+  const r = q0.get('range');
+  if (r === 'all') S.rmode = 'all';
+  else if (r && r.includes(',')) { S.rmode = 'manual'; [S.rmin, S.rmax] = r.split(',').map(Number); }
+  const c = q0.get('cut');
+  if (c) { const [a, p, s] = c.split(':'); S.cut = { axis: a, pos: +p, sign: s === '-' ? -1 : 1 }; }
+}
+
+let M = null;              // meta
+let NODES = null;          // Float32Array nnodes*3
+let SURF = null;           // {tri, triElem, edges}
+let VERT = null;           // Uint32Array node id per rendered vertex
+let R = { min: 0, max: 1 }; // colour range in use
+let GLOB = null;
+let DISP = null, DISP_STEP = -1;
+const CACHE = new Map();
+const RANGE = new Map();
+const OVER = new Map();    // 'ss:id' | 'ns:id' -> overlay
+let PROBE = null;          // {node, elem, marker}
+let playing = null;
+let bboxDiag = 1;
+
+// ---------------------------------------------------------------- api
+async function api(ep, q = {}) {
+  const u = new URL('/api/' + ep, location.origin);
+  if (S.file) u.searchParams.set('file', S.file);
+  for (const k in q) if (q[k] !== undefined && q[k] !== null && q[k] !== '') u.searchParams.set(k, q[k]);
+  const r = await fetch(u);
+  if (!r.ok) { let m = r.statusText; try { m = (await r.json()).error; } catch {} throw new Error(m); }
+  return r;
+}
+const apiJson = async (ep, q) => (await api(ep, q)).json();
+async function apiBin(ep, q) {
+  const buf = await (await api(ep, q)).arrayBuffer();
+  const dv = new DataView(buf), hl = dv.getUint32(0, true);
+  const hdr = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, hl)));
+  let off = 4 + hl;
+  const out = { hdr };
+  for (const a of hdr.arrays) {
+    const n = a.shape.reduce((x, y) => x * y, 1);
+    const C = { f4: Float32Array, u4: Uint32Array, i4: Int32Array }[a.dtype];
+    out[a.name] = new C(buf, off, n);
+    off += n * 4; off = (off + 3) & ~3;
+  }
+  return out;
+}
+function status(msg, err = false) { const s = $('#status'); s.textContent = msg; s.className = err ? 'err' : ''; }
+function fmt(x) {
+  if (x === null || x === undefined || Number.isNaN(x)) return 'nan';
+  if (x === 0) return '0';
+  const a = Math.abs(x);
+  return (a >= 1e5 || a < 1e-3) ? x.toExponential(3) : +x.toPrecision(5) + '';
+}
+
+// ---------------------------------------------------------------- three
+const canvas = $('#gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(35, 1, 0.01, 1000);
+scene.add(camera);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x666666, 1.1));
+const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(0.4, 0.6, 1); camera.add(key);
+// OrbitControls fixes its orbit axis from camera.up at construction, so it is rebuilt when up changes.
+let controls = null, LOCK = false;
+function makeControls() {
+  const target = controls ? controls.target.clone() : null;
+  if (controls) controls.dispose();
+  controls = new OrbitControls(camera, canvas);
+  controls.screenSpacePanning = true;
+  controls.addEventListener('change', () => { urlDirty = true; });
+  if (target) controls.target.copy(target);
+  applyLock(LOCK);
+  controls.update();
+}
+function applyLock(on) { LOCK = on; controls.enableRotate = !on; controls.mouseButtons.LEFT = on ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE; }
+makeControls();
+
+const geom = new THREE.BufferGeometry();
+const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+// Lower-dimensional blocks (mortar faces, shells on a solid) sit on 3D faces; pull them forward.
+const matLow = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+const mesh = new THREE.Mesh(geom, [mat, matLow]); scene.add(mesh);
+const egeom = new THREE.BufferGeometry();
+const elines = new THREE.LineSegments(egeom, new THREE.LineBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.55 })); scene.add(elines);
+// 1D elements (beams, trusses): field-coloured segments.
+const lgeom = new THREE.BufferGeometry();
+const lseg = new THREE.LineSegments(lgeom, new THREE.LineBasicMaterial({ vertexColors: true })); scene.add(lseg);
+const axes = new THREE.AxesHelper(1); axes.visible = false; scene.add(axes);
+const markerGeom = new THREE.SphereGeometry(1, 12, 12);
+const marker = new THREE.Mesh(markerGeom, new THREE.MeshBasicMaterial({ color: 0xff2d55 })); marker.visible = false; scene.add(marker);
+
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+let urlDirty = false, urlTimer = 0;
+function loop() {
+  controls.update();
+  renderer.render(scene, camera);
+  if (urlDirty && !urlTimer) urlTimer = setTimeout(() => { urlTimer = 0; urlDirty = false; updateURL(); }, 300);
+  requestAnimationFrame(loop);
+}
+
+function setUp(u) {
+  S.up = u;
+  camera.up.set(0, u === 'y' ? 1 : 0, u === 'z' ? 1 : 0);
+  makeControls();
+}
+function fit() {
+  geom.computeBoundingBox(); egeom.computeBoundingBox(); lgeom.computeBoundingBox();
+  const bb = new THREE.Box3();
+  for (const g of [geom, egeom, lgeom]) if (g.boundingBox && isFinite(g.boundingBox.min.x)) bb.union(g.boundingBox);
+  if (bb.isEmpty()) return;
+  const c = new THREE.Vector3(), size = new THREE.Vector3();
+  bb.getCenter(c); bb.getSize(size);
+  const rad = Math.max(size.length() / 2, 1e-6);
+  const dist = rad / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.1;
+  const dir = new THREE.Vector3(0, 0, 1);
+  if (M && M.dim !== 2) {
+    let [x, y, z] = VIEWS[S.view] || VIEWS.iso;
+    if (S.up === 'y') [x, y, z] = [x, z, -y];   // z-up frame -> y-up frame
+    dir.set(x, y, z).normalize();
+  }
+  camera.position.copy(c).addScaledVector(dir, dist);
+  camera.near = dist / 200; camera.far = dist * 50; camera.updateProjectionMatrix();
+  controls.target.copy(c); controls.update();
+  axes.scale.setScalar(rad * 0.5); axes.position.copy(bb.min);
+  marker.scale.setScalar(rad * 0.012);
+}
+function applyCam(str) {
+  const v = str.split(',').map(Number);
+  if (v.length < 6 || v.some(isNaN)) return false;
+  camera.position.set(v[0], v[1], v[2]); controls.target.set(v[3], v[4], v[5]); controls.update();
+  return true;
+}
+function camString() {
+  const p = camera.position, t = controls.target;
+  return [p.x, p.y, p.z, t.x, t.y, t.z].map(x => +x.toPrecision(6)).join(',');
+}
+
+// ---------------------------------------------------------------- data
+async function getField(name, step) {
+  const k = name + '|' + step;
+  if (!CACHE.has(k)) {
+    const r = await apiBin('var', { name, step });
+    CACHE.set(k, { kind: r.hdr.kind, values: r.values, min: r.hdr.min, max: r.hdr.max, categories: r.hdr.categories || null });
+    if (CACHE.size > 400) CACHE.delete(CACHE.keys().next().value);
+  }
+  return CACHE.get(k);
+}
+async function getRange(name) {
+  if (!RANGE.has(name)) RANGE.set(name, await apiJson('range', { name }));
+  return RANGE.get(name);
+}
+async function getDisp(step) {
+  if (!S.wprefix) return null;
+  if (DISP && DISP_STEP === step && DISP.prefix === S.wprefix) return DISP;
+  const comps = ['x', 'y', 'z'].map(c => M.nodal.includes(`${S.wprefix}_${c}`) ? `${S.wprefix}_${c}` : null);
+  const arrs = await Promise.all(comps.map(n => n ? getField(n, step).then(f => f.values) : null));
+  DISP = { prefix: S.wprefix, arrs }; DISP_STEP = step;
+  return DISP;
+}
+
+// wscale=auto: peak displacement over all steps becomes a tenth of the bounding box diagonal.
+async function resolveWscale() {
+  if (!S.wprefix) return;
+  const r = await getRange('mag:' + S.wprefix);
+  S.wscale = r.max > 0 ? +(0.1 * bboxDiag / r.max).toPrecision(3) : 1;
+  $('#wscale').value = S.wscale;
+}
+
+function fillPositions(out, idx, disp, scale) {
+  const n = idx.length, d = disp ? disp.arrs : null;
+  for (let k = 0; k < n; k++) {
+    const i = idx[k];
+    out[3 * k] = NODES[3 * i] + (d && d[0] ? scale * d[0][i] : 0);
+    out[3 * k + 1] = NODES[3 * i + 1] + (d && d[1] ? scale * d[1][i] : 0);
+    out[3 * k + 2] = NODES[3 * i + 2] + (d && d[2] ? scale * d[2][i] : 0);
+  }
+}
+
+async function loadSurface() {
+  const q = {};
+  if (S.blocks) q.blocks = [...S.blocks].join(',') || '-1';
+  if (S.cut) q.cut = `${S.cut.axis}:${S.cut.pos}:${S.cut.sign < 0 ? '-' : '+'}`;
+  SURF = await apiBin('surface', q);
+  VERT = SURF.tri; // flat (ntri*3)
+  const nv = VERT.length;
+  geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nv * 3), 3));
+  geom.setAttribute('color', new THREE.BufferAttribute(new Float32Array(nv * 3), 3));
+  geom.clearGroups();
+  geom.addGroup(0, SURF.hdr.ntri3 * 3, 0);
+  geom.addGroup(SURF.hdr.ntri3 * 3, nv - SURF.hdr.ntri3 * 3, 1);
+  egeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SURF.edges.length * 3), 3));
+  lgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SURF.line.length * 3), 3));
+  lgeom.setAttribute('color', new THREE.BufferAttribute(new Float32Array(SURF.line.length * 3), 3));
+  await updatePositions();
+  await updateColors();
+  $('#dims').textContent = `${SURF.hdr.ntri} tris` + (SURF.hdr.nline ? `, ${SURF.hdr.nline} lines` : '');
+}
+
+async function updatePositions() {
+  if (!SURF) return;
+  const disp = S.warp ? await getDisp(curStep()) : null;
+  fillPositions(geom.attributes.position.array, VERT, disp, S.wscale);
+  geom.attributes.position.needsUpdate = true;
+  geom.computeVertexNormals();
+  geom.computeBoundingSphere();
+  fillPositions(egeom.attributes.position.array, SURF.edges, disp, S.wscale);
+  egeom.attributes.position.needsUpdate = true;
+  egeom.computeBoundingSphere();
+  fillPositions(lgeom.attributes.position.array, SURF.line, disp, S.wscale);
+  lgeom.attributes.position.needsUpdate = true;
+  lgeom.computeBoundingSphere();
+  for (const o of OVER.values()) {
+    for (const part of o.parts) {
+      fillPositions(part.obj.geometry.attributes.position.array, part.idx, disp, S.wscale);
+      part.obj.geometry.attributes.position.needsUpdate = true;
+      part.obj.geometry.computeBoundingSphere();
+    }
+  }
+  if (PROBE && PROBE.node !== null && PROBE.node !== undefined) placeMarker(PROBE.node, disp);
+}
+
+// Colour one vertex array: vertNode maps vertex -> node, vertsPerPrim groups vertices into
+// primitives whose element id primElem gives for elemental fields. f null = flat mesh colour.
+function fillColors(col, vertNode, primElem, vertsPerPrim, f) {
+  const nv = vertNode.length;
+  if (!f) {
+    for (let k = 0; k < nv; k++) { col[3 * k] = 0.80; col[3 * k + 1] = 0.83; col[3 * k + 2] = 0.88; }
+    return;
+  }
+  const L = lut(S.cmap), span = (R.max - R.min) || 1, v = f.values, nodal = f.kind === 'nodal';
+  const cat = f.categories ? PALETTE.map(h => new THREE.Color(h)) : null;
+  for (let k = 0; k < nv; k++) {
+    const x = nodal ? v[vertNode[k]] : v[primElem[(k / vertsPerPrim) | 0]];
+    if (Number.isNaN(x)) { col[3 * k] = col[3 * k + 1] = col[3 * k + 2] = 0.6; continue; }
+    if (cat) { const c = cat[Math.round(x) % cat.length]; col[3 * k] = c.r; col[3 * k + 1] = c.g; col[3 * k + 2] = c.b; continue; }
+    let t = (x - R.min) / span; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const i = 3 * Math.round(t * 255);
+    col[3 * k] = L[i]; col[3 * k + 1] = L[i + 1]; col[3 * k + 2] = L[i + 2];
+  }
+}
+async function updateColors() {
+  if (!SURF) return;
+  let f = null;
+  if (S.var) {
+    f = await getField(S.var, curStep());
+    if (S.rmode === 'step') { R = { min: f.min, max: f.max }; }
+    else if (S.rmode === 'all') { const r = await getRange(S.var); R = { min: r.min, max: r.max }; }
+    else R = { min: S.rmin, max: S.rmax };
+    $('#rmin').value = R.min; $('#rmax').value = R.max;
+  }
+  fillColors(geom.attributes.color.array, VERT, SURF.triElem, 3, f);
+  geom.attributes.color.needsUpdate = true;
+  fillColors(lgeom.attributes.color.array, SURF.line, SURF.lineElem, 2, f);
+  if (!f) lgeom.attributes.color.array.fill(0.25);
+  lgeom.attributes.color.needsUpdate = true;
+  LASTFIELD = f;
+  drawBar(f ? f.kind : null);
+}
+
+let LASTKIND = null, LASTFIELD = null;
+function drawBar(kind) {
+  if (kind === 'redraw') kind = LASTKIND; else LASTKIND = kind;
+  const c = $('#bar'), ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  if (!kind) return;
+  const dark0 = S.bg === '#202428';
+  if (LASTFIELD && LASTFIELD.categories) {
+    // categorical legend: one swatch per category, bottom-aligned like the bar
+    const cats = LASTFIELD.categories, rowH = 15, y1 = c.height - 6;
+    ctx.font = '11px sans-serif'; ctx.textBaseline = 'middle'; ctx.fillStyle = dark0 ? '#eee' : '#111';
+    cats.forEach((name, i) => {
+      const y = y1 - (cats.length - 1 - i) * rowH - rowH / 2;
+      ctx.fillStyle = PALETTE[i % PALETTE.length]; ctx.fillRect(6, y - 5, 10, 10);
+      ctx.fillStyle = dark0 ? '#eee' : '#111';
+      let t = name; while (t.length > 3 && ctx.measureText(t).width > c.width - 22) t = t.slice(0, -2) + '…';
+      ctx.fillText(t, 20, y);
+    });
+    ctx.textBaseline = 'alphabetic'; ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('block', 6, y1 - cats.length * rowH - 4);
+    return;
+  }
+  const L = lut(S.cmap), x0 = 6, y0 = 22, h = 240, w = 16;
+  for (let i = 0; i < h; i++) {
+    const j = 3 * Math.round((1 - i / (h - 1)) * 255);
+    ctx.fillStyle = `rgb(${L[j] * 255 | 0},${L[j + 1] * 255 | 0},${L[j + 2] * 255 | 0})`;
+    ctx.fillRect(x0, y0 + i, w, 1);
+  }
+  const dark = S.bg === '#202428';
+  ctx.fillStyle = dark ? '#eee' : '#111'; ctx.strokeStyle = ctx.fillStyle;
+  ctx.strokeRect(x0 + .5, y0 + .5, w, h);
+  ctx.font = '10px sans-serif'; ctx.textBaseline = 'middle';
+  for (let k = 0; k <= 4; k++) {
+    const y = y0 + h * (1 - k / 4), val = R.min + (R.max - R.min) * k / 4;
+    ctx.fillRect(x0 + w, y, 3, 1);
+    ctx.fillText(fmt(val), x0 + w + 5, y);
+  }
+  ctx.textBaseline = 'alphabetic'; ctx.font = 'bold 11px sans-serif';
+  let title = S.var + (kind === 'elemental' ? ' (elem)' : '');
+  while (title.length > 4 && ctx.measureText(title).width > c.width - x0) title = title.slice(0, -2) + '…';
+  ctx.fillText(title, x0, 13);
+}
+
+// ---------------------------------------------------------------- overlays
+function overlayKey(kind, id) { return kind + ':' + id; }
+async function setOverlay(kind, id, on, color) {
+  const k = overlayKey(kind, id);
+  if (!on) {
+    const o = OVER.get(k); if (o) { for (const p of o.parts) scene.remove(p.obj); OVER.delete(k); }
+    return;
+  }
+  if (OVER.has(k)) return;
+  const r = await apiBin(kind === 'ss' ? 'sideset' : 'nodeset', { id });
+  const parts = [];
+  const mk = (idx, obj) => { obj.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(idx.length * 3), 3)); parts.push({ idx, obj }); scene.add(obj); };
+  const col = new THREE.Color(color);
+  if (r.tri && r.tri.length) mk(r.tri, new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, transparent: true, opacity: 0.85 })));
+  if (r.edges && r.edges.length) mk(r.edges, new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: col, linewidth: 2 })));
+  if (r.points && r.points.length) mk(r.points, new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: col, size: 7, sizeAttenuation: false })));
+  OVER.set(k, { parts });
+  const disp = S.warp ? await getDisp(curStep()) : null;
+  for (const p of parts) { fillPositions(p.obj.geometry.attributes.position.array, p.idx, disp, S.wscale); p.obj.geometry.attributes.position.needsUpdate = true; p.obj.geometry.computeBoundingSphere(); }
+}
+
+// ---------------------------------------------------------------- probe
+function placeMarker(node, disp) {
+  const p = new Float32Array(3); fillPositions(p, [node], disp, S.wscale);
+  marker.position.set(p[0], p[1], p[2]); marker.visible = true;
+}
+async function showProbe(node, elem) {
+  PROBE = { node, elem };
+  if (node !== null && node !== undefined) placeMarker(node, S.warp ? await getDisp(curStep()) : null);
+  else marker.visible = false;
+  const r = await apiJson('probe', { node, elem, step: curStep() });
+  PROBE.result = r;
+  const rows = (obj) => Object.entries(obj).map(([k, v]) => `<tr><td>${k}</td><td>${fmt(v)}</td></tr>`).join('');
+  let h = `<span class="x" id="probeclose">&times;</span>`;
+  if (r.node) h += `<h4>node ${r.node.id}</h4><div class="hint">(${r.node.xyz.map(fmt).join(', ')})</div><table>${rows(r.node.values)}</table>`;
+  if (r.elem) h += `<h4>elem ${r.elem.id} &middot; ${r.elem.type} &middot; block ${r.elem.block_name}</h4><table>${rows(r.elem.values)}</table>`;
+  h += `<div class="hint">step ${r.step}, t = ${fmt(r.time)}</div>`;
+  const p = $('#probe'); p.innerHTML = h; p.style.display = 'block';
+  $('#probeclose').onclick = () => { p.style.display = 'none'; marker.visible = false; PROBE = null; };
+}
+{
+  let down = null;
+  canvas.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
+  canvas.addEventListener('pointerup', e => {
+    if (S.embed && !S.controls.has('probe') && !S.controls.has('all')) { down = null; return; }
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4 || !SURF) { down = null; return; }
+    down = null;
+    const rect = canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    const rc = new THREE.Raycaster(); rc.setFromCamera(ndc, camera);
+    const hit = rc.intersectObject(mesh, false)[0];
+    if (!hit) return;
+    const t = hit.faceIndex, pos = geom.attributes.position.array;
+    let best = 0, bd = Infinity;
+    for (let j = 0; j < 3; j++) {
+      const k = 3 * t + j, d = hit.point.distanceToSquared(new THREE.Vector3(pos[3 * k], pos[3 * k + 1], pos[3 * k + 2]));
+      if (d < bd) { bd = d; best = k; }
+    }
+    showProbe(VERT[best], SURF.triElem[t]).catch(err => status(err.message, true));
+  });
+}
+
+// ---------------------------------------------------------------- time
+function curStep() { return +$('#step').value; }
+async function setStep(i, opts = {}) {
+  const n = M.times.length;
+  i = Math.max(0, Math.min(n - 1, Math.round(i)));
+  $('#step').value = i; $('#stepn').value = i;
+  $('#tlabel').textContent = `step ${i} / ${n - 1}   t = ${fmt(M.times[i])}`;
+  try {
+    const jobs = [updateColors()];
+    if (S.warp) jobs.push(updatePositions());
+    await Promise.all(jobs);
+    renderGlobals(i);
+    if (PROBE && !opts.quiet) showProbe(PROBE.node, PROBE.elem).catch(() => {});
+  } catch (e) { status(e.message, true); }
+  urlDirty = true;
+}
+function renderGlobals(i) {
+  if (!GLOB || !GLOB.names.length) { $('#globals').innerHTML = '<tr><td class="hint">none</td></tr>'; return; }
+  const row = GLOB.values[Math.min(i, GLOB.values.length - 1)] || [];
+  $('#globals').innerHTML = GLOB.names.map((n, k) => `<tr><td>${n}</td><td>${fmt(row[k])}</td></tr>`).join('');
+}
+function togglePlay(on) {
+  if (playing) { clearInterval(playing); playing = null; }
+  $('#play').classList.toggle('on', !!on);
+  $('#play').innerHTML = on ? '&#10074;&#10074;' : '&#9654;';
+  if (on) {
+    let busy = false;
+    playing = setInterval(async () => {
+      if (busy) return; busy = true;
+      const n = M.times.length, i = (curStep() + 1) % n;
+      await setStep(i, { quiet: true });
+      busy = false;
+    }, 1000 / Math.max(1, +$('#fps').value || 8));
+  }
+}
+
+// ---------------------------------------------------------------- url
+function updateURL() {
+  const u = new URL(location.href), p = u.searchParams;
+  const set = (k, v) => { if (v === null || v === undefined || v === '' || v === false) p.delete(k); else p.set(k, v); };
+  set('file', S.file); set('var', S.var); set('step', curStep()); set('cmap', S.cmap !== 'viridis' ? S.cmap : '');
+  set('range', S.rmode === 'all' ? 'all' : S.rmode === 'manual' ? `${R.min},${R.max}` : '');
+  set('warp', S.warp ? '1' : ''); set('wprefix', S.warp && S.wprefix ? S.wprefix : '');
+  set('wscale', !S.warp ? '' : S.wscaleAuto ? 'auto' : S.wscale !== 1 ? S.wscale : '');
+  set('blocks', S.blocks ? [...S.blocks].join(',') : ''); set('ss', [...S.ss].join(',')); set('ns', [...S.ns].join(','));
+  set('cut', S.cut ? `${S.cut.axis}:${+S.cut.pos.toPrecision(6)}:${S.cut.sign < 0 ? '-' : '+'}` : '');
+  set('edges', S.edges ? '' : '0'); set('axes', S.axes ? '1' : ''); set('opacity', S.opacity !== 1 ? S.opacity : '');
+  set('up', S.up === 'y' ? 'y' : ''); set('bg', S.bg !== '#ffffff' ? S.bg : ''); set('lock2d', controls.enableRotate ? '' : '1');
+  set('view', ''); set('cam', camString());
+  history.replaceState(null, '', u);
+}
+
+// ---------------------------------------------------------------- snapshot
+async function snapshot() {
+  renderer.render(scene, camera);
+  const gl = canvas, bar = $('#bar');
+  const out = document.createElement('canvas'); out.width = gl.width; out.height = gl.height;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = S.bg; ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(gl, 0, 0);
+  const pr = window.devicePixelRatio || 1;
+  if (S.var) ctx.drawImage(bar, out.width - (bar.width + 10) * pr, out.height - (bar.height + 10) * pr, bar.width * pr, bar.height * pr);
+  ctx.font = `${12 * pr}px sans-serif`; ctx.fillStyle = S.bg === '#202428' ? '#eee' : '#222';
+  const cap = `${M.file.split('/').pop()}  ${S.var || 'mesh'}  step ${curStep()}  t=${fmt(M.times[curStep()])}${S.warp ? `  warp ${S.wscale}x` : ''}`;
+  ctx.fillText(cap, 8 * pr, out.height - 8 * pr);
+  const name = $('#snapname').value || defaultSnapName();
+  const state = { url: location.href, file: M.file, var: S.var, step: curStep(), time: M.times[curStep()], range: R, warp: S.warp ? { prefix: S.wprefix, scale: S.wscale } : null, cut: S.cut, blocks: S.blocks ? [...S.blocks] : 'all', cam: camString(), probe: PROBE ? PROBE.result : null };
+  const r = await fetch('/api/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, dir: S.snapdir || undefined, png: out.toDataURL('image/png'), state }) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error);
+  $('#snapinfo').textContent = j.png;
+  status('saved ' + j.png);
+}
+function defaultSnapName() {
+  const stem = (M.file.split('/').pop() || 'exodus').replace(/\.[^.]+$/, '');
+  return `${stem}_${S.var || 'mesh'}_s${curStep()}`;
+}
+
+// ---------------------------------------------------------------- ui
+function opt(sel, items, value) {
+  const el = $(sel); el.innerHTML = '';
+  for (const it of items) { const o = document.createElement('option'); o.value = it.value ?? it; o.textContent = it.label ?? it; el.appendChild(o); }
+  if (value !== undefined) el.value = value;
+}
+function buildUI() {
+  document.title = 'exodus-view: ' + M.file.split('/').pop();
+  $('#title').textContent = M.file.split('/').pop();
+  $('#path').textContent = M.file;
+  $('#dims').textContent = `${M.dim}D, ${M.nnodes} nodes, ${M.nelem} elems`;
+  const v = $('#var'); v.innerHTML = '<option value="">(mesh only)</option>';
+  const grp = (label, names) => { if (!names.length) return; const g = document.createElement('optgroup'); g.label = label; for (const n of names) { const o = document.createElement('option'); o.value = n; o.textContent = n; g.appendChild(o); } v.appendChild(g); };
+  grp('nodal', M.nodal); grp('elemental', M.elemental);
+  grp('vector magnitude', M.displacements.map(p => 'mag:' + p));
+  grp('mesh', ['block']);
+  const known = n => M.nodal.includes(n) || M.elemental.includes(n) || n === 'block' || (n.startsWith('mag:') && M.displacements.includes(n.slice(4)));
+  if (S.var && !known(S.var)) { status(`variable "${S.var}" not in file`, true); S.var = ''; }
+  if (!S.var && !q0.has('var')) S.var = M.nodal[0] || M.elemental[0] || '';
+  v.value = S.var;
+  // resolve block / set names from the URL to ids
+  const resolveIds = (raw, items) => new Set(raw.map(t => { const it = items.find(x => x.name === t); return it ? it.id : +t; }).filter(x => !Number.isNaN(x)));
+  S.blocks = S.blocksRaw ? resolveIds(S.blocksRaw, M.blocks) : null;
+  S.ss = resolveIds(S.ssRaw, M.sidesets); S.ns = resolveIds(S.nsRaw, M.nodesets);
+  opt('#cmap', Object.keys(CMAPS), S.cmap);
+  $('#rmode').value = S.rmode; $('#rmin').value = S.rmin; $('#rmax').value = S.rmax;
+  const n = M.times.length; $('#step').max = n - 1; $('#stepn').max = n - 1;
+  opt('#wprefix', M.displacements, S.wprefix || M.displacements[0] || '');
+  S.wprefix = $('#wprefix').value;
+  $('#warp').checked = S.warp && !!S.wprefix; S.warp = $('#warp').checked; $('#wscale').value = S.wscale;
+
+  const bl = $('#blocks'); bl.innerHTML = '';
+  for (const b of M.blocks) {
+    const on = !S.blocks || S.blocks.has(b.id);
+    bl.insertAdjacentHTML('beforeend', `<label><input type="checkbox" data-id="${b.id}" ${on ? 'checked' : ''}> ${b.name} <span class="meta">${b.id} &middot; ${b.type} &middot; ${b.nelem}</span></label>`);
+  }
+  bl.querySelectorAll('input').forEach(cb => cb.onchange = () => {
+    const ids = [...bl.querySelectorAll('input')].filter(c => c.checked).map(c => +c.dataset.id);
+    S.blocks = ids.length === M.blocks.length ? null : new Set(ids);
+    loadSurface().then(() => { urlDirty = true; }).catch(e => status(e.message, true));
+  });
+  const sets = (sel, kind, items, chosen) => {
+    const el = $(sel); el.innerHTML = '';
+    items.forEach((s, i) => {
+      const col = PALETTE[i % PALETTE.length];
+      el.insertAdjacentHTML('beforeend', `<label><input type="checkbox" data-id="${s.id}" data-col="${col}" ${chosen.has(s.id) ? 'checked' : ''}> <span class="sw" style="background:${col}"></span> ${s.name} <span class="meta">${s.id} &middot; ${s.n}</span></label>`);
+    });
+    if (!items.length) el.innerHTML = '<div class="hint">none</div>';
+    el.querySelectorAll('input').forEach(cb => cb.onchange = () => {
+      const id = +cb.dataset.id; cb.checked ? chosen.add(id) : chosen.delete(id);
+      setOverlay(kind, id, cb.checked, cb.dataset.col).then(() => { urlDirty = true; }).catch(e => status(e.message, true));
+    });
+    for (const cb of el.querySelectorAll('input:checked')) setOverlay(kind, +cb.dataset.id, true, cb.dataset.col).catch(e => status(e.message, true));
+  };
+  sets('#sidesets', 'ss', M.sidesets, S.ss);
+  sets('#nodesets', 'ns', M.nodesets, S.ns);
+
+  $('#cuton').checked = !!S.cut;
+  if (S.cut) { $('#cutaxis').value = S.cut.axis; $('#cutflip').checked = S.cut.sign < 0; }
+  syncCutSlider();
+  $('#edges').checked = S.edges; elines.visible = S.edges;
+  $('#axes').checked = S.axes; axes.visible = S.axes;
+  $('#opacity').value = S.opacity; applyOpacity();
+  if (!S.up) S.up = M.dim === 2 ? 'y' : 'z';
+  $('#up').value = S.up; setUp(S.up);
+  $('#bg').value = S.bg; applyBg();
+  const lock = S.lock2d !== null ? S.lock2d === '1' : M.dim === 2;
+  $('#lock2d').checked = lock; applyLock(lock);
+  $('#snapname').placeholder = defaultSnapName();
+}
+function cutAxisIndex() { return 'xyz'.indexOf($('#cutaxis').value); }
+function syncCutSlider() {
+  const a = cutAxisIndex(), lo = M.bbox[0][a], hi = M.bbox[1][a];
+  const pos = S.cut ? S.cut.pos : (lo + hi) / 2;
+  $('#cutpos').value = Math.round((pos - lo) / ((hi - lo) || 1) * 1000);
+  $('#cutval').value = +pos.toPrecision(6);
+}
+function readCut() {
+  if (!$('#cuton').checked) { S.cut = null; return; }
+  const a = cutAxisIndex(), lo = M.bbox[0][a], hi = M.bbox[1][a];
+  const pos = lo + (hi - lo) * (+$('#cutpos').value / 1000);
+  $('#cutval').value = +pos.toPrecision(6);
+  S.cut = { axis: 'xyz'[a], pos, sign: $('#cutflip').checked ? -1 : 1 };
+}
+let cutTimer = 0;
+function cutChanged(fromNumber = false) {
+  if (fromNumber && $('#cuton').checked) {
+    const a = cutAxisIndex(), lo = M.bbox[0][a], hi = M.bbox[1][a];
+    $('#cutpos').value = Math.round((+$('#cutval').value - lo) / ((hi - lo) || 1) * 1000);
+  }
+  readCut();
+  clearTimeout(cutTimer);
+  cutTimer = setTimeout(() => loadSurface().then(() => { urlDirty = true; }).catch(e => status(e.message, true)), 120);
+}
+function applyOpacity() { mat.transparent = S.opacity < 1; mat.opacity = S.opacity; mat.depthWrite = S.opacity >= 1; mat.needsUpdate = true; }
+function applyBg() { renderer.setClearColor(new THREE.Color(S.bg)); document.body.style.background = S.bg; elines.material.color.set(S.bg === '#202428' ? 0xdddddd : 0x1a1a1a); drawBar('redraw'); }
+
+function wire() {
+  const rerun = (fn) => (e) => Promise.resolve(fn(e)).then(() => { urlDirty = true; }).catch(err => status(err.message, true));
+  $('#var').onchange = rerun(e => { S.var = e.target.value; return updateColors(); });
+  $('#cmap').onchange = rerun(e => { S.cmap = e.target.value; return updateColors(); });
+  $('#rmode').onchange = rerun(e => { S.rmode = e.target.value; if (S.rmode === 'manual') { S.rmin = +$('#rmin').value; S.rmax = +$('#rmax').value; } return updateColors(); });
+  const manual = rerun(() => { S.rmode = 'manual'; $('#rmode').value = 'manual'; S.rmin = +$('#rmin').value; S.rmax = +$('#rmax').value; return updateColors(); });
+  $('#rmin').onchange = manual; $('#rmax').onchange = manual;
+  $('#step').oninput = () => setStep(+$('#step').value, { quiet: true });
+  $('#step').onchange = () => setStep(+$('#step').value);
+  $('#stepn').onchange = () => setStep(+$('#stepn').value);
+  $('#play').onclick = () => togglePlay(!playing);
+  $('#warp').onchange = rerun(e => { S.warp = e.target.checked && !!S.wprefix; e.target.checked = S.warp; return updatePositions(); });
+  $('#wprefix').onchange = rerun(async e => { S.wprefix = e.target.value; if (S.wscaleAuto) await resolveWscale(); return updatePositions(); });
+  $('#wscale').onchange = rerun(e => { S.wscale = +e.target.value || 0; S.wscaleAuto = false; return updatePositions(); });
+  $('#blkall').onclick = e => { e.preventDefault(); $('#blocks').querySelectorAll('input').forEach(c => c.checked = true); $('#blocks').querySelector('input')?.onchange(); };
+  $('#blknone').onclick = e => { e.preventDefault(); $('#blocks').querySelectorAll('input').forEach(c => c.checked = false); $('#blocks').querySelector('input')?.onchange(); };
+  $('#cuton').onchange = () => cutChanged();
+  $('#cutaxis').onchange = () => { S.cut = null; syncCutSlider(); cutChanged(); };
+  $('#cutpos').oninput = () => cutChanged();
+  $('#cutval').onchange = () => cutChanged(true);
+  $('#cutflip').onchange = () => cutChanged();
+  $('#edges').onchange = e => { S.edges = e.target.checked; elines.visible = S.edges; urlDirty = true; };
+  $('#axes').onchange = e => { S.axes = e.target.checked; axes.visible = S.axes; urlDirty = true; };
+  $('#lock2d').onchange = e => { applyLock(e.target.checked); urlDirty = true; };
+  $('#opacity').oninput = e => { S.opacity = +e.target.value; applyOpacity(); urlDirty = true; };
+  $('#up').onchange = e => { setUp(e.target.value); fit(); urlDirty = true; };
+  $('#bg').onchange = e => { S.bg = e.target.value; applyBg(); urlDirty = true; };
+  $('#fit').onclick = () => { S.view = 'iso'; fit(); urlDirty = true; };
+  $('#copyurl').onclick = () => { updateURL(); navigator.clipboard.writeText(location.href).then(() => status('URL copied')); };
+  $('#openbtn').onclick = () => { const p = $('#openpath').value.trim(); if (p) location.href = '/?file=' + encodeURIComponent(p); };
+  $('#openpath').onkeydown = e => { if (e.key === 'Enter') $('#openbtn').onclick(); };
+  $('#files').onchange = e => { if (e.target.value) location.href = '/?file=' + encodeURIComponent(e.target.value); };
+  $('#snap').onclick = () => snapshot().catch(err => status(err.message, true));
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.key === 'ArrowRight') setStep(curStep() + 1);
+    else if (e.key === 'ArrowLeft') setStep(curStep() - 1);
+    else if (e.key === ' ') { e.preventDefault(); togglePlay(!playing); }
+    else if (e.key === 'r') { fit(); urlDirty = true; }
+    else if (e.key === 'e') { $('#edges').checked = !$('#edges').checked; $('#edges').onchange({ target: $('#edges') }); }
+  });
+}
+
+function setupEmbed() {
+  const bar = $('#ebar'), want = S.controls.has('all') ? ['var', 'time', 'warp', 'cut'] : ['var', 'time', 'warp', 'cut'].filter(c => S.controls.has(c));
+  for (const c of want) {
+    if (c === 'time' && M.times.length < 2) continue;
+    if (c === 'warp' && !M.displacements.length) continue;
+    bar.appendChild($('#row-' + c));
+  }
+  bar.classList.toggle('on', bar.children.length > 0);
+  const u = new URL(location.href); u.searchParams.delete('embed'); u.searchParams.delete('controls'); u.searchParams.delete('snap'); u.searchParams.delete('snapdir');
+  $('#efull').href = u.toString();
+  resize();
+}
+
+// ---------------------------------------------------------------- boot
+async function boot() {
+  resize(); loop();
+  const files = await (await fetch('/api/files')).json();
+  if (!S.file) S.file = files.default || '';
+  const fs = $('#files'); fs.innerHTML = '';
+  for (const f of files.files) { const o = document.createElement('option'); o.value = f; o.textContent = f.split('/').pop(); o.title = f; fs.appendChild(o); }
+  if (S.file && !files.files.includes(S.file)) { const o = document.createElement('option'); o.value = S.file; o.textContent = S.file.split('/').pop(); fs.appendChild(o); }
+  fs.value = S.file;
+  M = await apiJson('meta');
+  const d = M.bbox; bboxDiag = Math.hypot(d[1][0] - d[0][0], d[1][1] - d[0][1], d[1][2] - d[0][2]) || 1;
+  NODES = (await apiBin('nodes')).xyz;
+  buildUI(); wire();
+  if (S.embed) setupEmbed();
+  GLOB = await apiJson('globals').catch(() => null);
+  const n = M.times.length;
+  const step0 = S.step === 'last' ? n - 1 : Math.max(0, Math.min(n - 1, num(S.step, n - 1)));
+  $('#step').value = step0; $('#stepn').value = step0;
+  if (S.warp && S.wscaleAuto) await resolveWscale();
+  await loadSurface();
+  fit();
+  if (S.cam) applyCam(S.cam);
+  await setStep(step0);
+  status(`${M.file.split('/').pop()}: ${M.nnodes} nodes, ${M.nelem} elems, ${n} steps`);
+  if (q0.get('probe')) {
+    // ?probe=<node>[,<elem>] opens the probe panel on that node (and element).
+    const [pn, pe] = q0.get('probe').split(',').map(x => x === '' || x === undefined ? null : +x);
+    await showProbe(pn, pe).catch(e => status(e.message, true));
+  }
+  if (q0.get('snap')) {
+    // Automation hook: ?snap=<name> saves a snapshot once the first frame is drawn.
+    const nm = q0.get('snap');
+    $('#snapname').value = nm === '1' ? defaultSnapName() : nm;
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await snapshot();
+    document.body.dataset.snapped = '1';
+  }
+}
+boot().catch(e => { console.error(e); status(e.message, true); });
+</script>
+</body>
+</html>
