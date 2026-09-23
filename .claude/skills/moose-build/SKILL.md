@@ -146,7 +146,9 @@ commit message; then "run `/moose-ship` when satisfied". Write the same report t
 `<meta-root>/.claude/cache/moose-build-<run_label>.json` as
 `{"runId": "<run_label>", "status": "<terminal status>", "report": "<text>"}`; the session-context hook
 shows the newest record after a compaction. The run is interruptible at any point: the loop's SendMessages
-and the status fields in the blueprint show where it is.
+and the status fields in the blueprint show where it is. Then run `~/projects/moose_stack/factory/factory board`
+(absolute path; no `factory/` exists in this worktree) so the card moves to its new lane, and say which lane in one
+line; a card left in the old lane is the first thing asked about after a build.
 
 Then write the handoff, `<meta-root>/specs/handoff.md`, seeding it from
 `<meta-root>/.claude/skills/handoff/references/handoff-template.md` when it is absent: rewrite

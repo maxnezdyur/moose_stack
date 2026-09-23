@@ -72,6 +72,8 @@ Children of a requirement-grouping parent carry `detail` and no `requirement`, `
 - `capabilities = '<expr>'` gates on build capabilities (`'petsc>=3.18 & vtk'`, `'method=opt'`). The legacy `petsc_version`, `method`, `mumps`, and `slepc_version` params are not used in new tests.
 - `allow_test_objects = true` is required for test-only objects on module, blackbear, and isopod binaries.
 - `recover = true` is the default. Set `recover = false` for steady, `--mesh-only`, `--check-input`, custom-postprocessor, and multiapp-move tests. `restep = false` opts out of restep. `--recover` and `--test-restep` are incompatible, so the first leg of a manual checkpoint chain sets both to false.
+- An eigenvector's sign is arbitrary, so a mode shape cannot be diffed as written: diff the eigenvalues with `CSVDiff` (what the `eigen_problem` specs do), and when a mode shape must be diffed pass `exodiff_opts = '-eigen_relative'`, which compares absolute values.
+- A tolerance loosened because CIVET's machines drift from a local run (`rel_err`, `abs_zero`) is the loosest value that still fails the mutation, usually 1e-7 or 1e-8 rather than 1e-10, and gets no comment: drift is not a non-obvious tolerance.
 - `RunApp`-derived Testers also take `expect_out`, `absent_out`, `match_literal`, `errors`, `allow_warnings`, `allow_unused`, `allow_deprecated`. `FileTester`-derived Testers (Exodiff, CSVDiff, CheckFiles, ImageDiff, AnalyzeJacobian) take `gold_dir` (default `gold`), `abs_zero` (1e-10), `rel_err` (5.5e-6).
 
 ## Tester catalog

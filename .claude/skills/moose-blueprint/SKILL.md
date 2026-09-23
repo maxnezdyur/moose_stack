@@ -27,7 +27,9 @@ also `<meta-root>` for every script path here.
 When `<worktree-root>/specs/blueprint.md` exists, ask with `AskUserQuestion`: Resume (keep
 it, grill only the sections that are empty or placeholders), Restart (overwrite at the write
 step), or Cancel. A blueprint whose headings are missing or whose fenced JSON does not parse
-is restarted with a warning.
+is restarted with a warning. When the resumed blueprint carries unticked `## Needs clarification`
+boxes that each record a chosen answer (an unattended run), list them and ask once whether to
+accept every recorded answer before grilling any of them one by one; that is the usual outcome.
 
 ## Grill
 
@@ -40,7 +42,10 @@ class, for example); otherwise carry the plan forward and grill the remaining ga
 
 Ask once during the grill whether this feature needs a showcase: a figure a human can look at to
 see it work. Most do, and the question is cheap - "which example should we build, and which
-picture proves the claim?" A yes writes the optional `## Showcase` section (the `Example:` input
+picture proves the claim?" Propose two figure kinds up front, because they are asked for afterwards
+otherwise: a comparison against the method the feature replaces (iteration counts, wall time,
+condition number, or error against the analytic solution under refinement, old and new side by
+side), and a second example in a different setting. A yes writes the optional `## Showcase` section (the `Example:` input
 and one bullet per figure, `<file>: <what it shows and which claim it proves>`) and one
 `showcase` unit with agent `moose-figure`, whose `files` list those gallery outputs and whose
 `deps` are the implement units the figures show. A no omits the heading and the unit; do not
@@ -109,4 +114,6 @@ Tell the user: "Blueprint written to `<worktree-root>/specs/blueprint.md`; open
 on save), then run `/moose-build`." Add that `/moose-build` is gated on the `blueprint_approved` gate,
 which only the user grants: set the frontmatter `status: approved`, then tick `blueprint_approved` in
 `~/projects/moose-factory/Features/<feature>.md` or run
-`~/projects/moose_stack/factory/factory grant <feature> blueprint_approved`.
+`~/projects/moose_stack/factory/factory grant <feature> blueprint_approved`. Then run
+`~/projects/moose_stack/factory/factory board` (absolute path) so the blueprint shows on the feature's
+card; it is not in the vault until the board runs.

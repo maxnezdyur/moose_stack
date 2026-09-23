@@ -117,7 +117,8 @@ confirmed correct, or on `FAIL` with reason `MISSING GOLD FILE` for a newly auth
    (no `_out`). A multiapp spec lists every level; copy each one. Two inputs that share one output
    share one gold through a symlink in `gold/`.
 3. Re-run the same command; the test must print `OK`.
-4. `git add <spec_dir>/gold/` so the gold lands in the staged diff. Leave the commit to the user and
+4. `git add <spec_dir>/gold/` so the gold lands in the staged diff. A `.git/index.lock` left by a killed
+   session, with no git process alive, blocks this: remove it and retry. Leave the commit to the user and
    suggest `Regenerate <area>/<feature> gold for <change>` as its message.
 
 `RunException` and `RunApp` tests have no gold; their fix is `expect_err`, `expect_out`, or
