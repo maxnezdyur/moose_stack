@@ -138,7 +138,7 @@ to the blueprint's `## Amendments`: the review label, how many were applied, how
 
 Files created or edited per unit; the exact runner commands with final counts; gold files with observed
 values; each gate's result and what repair changed; the docs result (smoke line and log path, or "docs
-skipped (--core)"); one `SHOWCASE:` line naming each gallery file with its caption, or "no showcase in the
+skipped (--core)"); one `SHOWCASE:` line naming each gallery file with its `gallery.md` section heading, or "no showcase in the
 blueprint"; the review summary and findings file, the applied count, and every held finding verbatim with why it is held, so the user decides those before `/moose-ship` and nothing else waits; any CONCERNS carried; a diff attribution audit that
 groups the diff into change classes and traces each to the blueprint's purpose (`moose/AGENTS.md` section 3,
 Surgical Changes), flagging unattributable hunks to drop, split out, or justify in the PR body; a suggested

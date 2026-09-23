@@ -6,7 +6,8 @@ the status fields in its JSON block. `specs/blueprint.html` is a generated view:
 `render-blueprint.sh` hook runs pandoc with `blueprint.template.html` and `workplan.html` from
 this directory whenever `blueprint.md` is written (MathML for equations, so the page is
 self-contained and renders in Safari). Never edit the HTML. `example-blueprint.md` here is a
-complete, real blueprint; write yours in the same shape.
+complete, real blueprint for a large framework feature; write yours in the same shape, at the length
+your feature needs (a one-class feature is a fraction of it).
 
 ## Frontmatter
 

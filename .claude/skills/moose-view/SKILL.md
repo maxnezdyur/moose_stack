@@ -1,6 +1,6 @@
 ---
 name: moose-view
-description: Shows a MOOSE Exodus result in the browser through scripts/exodus-view.py as one embedded figure (mesh, blocks, a field, the deformed shape, a cut, a boundary), a PNG in chat, or an HTML report with prose and figures in specs/gallery/. Use for "show me the mesh", "let me see <var>", "view the results of <input.i>", "what does the deformed shape look like", "send me a picture of", "write up the results", "make a report", or /moose-view <file.e|input.i> [look|snap|report] [what to show].
+description: Shows a MOOSE Exodus result in the browser through scripts/exodus-view.py as one embedded figure (mesh, blocks, a field, the deformed shape, a cut, a boundary), a PNG in chat, or an HTML report with prose and figures in specs/gallery/. Use when the user wants to see a mesh, a field, the deformed shape, or the results of an input, wants a picture in chat, or wants the results written up as a report; or /moose-view <file.e|input.i> [look|snap|report] [what to show].
 argument-hint: "<file.e | input.i> [look | snap | report] [what to show]"
 effort: high
 ---

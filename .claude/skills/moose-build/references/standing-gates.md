@@ -5,8 +5,7 @@ carries a `gates` object with these ids and criteria, and the rendered page draw
 cannot add, remove, reorder, or alter one. Gate A
 runs inside the loop; Gate B runs after `GOAL_MET`. Each row's criterion is its entry in `/moose-build`'s
 goal ledger, and a gate passes when its rows are green. Row ids are stable and `/moose-build` addresses Gate
-B rows by number; B1 (the consistency sweep) was retired because the code and dry lenses of the clean-context
-review cover it, and its id is not reused. The commands live in `scripts/gates.sh` beside this file: a new
+B rows by number; B1 is unused, because the clean-context review's code and dry lenses cover that check. The commands live in `scripts/gates.sh` beside this file: a new
 CIVET rejection becomes a gate there plus a row here, once, and every later run inherits it.
 
 | Gate | Criterion | Check |
@@ -20,8 +19,8 @@ CIVET rejection becomes a gate there plus a row here, once, and every later run 
 
 Two gotchas.
 
-`.md` and `.bib` are exempt from the ASCII rule because CIVET's precheck covers code, not documentation:
-idaholab/moose scoped the rule to code in `c12859fc3f` (May 2026, refs #32497). An em dash or Nedelec with
+`.md` and `.bib` are exempt from the ASCII rule because CIVET's precheck covers code, not documentation.
+An em dash or Nedelec with
 its accent in a `.md` or `.bib` is correct, not a defect, and a name's diacritics there are never "fixed".
 In code a diacritic is a hit like any other and is transliterated; unicode math is spelled out or written
 as LaTeX in a comment.

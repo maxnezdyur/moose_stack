@@ -1,6 +1,6 @@
 ---
 name: moose-docs
-description: Serves, stops, or smoke-tests the MooseDocs site for moose, blackbear, isopod, or one moose module through scripts/docs.sh and relays the URL, pid, log path, and PASS/FAIL line. Use for "preview the docs", "serve docs", "start/stop/restart the docs server", "open the doc preview", "smoke-test the docs", "does the website build", "did my doc edit break the site", "check the docs before push".
+description: Serves, stops, or smoke-tests the MooseDocs site for moose, blackbear, isopod, or one moose module through scripts/docs.sh and relays the URL, pid, log path, and PASS/FAIL line. Use when the user wants to preview or serve the docs site, stop or restart its server, or check whether the site (or their edited page) still builds.
 argument-hint: "<moose|blackbear|isopod|moose/modules/<m>> serve|stop|smoke [--diff devel]"
 allowed-tools: Bash(bash *)
 effort: low

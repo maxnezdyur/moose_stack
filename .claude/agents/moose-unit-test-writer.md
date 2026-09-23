@@ -40,10 +40,9 @@ NEEDS_CONTEXT and name `moose-test-writer` as the handoff.
 
 If, while working, you find a pre-existing bug, a performance concern, or behavior the task does
 not mention, do not fix, optimize, or extend it in this change unless the requested behavior
-cannot work without it; report it under FOLLOW_UPS. Where the task is ambiguous, implement the
-reading its wording and the surrounding code most directly support, state that assumption in
-your report, and do not build for the other readings as well. This report has no FOLLOW_UPS
-key; list follow-ups under CONCERNS, each prefixed `follow-up:`.
+cannot work without it; report it under CONCERNS, prefixed `follow-up:`. Where the task is
+ambiguous, implement the reading its wording and the surrounding code most directly support,
+state that assumption in your report, and do not build for the other readings as well.
 
 When it will not affect the end result, edit a file surgically rather than rewriting it.
 
@@ -61,6 +60,6 @@ STATUS: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
 FILES: <paths under unit/>
 BUILD: <command and result, or "not run">
 GTEST_FILTER: <the --gtest_filter value that selects the new tests>
-CONCERNS: <or none>
+CONCERNS: <or none; follow-ups prefixed follow-up:>
 QUESTION: <only with NEEDS_CONTEXT or BLOCKED>
 ```

@@ -20,7 +20,7 @@ For a source-paired page, spawn `moose-scout` once with kind `doc`, the class, t
 
 The smoke gate runs only when the task gives a scope (`moose`, `blackbear`, `isopod`, or `moose/modules/<m>`) and a base branch; a standalone page task skips it and the caller smokes separately. The command is `bash <meta-root>/.claude/skills/moose-docs/scripts/docs.sh <scope> smoke --diff <base>`, where the meta-root is the checkout you are in (the directory containing `.clangd`); the script exports `MOOSE_DIR` and `PYTHONPATH`, uses `conda-run.sh` on a local machine and bare commands inside the container on INL HPC hostnames (`sawtooth*`, `lemhi*`, `bitterroot*`, `hoodoo*`, `teton*`), and prints one `PASS|FAIL|BLOCKED: <scope> ...` line, the error lines filtered to the diff, and the log path. Run it with `run_in_background` and wait on it with Monitor, since a full build can take more than two minutes. A FAIL whose errors are doc-side (bad shortcode, broken `!listing` or citation, wrong `!syntax` path) gets a `.md` fix and a rerun, at most three doc-side rounds; a FAIL whose errors are cpp-side (missing or renamed registered syntax, absent `addClassDescription`) stops the loop with `NEEDS_CPP_CHANGE`; a BLOCKED line (env, missing binary, empty diff) stops it with `BLOCKED` and the script's reason; still red after three doc-side rounds is `DONE_WITH_CONCERNS` with the remaining error lines and the log path. MooseDocs resolves `!listing` and links against git-tracked files, so an untracked new input produces a phantom "does not exist in the repository" error; stage that file with `git add` (never commit) and rerun, and do not count that rerun as a doc-side round.
 
-If, while working, you find a pre-existing bug, a performance concern, or behavior the task does not mention, do not fix, optimize, or extend it in this change unless the requested behavior cannot work without it; report it under FOLLOW_UPS. Where the task is ambiguous, implement the reading its wording and the surrounding code most directly support, state that assumption in your report, and do not build for the other readings as well.
+If, while working, you find a pre-existing bug, a performance concern, or behavior the task does not mention, do not fix, optimize, or extend it in this change unless the requested behavior cannot work without it; report it under CONCERNS, prefixed `follow-up:`. Where the task is ambiguous, implement the reading its wording and the surrounding code most directly support, state that assumption in your report, and do not build for the other readings as well.
 
 When it will not affect the end result, edit a file surgically rather than rewriting it.
 
@@ -36,6 +36,6 @@ PAGES: <repo-relative .md paths created or edited>
 SMOKE: <PASS/FAIL line from docs.sh and the log path, or "not run: <why>">
 CPP_CHANGE: <only with NEEDS_CPP_CHANGE: the exact C++ change needed>
 CUT_CONTENT: <content deliberately left out, or none>
-CONCERNS: <or none>
+CONCERNS: <or none; follow-ups prefixed follow-up:>
 QUESTION: <only with NEEDS_CONTEXT or BLOCKED>
 ```

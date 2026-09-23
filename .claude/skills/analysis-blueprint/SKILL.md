@@ -11,7 +11,8 @@ Goal: a `study.yaml` that `/analysis-run` can fire unattended. The spec is the o
 review in a fire-and-forget system; an underspecified study burns HPC time with nobody watching.
 This skill ends at an approved spec; `/analysis-run` is the only thing that fires.
 
-The toolkit is `${CLAUDE_PROJECT_DIR}/analysis/analysis` (run from the meta-repo). The schema and
+The toolkit is `${CLAUDE_PROJECT_DIR:-$PWD}/analysis/analysis` (run from the meta-repo root or the
+worktree root; the Bash tool does not export `CLAUDE_PROJECT_DIR`, so `$PWD` is the fallback). The schema and
 the per-field judgment notes live in `analysis/README.md` (the `study.yaml schema` section); read
 that section before grilling. A study runs an existing `.i` with command-line overrides; this skill
 edits no C++ and no input file.
@@ -28,9 +29,9 @@ the user chose.
 ## Scaffold, write, validate
 
 ```
-${CLAUDE_PROJECT_DIR}/analysis/analysis new <id> --kind <sweep|convergence|optimization>
-${CLAUDE_PROJECT_DIR}/analysis/analysis validate <id>
-${CLAUDE_PROJECT_DIR}/analysis/analysis estimate <id>
+"${CLAUDE_PROJECT_DIR:-$PWD}/analysis/analysis" new <id> --kind <sweep|convergence|optimization>
+"${CLAUDE_PROJECT_DIR:-$PWD}/analysis/analysis" validate <id>
+"${CLAUDE_PROJECT_DIR:-$PWD}/analysis/analysis" estimate <id>
 ```
 
 Copy the baseline `.i` and every file it reads into `analysis/studies/<id>/inputs/`, then write

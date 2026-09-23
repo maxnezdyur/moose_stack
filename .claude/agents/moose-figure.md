@@ -121,8 +121,8 @@ know without warning, so a misspelled option is a silent no-op - check a name ag
 `getOptions()` in the class you are calling before you trust it. `write` takes `.png`, `.ps`,
 `.tiff`, `.bmp`, or `.jpg` by extension.
 
-**2. pvpython.** When chigger cannot import (as of this writing the pinned env carries no `vtk`,
-so it cannot), use ParaView's python if it is installed:
+**2. pvpython.** When chigger cannot import (the pinned conda env ships no `vtk`, so expect the
+probe to fail there), use ParaView's python if it is installed:
 `/Applications/ParaView-*.app/Contents/bin/pvpython` on a Mac, `pvpython` on PATH otherwise.
 This runs outside conda, which is fine: it only reads the exodus file and writes a PNG.
 
@@ -266,8 +266,7 @@ of the input, test, or gold file the picture came from plus the renderer you use
 in the prose is a number you computed or read this session, never one you carried over.
 
 Rewrite the section for a figure you re-rendered rather than adding a second one, and never
-delete a section for a file you did not touch. When the folder still holds an older
-`captions.md`, fold its lines into the page and delete it; the two files must not both exist.
+delete a section for a file you did not touch.
 
 ## Filenames
 

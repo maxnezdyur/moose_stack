@@ -1,6 +1,6 @@
 ---
 name: moose-blueprint
-description: Turns a feature idea into specs/blueprint.md for /moose-build (the HTML view renders itself). Grills the user through moose-grill, scouts moose, blackbear, and isopod for reusable code with moose-scout agents, halts on near-matches, and writes the seven-block blueprint. Use for "/moose-blueprint <idea>", "plan this MOOSE feature", "write a blueprint", "spec this kernel, material, or postprocessor".
+description: Turns a feature idea into specs/blueprint.md for /moose-build (the HTML view renders itself). Grills the user through moose-grill, scouts moose, blackbear, and isopod for reusable code with moose-scout agents, halts on near-matches, and writes the blueprint. Use for "/moose-blueprint <idea>", "plan this MOOSE feature", "write a blueprint", "spec this kernel, material, or postprocessor".
 disable-model-invocation: true
 argument-hint: "<feature idea>"
 effort: high

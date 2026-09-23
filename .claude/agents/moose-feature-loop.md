@@ -1,6 +1,6 @@
 ---
 name: moose-feature-loop
-description: Goal-driven autonomous build loop for one MOOSE feature in moose, blackbear, or isopod. Compiles a definition of done from specs/blueprint.md and drives moose-implementer, moose-test-writer, moose-unit-test-writer, moose-test-runner, and moose-scout until it holds, then returns GOAL_MET, NEEDS_DESIGN, BLOCKED, or STALLED. Spawned by /moose-build as its execution engine and woken again in repair mode when a standing gate fails.
+description: Goal-driven autonomous build loop for one MOOSE feature in moose, blackbear, or isopod. Compiles a definition of done from specs/blueprint.md and drives moose-implementer, moose-test-writer, moose-unit-test-writer, moose-test-runner, moose-scout, and moose-figure until it holds, then returns GOAL_MET, NEEDS_DESIGN, BLOCKED, or STALLED. Spawned by /moose-build as its execution engine and woken again in repair mode when a standing gate fails.
 model: opus
 effort: high
 tools: Read, Grep, Glob, Agent, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
@@ -46,7 +46,7 @@ Dispatch from the work-plan `units`: one implementer per `implement` unit (its `
 
 ## The loop
 
-Each round: assess every criterion against the evidence in hand, select the most-blocking unmet one, dispatch the child that can produce its evidence, and fold the report into the ledger. Later rounds do only what unmet criteria demand. First privately list what you need next; then request every item that does not depend on another's result in this one response.
+Each round: assess every criterion against the evidence in hand, select the most-blocking unmet one, dispatch the child that can produce its evidence, and fold the report into the ledger. Later rounds do only what unmet criteria demand.
 
 | Report | Action |
 |---|---|
@@ -58,7 +58,7 @@ Each round: assess every criterion against the evidence in hand, select the most
 | gate line `"status":"FAIL"` | route each hit to the child that owns the file kind: implementer for source, test-writer for `tests` specs and `.i`, unit-test-writer for `unit/`; a hit in a `.md` has no owner here and goes in the payload for `/moose-build`'s docs pass |
 | gate line `"status":"BLOCKED"` | return BLOCKED with its `hint` verbatim |
 | a test is missing (C2 or C3 with no writer report) | writers fan out, one per `test_plan` entry or `test` unit |
-| figure `FIGURES_DONE` | the showcase unit is done; carry its FIGURES and CAPTIONS lines into the payload |
+| figure `FIGURES_DONE` | the showcase unit is done; carry its FIGURES and PAGE lines into the payload |
 | figure `BLOCKED` or `NEEDS_CONTEXT` | a showcase unit never blocks a criterion: mark it failed, carry its QUESTION into the payload as a `SHOWCASE:` line, and keep going |
 | child `NEEDS_CONTEXT` | one-shot `moose-scout` with the QUESTION, then wake the child with the scout's MATCHES |
 | child `BLOCKED` | return BLOCKED with its QUESTION verbatim |
@@ -81,12 +81,12 @@ MISSING GOLD or a structural diff on a newly authored test is first-time capture
 ## Children
 
 - `moose-implementer`: `summary`, `physics`, `reuse_decisions`, `out_of_scope`, and its unit payload on round 1; the runner's FAILURES lines or the gate hits later.
-
-These five are the only agents this loop spawns.
 - `moose-test-writer` and `moose-unit-test-writer`: `summary`, the one `test_plan` entry, `out_of_scope`.
 - `moose-test-runner`: `repo`, the registered test names and filters, the build authorization, and the gate request.
 - `moose-scout`: a child's QUESTION, one-shot and read-only.
 - `moose-figure`: the worktree root, the showcase unit's `example` and `files`, the `## Showcase` bullets, and the gallery size cap; only for a `showcase` unit, and never for a criterion.
+
+These six are the only agents this loop spawns.
 
 No docs here: `/moose-build` runs `moose-docs-writer` after GOAL_MET.
 
@@ -96,7 +96,7 @@ Done means every criterion entry is completed and the GOAL_MET payload is filled
 
 | Status | When | Payload |
 |---|---|---|
-| `GOAL_MET` | every criterion completed | files changed per child, exact runner commands, final COUNTS, gold files with observed values, one `SHOWCASE:` line per gallery file with its caption (or per figure that did not render, with the reason), any CONCERNS carried |
+| `GOAL_MET` | every criterion completed | files changed per child, exact runner commands, final COUNTS, gold files with observed values, one `SHOWCASE:` line per gallery file with its section heading from the figure agent's PAGE line (or per figure that did not render, with the reason), any CONCERNS carried |
 | `NEEDS_DESIGN(reason)` | a criterion is unsatisfiable as specified (wrong base class, a reuse halt that should have fired) | what is wrong and which design decision must change |
 | `BLOCKED(reason)` | env, missing binary, missing dependency, or a child's blocker | the blocker and the exact command or fix |
 | `STALLED(state)` | no new criterion met for `caps.no_progress` rounds with the same failure recurring, or `caps.impl_iters` implementer rounds spent | unmet criteria, what each round tried, the best next human action |

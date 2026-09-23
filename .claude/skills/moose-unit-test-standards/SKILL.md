@@ -86,8 +86,8 @@ public:
 The base constructor takes the registered app name (`"MooseUnitApp"`, `"HeatTransferApp"`,
 `"FluidPropertiesApp"`, ...); a typo fails at runtime, not at compile time.
 
-`TYPED_TEST` is not used in the tree. AD and non-AD variants are separate overloads of the same
-test body (`Real` and `ADReal`).
+`TYPED_TEST` is rare in the tree (one use, `moose/modules/contact/unit/src/FrictionProjectionTest.C`).
+AD and non-AD variants are separate overloads of the same test body (`Real` and `ADReal`).
 
 ## Constructing a MOOSE object
 
