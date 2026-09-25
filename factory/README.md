@@ -851,9 +851,11 @@ rm -rf "$(factory config --get meta_repo)"/factory/state
 # 3. Keep the data. Gates, timeline and artifacts are inputs no run can recompute.
 cd ~/projects/moose-factory && git bundle create ~/moose-factory-backup.bundle --all
 
-# 4. Drop the generated view only.
-rm -f ~/projects/moose-factory/Home.md ~/projects/moose-factory/Board.html \
-      ~/projects/moose-factory/Features/*.md ~/projects/moose-factory/Campaigns/*.md
+# 4. Drop the generated view only. find, not a glob: zsh stops a command whose
+#    glob matches no file, so an empty Campaigns/ would abort the rm.
+rm -f ~/projects/moose-factory/Home.md ~/projects/moose-factory/Board.html
+find ~/projects/moose-factory/Features ~/projects/moose-factory/Campaigns \
+     -name '*.md' -delete
 
 # 5. Drop the vault, once the bundle is somewhere safe.
 #    Obsidian prunes the registration at its next launch.
