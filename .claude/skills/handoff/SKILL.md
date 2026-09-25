@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: 'Writes or updates specs/handoff.md, the cross-session memory of one feature worktree: State, Next, Do not repeat, Decisions, Gotchas, Map, Sessions. Use for "/handoff [<note>]", "write the handoff", "save this for the next session", "hand this off". Manual invoke only.'
+description: 'Writes or updates the cross-session memory of one feature worktree (specs/handoff.md) or one campaign (campaigns/<id>/handoff.md): State, Next, Do not repeat, Decisions, Gotchas, Map, Sessions. Use for "/handoff [<note>]", "write the handoff", "save this for the next session", "hand this off". Manual invoke only.'
 disable-model-invocation: true
 argument-hint: "[<note>]"
 effort: low
@@ -8,7 +8,8 @@ effort: low
 
 # /handoff
 
-Carries this session into the next one through one file, `<worktree-root>/specs/handoff.md`. It sits
+Carries this session into the next one through one file, `<worktree-root>/specs/handoff.md`, or
+`campaigns/<id>/handoff.md` inside a campaign (below). It sits
 beside `specs/blueprint.md` (the plan) and points at the newest build record (the result), and it
 duplicates neither: it says where the work stands, what to do next, and what not to try again. This
 skill writes that one file and nothing else. It edits no code, runs no build, no tests and no
@@ -19,13 +20,32 @@ write the handoff from this conversation alone.
 
 ## Preconditions
 
-This skill runs only inside a `/new-feature` worktree: walk up from the cwd to the directory whose
-`.git` is a file (a worktree, not a clone) beside `moose/`, `blackbear/`, and `isopod/`. Outside one,
-refuse with "No feature worktree here; /handoff only runs inside a /new-feature worktree." That
-directory is `<worktree-root>`, it owns its own `.claude/`, and `<feature>` is its basename.
+This skill runs inside a `/new-feature` worktree or inside a campaign. Check the campaign first:
+walk up from the cwd to a directory whose parent is named `campaigns` and that holds
+`campaign.md`. Otherwise walk up to the directory whose `.git` is a file (a worktree, not a clone)
+beside `moose/`, `blackbear/`, and `isopod/`. Outside both, refuse with "No feature worktree or
+campaign here; /handoff only runs inside a /new-feature worktree or a campaigns/<id>/ directory."
+
+In a worktree, that directory is `<worktree-root>`, it owns its own `.claude/`, and `<feature>` is
+its basename. The file is `<worktree-root>/specs/handoff.md`.
+
+In a campaign, the directory is `<dir>` and `<id>` is its basename. The file is
+`<dir>/handoff.md`, and these differences apply:
+
+- Seed from the same template, resolved under `<meta_repo>/.claude/skills/handoff/references/`
+  (`<meta_repo>` is the `meta_repo` key of `~/.config/moose-factory/config.toml`, fallback
+  `$HOME/projects/moose_stack`). Substitute `campaign:` for the `feature:` key and `<id>` for
+  every `<feature>`, and replace the paragraph under `# Handoff:` with: "One page that carries
+  this campaign from one session to the next. The question and the queue are in `campaign.md`,
+  the record is `LEDGER.md` and `FINDINGS.md`; this file duplicates neither."
+- `## Map` lists the runs (first and last `runs/` directory), the measure scripts, and every
+  figure in `gallery/` with its `gallery.md` section heading.
+- The State paragraph's command is `campaign status <id>`.
+- Never edit `campaign.md`, `LEDGER.md`, `FINDINGS.md`, or a run directory: `/campaign` owns them.
 
 ## Write
 
+The steps below name the worktree file; in a campaign read `<dir>/handoff.md` and seed as above.
 When `<worktree-root>/specs/handoff.md` is absent, seed it from
 `<worktree-root>/.claude/skills/handoff/references/handoff-template.md` (fall back to
 `~/projects/moose_stack/.claude/skills/handoff/references/handoff-template.md` in a worktree whose
@@ -54,7 +74,7 @@ them by name.
 
 Three lines plus the diff. Say which sections were rewritten, how many lines were appended and to
 which sections, and the new `sessions` count. Then show the change: `git -C <worktree-root> diff --
-specs/handoff.md` when the file is tracked, otherwise print each rewritten heading followed by every
+specs/handoff.md` for a feature, or `git -C <dir> diff -- handoff.md` for a campaign, when the file is tracked, otherwise print each rewritten heading followed by every
 appended line verbatim. Close with the one-line reminder that the next session reads State and Next
 automatically, from the SessionStart hook and from
-`~/projects/moose-factory/Features/<feature>.md`.
+`~/projects/moose-factory/Features/<feature>.md` (in a campaign, from the hook's campaign block).

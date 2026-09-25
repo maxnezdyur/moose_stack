@@ -596,6 +596,8 @@ def run_teardown(rest: List[str], ctx: Any) -> int:
         _err("usage: factory teardown <feature> [--yes] [--force]")
         return REFUSED
     config.validate_id(feature)
+    if _is_campaign(ctx, feature, "teardown"):
+        return REFUSED
     card = ctx.card(feature)
     if card is None:
         _err(
@@ -698,6 +700,8 @@ def run_archive(rest: List[str], ctx: Any) -> int:
         _err("usage: factory archive <feature> [--force] [--dry-run]")
         return REFUSED
     config.validate_id(feature)
+    if _is_campaign(ctx, feature, "archive"):
+        return REFUSED
     note = cfg.note_path(feature)
     if not note.is_file():
         _err("no note at %s" % (note,))
@@ -807,3 +811,13 @@ HELP = {
     "teardown": "print the teardown recipe; --yes runs it in a terminal",
     "archive": "git mv one feature note into Archive/",
 }
+
+
+def _is_campaign(ctx: Any, feature: str, verb: str) -> bool:
+    """A campaign id is refused here with one sentence: this verb acts on a
+    feature worktree, and a campaign lives in its project repository."""
+    try:
+        from . import ext_campaigns
+    except Exception:
+        return False
+    return ext_campaigns.refuse(ctx, feature, verb)

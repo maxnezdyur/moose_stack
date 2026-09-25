@@ -191,6 +191,8 @@ DEFAULT_META_DIRNAME = "moose_stack"
 #   int         a whole number
 #   ints        a list of whole numbers (nag_days)
 #   globs       a list of hostname globs
+#   paths       a list of filesystem paths, "~" expanded: colon separated in
+#               the environment, a TOML array in the file (campaign_roots)
 KEYS: Tuple[Tuple[str, str, str], ...] = (
     ("vault", "MOOSE_FACTORY_VAULT", "path"),
     ("worktrees_root", "FACTORY_WORKTREE_ROOT", "path"),
@@ -199,12 +201,9 @@ KEYS: Tuple[Tuple[str, str, str], ...] = (
     ("claude_bin", "FACTORY_CLAUDE_BIN", "path"),
     ("claude_home", "FACTORY_CLAUDE_HOME", "path"),
     ("obsidian_vault", "MOOSE_FACTORY_OBSIDIAN_VAULT", "str"),
-    # The analysis studies root, not the vault's Studies/ folder: the study
-    # sources the `studies` verb reads. It is spelled `studies_dir` because its
-    # environment variable is $FACTORY_STUDIES_DIR; on Config it is
-    # `analysis_studies`, so the vault-side `Config.studies_dir` property keeps
-    # its name.
-    ("studies_dir", "FACTORY_STUDIES_DIR", "path"),
+    # The project repositories that hold campaigns: each root carries
+    # `campaigns/<id>/campaign.md`. Read by tool/ext_campaigns.py only.
+    ("campaign_roots", "FACTORY_CAMPAIGN_ROOTS", "paths"),
     # Extra PATH prefixes for the launchd tick, colon separated. launchd hands a
     # job a minimal PATH, and a machine whose gh or git lives outside the usual
     # prefixes needs one place to say so.
@@ -236,6 +235,11 @@ KEYS: Tuple[Tuple[str, str, str], ...] = (
 KEY_NAMES: Tuple[str, ...] = tuple(k for k, _e, _t in KEYS)
 KEY_KINDS: Dict[str, str] = {k: t for k, _e, t in KEYS}
 KEY_ENV: Dict[str, str] = {k: e for k, e, _t in KEYS}
+
+# Top-level tables in config.toml that belong to another tool. They are never a
+# setting, never an unknown key and never a doctor complaint. `campaign` holds
+# the campaign CLI's own table (scratch, freeze_max_kb, clusters).
+RESERVED_TABLES: Dict[str, str] = {"campaign": "table, read by campaign/campaign"}
 
 
 def home_dir() -> Path:
@@ -289,7 +293,7 @@ def _defaults() -> Tuple[Dict[str, Any], Dict[str, str]]:
         "claude_bin": home / ".local" / "bin" / "claude",
         "claude_home": home / ".claude",
         "obsidian_vault": "",                # filled from the vault's basename
-        "studies_dir": meta / "analysis" / "studies",
+        "campaign_roots": (),
         "path_extra": "",
         "notifier": Path(DEFAULT_NOTIFIER),
         "refuse_hosts": DEFAULT_REFUSE_HOSTS,
@@ -393,6 +397,20 @@ def coerce(key: str, kind: str, raw: Any, origin: str) -> Any:
         return tuple(_as_int(key, origin, item) for item in _as_list(key, origin, raw))
     if kind == "globs":
         return tuple(_as_list(key, origin, raw))
+    if kind == "paths":
+        if isinstance(raw, str):
+            # The environment spelling: colon separated, like $PATH.
+            items = [p.strip() for p in raw.split(":") if p.strip()]
+        elif isinstance(raw, (list, tuple)):
+            items = []
+            for item in raw:
+                if not isinstance(item, str):
+                    raise _bad(key, origin, "a list of path strings", raw)
+                if item.strip():
+                    items.append(item.strip())
+        else:
+            raise _bad(key, origin, "a list of path strings", raw)
+        return tuple(Path(p).expanduser() for p in items)
     raise BadConfig("%s: unknown kind %r for %s" % (origin, kind, key))   # pragma: no cover
 
 
@@ -429,7 +447,9 @@ def resolve() -> Tuple[Dict[str, Any], Dict[str, str], Optional[Path], List[str]
         # obsidian:// link carries. Deriving it keeps one fact in one place.
         values["obsidian_vault"] = Path(values["vault"]).name
         sources["obsidian_vault"] = "derived from vault"
-    unknown = sorted(str(k) for k in data if k not in KEY_NAMES)
+    unknown = sorted(
+        str(k) for k in data if k not in KEY_NAMES and k not in RESERVED_TABLES
+    )
     return (values, sources, path, unknown)
 
 
@@ -591,9 +611,8 @@ class Config:
     claude_bin: Path = field(default_factory=lambda: home_dir() / ".local" / "bin" / "claude")
     notifier: Optional[Path] = field(default_factory=lambda: Path(DEFAULT_NOTIFIER))
     obsidian_vault: str = ""         # filled from the vault basename below
-    # The analysis studies root. None means "derive it from repo_root", which is
-    # what a Config built by hand in a test wants.
-    analysis_studies: Optional[Path] = None
+    # The project repositories that hold `campaigns/<id>/`. Empty means none.
+    campaign_roots: Tuple[Path, ...] = ()
     path_extra: str = ""             # extra PATH prefixes for the launchd tick
     refuse_hosts: Tuple[str, ...] = DEFAULT_REFUSE_HOSTS
     gh_limit: int = GH_LIMIT
@@ -613,8 +632,6 @@ class Config:
     def __post_init__(self) -> None:
         if not self.obsidian_vault:
             self.obsidian_vault = Path(self.vault).name
-        if self.analysis_studies is None:
-            self.analysis_studies = Path(self.repo_root) / "analysis" / "studies"
 
     # ---- derived vault paths ---------------------------------------------
 
@@ -623,8 +640,8 @@ class Config:
         return self.vault / "Features"
 
     @property
-    def studies_dir(self) -> Path:
-        return self.vault / "Studies"
+    def campaigns_dir(self) -> Path:
+        return self.vault / "Campaigns"
 
     @property
     def archive_dir(self) -> Path:
@@ -705,11 +722,7 @@ def load(offline: bool = False) -> Config:
         claude_bin=Path(values["claude_bin"]),
         notifier=values["notifier"],
         obsidian_vault=str(values["obsidian_vault"]),
-        # Only an explicit value is carried: left at the default it follows
-        # repo_root, which is what `<meta_repo>/analysis/studies` means.
-        analysis_studies=(
-            Path(values["studies_dir"]) if sources.get("studies_dir") != "default" else None
-        ),
+        campaign_roots=tuple(Path(p) for p in values["campaign_roots"]),
         path_extra=str(values["path_extra"]),
         refuse_hosts=tuple(values["refuse_hosts"]),
         max_concurrent_sessions=int(values["max_concurrent_sessions"]),
@@ -749,17 +762,23 @@ def require_vault(cfg: Config) -> None:
 # --------------------------------------------------------------------------
 
 
-def _printable(value: Any) -> str:
+def _printable(value: Any, kind: str = "") -> str:
     if value is None:
         return ""
     if isinstance(value, (list, tuple)):
-        return ", ".join(str(v) for v in value)
+        # A path list prints the way its environment variable is spelled, so
+        # `factory config --sh` round-trips into $FACTORY_CAMPAIGN_ROOTS.
+        sep = ":" if kind == "paths" else ", "
+        return sep.join(str(v) for v in value)
     return str(value)
 
 
 def as_dict(cfg: Config) -> Dict[str, Any]:
     """The resolved settings, JSON-ready, for ``factory config --json``."""
-    values = {key: _printable(getattr(cfg, _FIELD.get(key, key))) for key in KEY_NAMES}
+    values = {
+        key: _printable(getattr(cfg, _FIELD.get(key, key)), KEY_KINDS.get(key, ""))
+        for key in KEY_NAMES
+    }
     return {
         "config_file": str(cfg.config_file) if cfg.config_file else "",
         "config_path": str(config_path()),
@@ -774,13 +793,15 @@ def as_dict(cfg: Config) -> Dict[str, Any]:
 _FIELD: Dict[str, str] = {
     "meta_repo": "repo_root",
     "worktrees_root": "worktree_root",
-    "studies_dir": "analysis_studies",
 }
 
 
 def describe(cfg: Config) -> List[str]:
     """``key = value  (source)`` for every setting, aligned, plus a header."""
-    rows = [(key, _printable(getattr(cfg, _FIELD.get(key, key)))) for key in KEY_NAMES]
+    rows = [
+        (key, _printable(getattr(cfg, _FIELD.get(key, key)), KEY_KINDS.get(key, "")))
+        for key in KEY_NAMES
+    ]
     kw = max(len(k) for k, _v in rows)
     vw = min(60, max(len(v) for _k, v in rows))
     out = [
@@ -793,4 +814,12 @@ def describe(cfg: Config) -> List[str]:
         )
     for key in cfg.unknown_keys:
         out.append("  %-*s   ignored: not a setting" % (kw, key))
+    table, _path = ({}, None)
+    try:
+        table, _path = read_config_file()
+    except Exception:
+        pass
+    for key, what in sorted(RESERVED_TABLES.items()):
+        if key in table:
+            out.append("  %-*s   (%s)" % (kw, key, what))
     return out

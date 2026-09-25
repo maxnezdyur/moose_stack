@@ -237,6 +237,8 @@ def run_refresh(rest: List[str], ctx: Any) -> int:
         _err("usage: factory refresh-pipeline <feature> [--dry-run] [--confirm]")
         return REFUSED
     config.validate_id(feature)
+    if _is_campaign(ctx, feature, "refresh-pipeline"):
+        return REFUSED
     card = ctx.card(feature)
     if card is None:
         _err("no card %r. Known: %s" % (feature, ", ".join(sorted(c.id for c in ctx.cards))))
@@ -382,3 +384,13 @@ def doctor_checks(ctx: Any) -> List[Tuple[str, bool, str]]:
 VERBS = {"refresh-pipeline": run_refresh}
 
 HELP = {"refresh-pipeline": "diff and, on confirmation, copy the canonical .claude into a worktree"}
+
+
+def _is_campaign(ctx: Any, feature: str, verb: str) -> bool:
+    """A campaign id is refused here with one sentence: this verb acts on a
+    feature worktree, and a campaign lives in its project repository."""
+    try:
+        from . import ext_campaigns
+    except Exception:
+        return False
+    return ext_campaigns.refuse(ctx, feature, verb)

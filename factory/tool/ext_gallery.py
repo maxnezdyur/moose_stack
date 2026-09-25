@@ -635,8 +635,37 @@ def collect(ctx: Any) -> None:
             continue
         obs["gallery"] = rec
         table[feature] = rec
+    # Campaigns: `Gallery/<id>` links `<campaign dir>/gallery`, and the id is
+    # seen, so the sweep below keeps the link.
+    for cid, _cdir, gdir, grec in _campaign_targets(ctx):
+        if cid in table:
+            continue
+        try:
+            rec = dict(grec) if grec else scan(ctx, gdir, "worktree")
+            rec["refused"] = None
+            rec["link"] = str(link_path(ctx, cid))
+            rec["link_target"] = str(gdir) if gdir is not None else None
+            rec["link_status"] = maintain_link(ctx, cid, gdir)
+            seen.append(cid)
+        except Exception as exc:
+            ctx.log("gallery: campaign %s failed: %s" % (cid, exc))
+            continue
+        table[cid] = rec
     ctx.meta["gallery"] = table
     sweep(ctx, seen)
+
+
+def _campaign_targets(ctx: Any) -> List[Any]:
+    """``ext_campaigns.link_targets``, or nothing when that extension is absent."""
+    try:
+        from . import ext_campaigns
+    except Exception:
+        return []
+    try:
+        return list(ext_campaigns.link_targets(ctx))
+    except Exception as exc:
+        ctx.log("gallery: the campaign targets raised: %s" % (exc,))
+        return []
 
 
 def sweep(ctx: Any, seen: List[str]) -> List[str]:

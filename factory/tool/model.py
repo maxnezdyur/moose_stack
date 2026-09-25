@@ -312,23 +312,56 @@ class FeatureCard:
 
 
 @dataclass
-class StudyCard:
-    """A read-only projection of analysis/studies/<id>/card.yaml.
+class BoardCard:
+    """A first-class card that is not a feature, published by an extension.
 
-    Core never builds one: ``tool/ext_studies.py`` owns the adapter and the
-    analysis toolkit stays the only writer of the card itself.
+    ``render.board_cards`` gathers these from every extension's
+    ``board_cards(ctx)`` hook, and ``Home.md`` and ``Board.html`` merge them into
+    the same six posture groups as the feature cards. Core never builds one:
+    ``tool/ext_campaigns.py`` does, and ``data`` carries its own record for the
+    renderers that know the kind.
     """
 
     id: str
-    lane: str = "draft"
+    kind: str = "campaign"
     posture: str = PARKED
-    title: str = ""
-    updated: str = ""
-    progress: str = ""
-    note: str = ""
+    next_action: NextAction = field(default_factory=NextAction)
+    flags: List[str] = field(default_factory=list)
+    why: str = ""
+    note_folder: str = "Campaigns"
+    #: One short phrase for a table cell, e.g. ``tick D017``.
+    short: str = ""
+    #: The owning extension's own record. Renderers that know ``kind`` read it.
+    data: Any = None
+
+    #: Needs-you rank for an extension card: beside a pending gate, because a
+    #: tick or a budget is exactly that, a grant only Max can give.
+    PRIORITY_REASON: ClassVar[str] = "gate-pending"
+
+    def has(self, flag: str) -> bool:
+        return flag in self.flags
+
+    def add_flag(self, flag: str) -> None:
+        if flag not in self.flags:
+            self.flags.append(flag)
+
+    def priority_key(self) -> Tuple[int, str]:
+        try:
+            slot = 2 * NEEDS_YOU_PRIORITY.index(self.PRIORITY_REASON)
+        except ValueError:
+            slot = 2 * len(NEEDS_YOU_PRIORITY)
+        return (slot, self.id)
 
     def to_dict(self) -> Dict[str, Any]:
-        return dataclasses.asdict(self)
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "posture": self.posture,
+            "next_action": self.next_action.to_dict(),
+            "flags": list(self.flags),
+            "why": self.why,
+            "note_folder": self.note_folder,
+        }
 
 
 # --------------------------------------------------------------------------

@@ -8,7 +8,7 @@ effort: low
 # /factory
 
 Regenerates the vault board and relays it. The board is the answer to "what is going on": every
-feature card, the studies, and one named next move per card.
+feature card, the campaigns, and one named next move per card.
 
 The projector is called by **absolute path**, because this skill runs inside whatever worktree
 invoked it and no `factory/` directory exists there. The path is resolved, never a literal: the

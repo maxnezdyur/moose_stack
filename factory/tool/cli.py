@@ -50,7 +50,7 @@ OWNED_FIELDS = (
 )
 
 # Namespaces `factory set` accepts. A key must carry one.
-SET_NAMESPACES = ("blueprint", "notes", "env", "hint", "label", "study")
+SET_NAMESPACES = ("blueprint", "notes", "env", "hint", "label")
 
 
 def err(msg: str) -> None:
@@ -221,7 +221,24 @@ def run_board(args: Any, cfg: config.Config) -> int:
     )
     if ctx.meta.get("stale"):
         print("unknown this run: %s (carried forward)" % (", ".join(ctx.meta["stale"]),))
-    ny = sorted(ctx.by_posture("needs-you"), key=lambda c: c.priority_key())
+    extra = render.board_cards(ctx)
+    if extra:
+        print(
+            "  plus %d campaign card%s (%s)"
+            % (
+                len(extra),
+                "" if len(extra) == 1 else "s",
+                ", ".join(
+                    "%s %d" % (p, len([x for x in extra if x.posture == p]))
+                    for p in POSTURE
+                    if any(x.posture == p for x in extra)
+                ),
+            )
+        )
+    ny = sorted(
+        list(ctx.by_posture("needs-you")) + [x for x in extra if x.posture == "needs-you"],
+        key=lambda c: c.priority_key(),
+    )
     for card in ny[: cfg.needs_you_cap]:
         print("  %-22s %-12s %s" % (card.id, card.next_action.verb, card.next_action.why))
     if result["refused"]:
@@ -236,10 +253,12 @@ def run_status(args: Any, cfg: config.Config) -> int:
     config.hostname_guard()
     config.require_vault(cfg)
     if args.feature:
-        path = cfg.note_path(args.feature)
-        if not path.is_file():
+        # A feature note first, then each extension's note folder (Campaigns/).
+        found = [p for p in render.note_candidates(cfg, args.feature) if p.is_file()]
+        if not found:
             err("no note for %s. Run `factory board` first." % (args.feature,))
             return MISSING
+        path = found[0]
         text = path.read_text()
         if getattr(args, "head", False):
             # The head block verbatim: the next move and the gates, which is
@@ -260,16 +279,17 @@ def run_status(args: Any, cfg: config.Config) -> int:
 
 def run_next(args: Any, cfg: config.Config) -> int:
     ctx = build_ctx(cfg, dry_run=True, quiet=True)
-    card = ctx.card(args.feature)
+    card = render.find_card(ctx, args.feature)
     if card is None:
-        err(
-            "no card %r. Known: %s"
-            % (args.feature, ", ".join(sorted(c.id for c in ctx.cards)))
-        )
+        known = sorted(set(c.id for c in ctx.cards) | set(x.id for x in render.board_cards(ctx)))
+        err("no card %r. Known: %s" % (args.feature, ", ".join(known)))
         return MISSING
     na = card.next_action
     print("%s: %s" % (card.id, na.verb))
-    print("  lane     %s (%s)" % (card.lane, card.gates.get("_proof") or ""))
+    if render.is_feature(card):
+        print("  lane     %s (%s)" % (card.lane, card.gates.get("_proof") or ""))
+    else:
+        print("  kind     %s (note in %s/)" % (card.kind, card.note_folder))
     print("  posture  %s" % (card.posture,))
     if card.flags:
         print("  flags    %s" % (", ".join(card.flags),))
@@ -489,7 +509,7 @@ def run_doctor(args: Any, cfg: config.Config) -> int:
         not (cfg.vault / ".git").is_file(),
         "the vault must never be a worktree of any repo",
     )
-    for sub in ("Features", "Studies", "Archive", "Artifacts"):
+    for sub in ("Features", "Campaigns", "Archive", "Artifacts"):
         check("%s/ exists" % (sub,), (cfg.vault / sub).is_dir(), "mkdir %s" % (cfg.vault / sub,))
     for d in (cfg.gates_dir, cfg.timeline_dir, cfg.pulse_dir):
         check(".factory/%s/ exists" % (d.name,), d.is_dir(), "mkdir -p %s" % (d,))
@@ -523,13 +543,6 @@ def run_doctor(args: Any, cfg: config.Config) -> int:
             age < 3600,
             "the cache is %ds old; the board renders from it first" % (age,),
         )
-
-    av = os.environ.get("ANALYSIS_VAULT")
-    check(
-        "$ANALYSIS_VAULT is not this vault",
-        not (av and Path(av).expanduser().resolve() == cfg.vault.resolve()),
-        "analysis/tool/vault.py has its own write_home and would fight render.py",
-    )
 
     for repo in config.SUBMODULES:
         out, ok = probe.run(
@@ -621,8 +634,8 @@ def _state_ignored(cfg: config.Config) -> bool:
 
 CORE_HELP = {
     "board": "probe, derive and rewrite every generated file",
-    "status": "print Home.md, or one feature note",
-    "next": "the single next move for one feature, and why",
+    "status": "print Home.md, or one feature or campaign note",
+    "next": "the single next move for one feature or campaign, and why",
     "set": "record one namespaced annotation on a card; projector fields are refused",
     "abandon": "record that you have given up on a card, with a reason",
     "grant": "grant one gate, monotonically and attributed",

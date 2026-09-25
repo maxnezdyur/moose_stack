@@ -238,6 +238,24 @@ class Store:
                         m[key] = "unknown"
                     elif mt:
                         m[key] = str(int(mt))
+        # Campaigns: a tick in campaign.md, a ledger line, a finding, a new run
+        # directory or a lease wakes the board on the next tick, not the tenth.
+        for root in getattr(cfg, "campaign_roots", None) or ():
+            base = Path(root) / "campaigns"
+            try:
+                dirs = sorted(d for d in base.iterdir() if d.is_dir()) if base.is_dir() else []
+            except Exception:
+                m["campaigns:%s" % (root,)] = "unknown"
+                continue
+            for d in dirs:
+                for rel in ("campaign.md", "LEDGER.md", "FINDINGS.md", "handoff.md",
+                            "runs", ".factory-lease", "gallery"):
+                    mt, mok = probe._mtime(d / rel)
+                    key = "campaign:%s/%s" % (d.name, rel)
+                    if not mok:
+                        m[key] = "unknown"
+                    elif mt:
+                        m[key] = str(int(mt))
         for p in (cfg.ideas_note,):
             mt, mok = probe._mtime(p)
             if not mok:

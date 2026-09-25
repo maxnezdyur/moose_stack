@@ -1,6 +1,7 @@
 # Handoff writing rules
 
-`<worktree>/specs/handoff.md` is the cross-session memory of one feature worktree. It sits beside
+`<worktree>/specs/handoff.md` is the cross-session memory of one feature worktree, and
+`campaigns/<id>/handoff.md` of one campaign, with the same seven sections. It sits beside
 `specs/blueprint.md`, which holds the plan, and points at the build record, which holds the result.
 It repeats neither.
 
@@ -21,7 +22,7 @@ of the section and never edit or delete a line that is already there, even one t
 a line that turned out to be wrong gets a second line saying so. Four sections are append only
 because they are the only part of the file a later session cannot reconstruct.
 
-Frontmatter: `feature`, `updated` (a date, set by the writer when the content changes, never a
+Frontmatter: `feature` (`campaign` in a campaign), `updated` (a date, set by the writer when the content changes, never a
 clock-driven rewrite of an otherwise unchanged file), and `sessions` (a count, bumped by one per
 writing session).
 
@@ -54,6 +55,9 @@ and the link does not.
 | `moose-feature-loop` | on STALLED or BLOCKED | hands `/moose-build` the State, Next and Do-not-repeat lines to write |
 | `/moose-ship` | in its report | appends the PR URL to State and one Sessions line |
 | `/handoff` | any time | seeds or updates the whole file from the conversation |
+| `/campaign new` | after `campaign new` | seeds `campaigns/<id>/handoff.md` from the template with `campaign:` in place of `feature:`; appends one Sessions line |
+| `/campaign learn` | after judging runs | rewrites State, Next, Map; appends Do-not-repeat per failed run, Decisions per hypothesis rewrite or withdrawn proposal, Sessions |
+| `campaign-loop` | before it returns any status | the same sections as `/campaign learn`, plus one Sessions line per loop invocation |
 
 Read back: the `session-context.sh` SessionStart hook prints State and Next at the start of every
 session in the worktree, and `factory board` projects State, Next and the last three Do-not-repeat

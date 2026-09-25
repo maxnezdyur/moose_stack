@@ -1,0 +1,52 @@
+run: D011
+campaign: ptr-depth-sensitivity
+tag: nominal-baseline
+group: null
+replay_of: null
+proposal:
+  tests: the nominal forward reproduces the paper's 1 Hz phase within 0.005 rad rms
+  because: [campaign.md]
+  estimate_core_hours: 0.5
+hypothesis: the nominal forward reproduces the paper's 1 Hz phase within 0.005 rad rms
+
+started: 2026-09-19T14:15:02Z
+finished: 2026-09-19T14:22:14Z
+exit: 0
+host: maxs-macbook-pro.local
+cluster: local
+slurm: null
+local:
+  np: 3
+  core_hours: 0.36
+
+code:
+  ptr-update: {sha: eb8109b, branch: main, dirty: false}
+  moose: {sha: d96c576dc4d1c9a9dabaf01835deefa873a87d7c}
+  isopod: {sha: aa4173fafd0155c2006f81f48d5f34c8783db745}
+  container: null
+  binary: {path: /Users/maxnezdyur/projects/ptr-update/isopod/isopod-opt, built: 2026-08-02T13:41:09Z, sha256: 3f1a9c0e7b2d4e6f8a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d0e2f}
+  python: {env: moose, version: 3.14.4}
+
+command: mpiexec -np 3 ../../../isopod/isopod-opt -w -i truth_layer.i layer_depth_mm=0 tag=nominal-baseline
+cwd: PTR/release_13x13/inverse_simulation
+env:
+  OMP_NUM_THREADS: "1"
+  VECLIB_MAXIMUM_THREADS: "1"
+  OPENBLAS_NUM_THREADS: "1"
+
+inputs:
+  - {path: PTR/release_13x13/inverse_simulation/truth_layer.i, bytes: 3870, sha256: 9c2e11ab5d7f0e3c8b6a4d2f1e0c9b8a7d6e5f4c3b2a1908f7e6d5c4b3a29180, frozen: inputs/PTR/release_13x13/inverse_simulation/truth_layer.i}
+  - {path: PTR/release_13x13/inverse_simulation/forward_and_adjoint_3dfrs7_tri.i, bytes: 11204, sha256: 71b0f2c4e6a8d0b2f4e6c8a0d2f4b6e8a0c2d4f6b8e0a2c4f6d8b0e2a4c6f8d0, frozen: inputs/PTR/release_13x13/inverse_simulation/forward_and_adjoint_3dfrs7_tri.i}
+  - {path: PTR/release_13x13/config.i, bytes: 2210, sha256: c4d6e8f0a2b4c6d8e0f2a4b6c8d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6, frozen: inputs/PTR/release_13x13/config.i}
+  - {path: PTR/release_13x13/inverse_simulation/tri3d_slices.e, bytes: 48113022, sha256: d4a9b1c3e5f7a9b1c3d5e7f9a1b3c5d7e9f1a3b5c7d9e1f3a5b7c9d1e3f5a7b9, frozen: null}
+
+outputs:
+  dir: /Users/maxnezdyur/projects/ptr-update/PTR/release_13x13/inverse_simulation
+  purge_risk: false
+  kept: ["phase_1hz.csv", "phase_10hz.csv", "run.log"]
+
+qoi:
+  phase_rms_vs_paper_rad: 0.0021
+
+verdict: supported
+judged: {by: loop, at: 2026-09-19T14:31:40Z, finding: F1}

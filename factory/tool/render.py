@@ -175,6 +175,12 @@ def extensions() -> List[Any]:
         doctor_checks(ctx)          -> list[(name, ok, hint)]
         collect(ctx)                -> None   during the probe round
         outputs(ctx)                -> dict   {"counts": {...}, "refused": [...]}
+        board_cards(ctx)            -> list   first-class cards that are not
+                                              features (model.BoardCard: id,
+                                              kind, posture, next_action, flags,
+                                              why, note_folder)
+        find_card(ctx, id)          -> BoardCard or None, for `next` and `status`
+        NOTE_FOLDER  str            the vault folder its cards' notes live in
 
     ``outputs`` is called by :func:`sync` before ``Features.base`` and
     ``Home.md``, so an extension's own generated notes are written by the
@@ -211,6 +217,64 @@ def ext_sections(ctx: Any, hook: str, *args: Any) -> List[Tuple[str, str, int]]:
                 out.append(row)
     out.sort(key=lambda r: (r[2], r[0]))
     return out
+
+
+def board_cards(ctx: Any) -> List[Any]:
+    """Every extension card, from each extension's ``board_cards(ctx)``.
+
+    Merged by :func:`compose_home` and ``ext_board_html`` into the six posture
+    groups next to the feature cards. One extension that raises costs only its
+    own cards, and one line in the log.
+    """
+    out: List[Any] = []
+    for mod in extensions():
+        fn = getattr(mod, "board_cards", None)
+        if fn is None:
+            continue
+        try:
+            rows = fn(ctx) or []
+        except Exception as exc:
+            ctx.log("extension %s.board_cards raised: %s" % (mod.__name__, exc))
+            continue
+        for row in rows:
+            if getattr(row, "id", None) and getattr(row, "posture", None) in POSTURE:
+                out.append(row)
+    return out
+
+
+def find_card(ctx: Any, card_id: str) -> Any:
+    """A feature card, else the first extension card with this id, else None."""
+    card = ctx.card(card_id) if hasattr(ctx, "card") else None
+    if card is not None:
+        return card
+    for mod in extensions():
+        fn = getattr(mod, "find_card", None)
+        if fn is None:
+            continue
+        try:
+            row = fn(ctx, card_id)
+        except Exception as exc:
+            ctx.log("extension %s.find_card raised: %s" % (mod.__name__, exc))
+            continue
+        if row is not None:
+            return row
+    return None
+
+
+def note_candidates(cfg: Any, card_id: str) -> List[Path]:
+    """Where a card's note may live: ``Features/`` first, then each
+    extension's ``NOTE_FOLDER``. No probe round, so ``factory status`` stays
+    cheap."""
+    out = [cfg.note_path(card_id)]
+    for mod in extensions():
+        folder = getattr(mod, "NOTE_FOLDER", None)
+        if folder:
+            out.append(Path(cfg.vault) / str(folder) / (config.validate_id(card_id) + ".md"))
+    return out
+
+
+def is_feature(card: Any) -> bool:
+    return isinstance(card, FeatureCard)
 
 
 # --------------------------------------------------------------------------
@@ -609,7 +673,7 @@ def write_note(card: FeatureCard, ctx: Any) -> str:
 # --------------------------------------------------------------------------
 
 
-def _needs_you_rows(cards: List[FeatureCard]) -> List[str]:
+def _needs_you_rows(cards: List[Any]) -> List[str]:
     rows = ["| card | next move | why |", "|---|---|---|"]
     for c in cards:
         rows.append(
@@ -619,12 +683,26 @@ def _needs_you_rows(cards: List[FeatureCard]) -> List[str]:
     return rows
 
 
-def _running_rows(cards: List[FeatureCard], now: str) -> List[str]:
+def _running_rows(cards: List[Any], now: str) -> List[str]:
     rows = [
-        "| feature | state | for | last thing it said | take over |",
+        "| card | state | for | last thing it said | take over |",
         "|---|---|---|---|---|",
     ]
     for c in cards:
+        if not is_feature(c):
+            # An extension card carries no session record of its own: its why
+            # says what runs, and its command is how to take it over.
+            rows.append(
+                "| [[%s]] | %s | %s | %s | `%s` |"
+                % (
+                    c.id,
+                    cell(getattr(c, "kind", "") or "running"),
+                    "-",
+                    cell(c.next_action.why)[:80],
+                    cell(c.next_action.command or c.next_action.verb),
+                )
+            )
+            continue
         s = c.session or {}
         last = (s.get("last_line") or {}).get("detail") or s.get("detail") or ""
         bg = s.get("bg_id") or (s.get("sessionId") or "").split("-")[0]
@@ -652,6 +730,12 @@ def _running_rows(cards: List[FeatureCard], now: str) -> List[str]:
     return rows
 
 
+def _backlog_reason(card: Any, cfg: Any) -> str:
+    if is_feature(card):
+        return derive.backlog_reason(card, cfg)
+    return ", ".join(str(f) for f in (getattr(card, "flags", None) or [])[:2]) or card.next_action.verb
+
+
 def _age(started: Any, now: Any) -> str:
     """How long this session has been up, from its own stamp against ctx.now."""
     mins = _minutes_between(started, now)
@@ -666,7 +750,12 @@ def compose_home(ctx: Any) -> str:
     cfg = ctx.config
     cards = ctx.cards
     meta = ctx.meta
-    groups = {p: [c for c in cards if c.posture == p] for p in POSTURE}
+    extra = board_cards(ctx)
+    groups = {p: [c for c in list(cards) + extra if c.posture == p] for p in POSTURE}
+    kinds: Dict[str, int] = {}
+    for c in extra:
+        kind = str(getattr(c, "kind", "") or "card")
+        kinds[kind] = kinds.get(kind, 0) + 1
 
     open_prs = sum(len(c.open_prs()) for c in cards)
     worktrees = len([c for c in cards if c.worktree])
@@ -682,21 +771,18 @@ def compose_home(ctx: Any) -> str:
         "---",
         "updated: %s" % (STAMP,),
         "features: %d" % (len(cards),),
+        "campaigns: %d" % (kinds.get("campaign", 0),),
     ]
     for p in POSTURE:
         out.append("%s: %d" % (p.replace("-", "_"), len(groups[p])))
     out += ["tags: [factory-home]", "---", "# moose factory", ""]
 
-    study_rows = ctx.meta.get("study_cards") or []
-    if len(study_rows) == 1:
-        studies_text = "1 study, "
-    elif study_rows:
-        studies_text = "%d studies, " % (len(study_rows),)
-    else:
-        studies_text = ""
+    kinds_text = "".join(
+        "%d %s%s, " % (n, kind, "" if n == 1 else "s") for kind, n in sorted(kinds.items())
+    )
     masthead = [
         "_%d features, %s%d workspaces, %d open PRs."
-        % (len(cards), studies_text, worktrees, open_prs),
+        % (len(cards), kinds_text, worktrees, open_prs),
         "Regenerated by `factory board`. This picture was established %s;" % (STAMP_HM,),
         "a stamp moves only when the content under it moves.",
     ]
@@ -762,9 +848,7 @@ def compose_home(ctx: Any) -> str:
         out.append(
             "_Backlog, triage once: %s._"
             % (
-                ", ".join(
-                    "[[%s]] (%s)" % (c.id, derive.backlog_reason(c, cfg)) for c in rest
-                ),
+                ", ".join("[[%s]] (%s)" % (c.id, _backlog_reason(c, cfg)) for c in rest),
             )
         )
         out.append("")
@@ -966,7 +1050,7 @@ def write_base(ctx: Any) -> str:
     normalises to, so a fresh vault gives it no reason to rewrite.
 
     The delete-and-rebuild guarantee covers ``Home.md``, ``Features/*.md`` and
-    ``Studies/*.md``. Delete this file too and you get a working seed back, not
+    ``Campaigns/*.md``. Delete this file too and you get a working seed back, not
     the same bytes: a dragged column width is not derivable from anything.
     """
     cfg = ctx.config

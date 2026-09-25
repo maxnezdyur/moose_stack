@@ -31,7 +31,7 @@ factory/
   tool/ext_board_html.py Board.html: the six-column kanban, written through the outputs hook
   tool/ext_dispatch.py   the lease; start, stop, attach, logs, release, reset
   tool/ext_refresh.py    refresh-pipeline: the canonical .claude against a worktree's frozen copy
-  tool/ext_studies.py    read-only adapter over analysis/studies/*/card.yaml; Studies/<id>.md
+  tool/ext_campaigns.py  read-only adapter over <root>/campaigns/*/; campaign cards; Campaigns/<id>.md
   tool/ext_handoff.py    rescue specs/handoff.md into Artifacts/; the ## Handoff card section; handoff-stale
   tool/ext_gallery.py    the specs/gallery/ listing, the Gallery/<feature> symlink, the ## Gallery card section
   tool/ext_teardown.py   teardown and archive, plus the reclaimable-bytes number
@@ -66,7 +66,7 @@ factory/
 | `teardown <feature> [--yes]` | print the teardown recipe; `--yes` runs it in a terminal | worktrees, on a typed yes |
 | `archive <feature>` | `git mv` the note into `Archive/` once the worktree and the PR are gone | the vault |
 | `refresh-pipeline <feature>` | diff the canonical `.claude` against a worktree's frozen copy | a worktree, on `--confirm` |
-| `studies [<id>]` | the analysis studies, by lane | nothing |
+| `campaigns [<id>]` | the campaigns under `campaign_roots`: status, posture, runs, budget, next move | nothing |
 | `tick-status` | what the 120 s loop looks like right now | nothing |
 
 Every verb that writes accepts `--dry-run`.
@@ -133,7 +133,7 @@ factory doctor              # the same block, above the checks
 | `obsidian_vault` | the vault directory's basename | the name an `obsidian://` link carries |
 | `notifier` | `/opt/homebrew/bin/terminal-notifier` | the banner binary; `""` uses the osascript fallback |
 | `refuse_hosts` | the five INL families | hostname globs every entry point refuses, matched lowercased |
-| `studies_dir` | `<meta_repo>/analysis/studies` | the analysis studies the `studies` verb reads; not the vault's `Studies/` |
+| `campaign_roots` | empty | the project repositories that hold `campaigns/<id>/`; a TOML array in the file, colon separated in `$FACTORY_CAMPAIGN_ROOTS` |
 | `path_extra` | `""` | extra PATH prefixes the launchd tick prepends, colon separated |
 | `gallery_max_mb` | `5` | the per-file cap in `specs/gallery/`; a bigger file is named on the note and never linked |
 | `gallery_thumbs` | `3` | how many thumbnails one `Board.html` card shows |
@@ -141,7 +141,7 @@ factory doctor              # the same block, above the checks
 
 Every key has an environment variable: `MOOSE_FACTORY_VAULT`, `FACTORY_WORKTREE_ROOT`,
 `FACTORY_REPO_ROOT`, `FACTORY_PYTHON`, `FACTORY_CLAUDE_BIN`, `FACTORY_CLAUDE_HOME`,
-`FACTORY_STUDIES_DIR`, and `MOOSE_FACTORY_<KEY>` for the rest. An empty variable is not an
+`FACTORY_CAMPAIGN_ROOTS`, and `MOOSE_FACTORY_<KEY>` for the rest. An empty variable is not an
 override. The launchd tick reads no shell profile, so a value it needs belongs in the file, not in
 an exported variable.
 
@@ -174,9 +174,10 @@ The code is shared and the state is not. Follow these steps on the second Mac.
    notifier = "/opt/homebrew/bin/terminal-notifier"
    refuse_hosts = ["sawtooth*", "lemhi*", "bitterroot*", "hoodoo*", "teton*"]
 
-   # Optional. The analysis studies root, and PATH prefixes for the launchd tick
-   # (launchd hands a job a minimal PATH; gh outside the usual prefixes needs this).
-   # studies_dir = "~/research/studies"
+   # Optional. The project repositories that hold campaigns, and PATH prefixes for
+   # the launchd tick (launchd hands a job a minimal PATH; gh outside the usual
+   # prefixes needs this).
+   # campaign_roots = ["~/projects/ptr-update"]
    # path_extra = "/opt/local/bin"
 
    max_concurrent_sessions = 2
@@ -352,7 +353,7 @@ No script removes a worktree.
 
 ## Determinism
 
-Delete `Home.md`, `Board.html`, `Features/*.md` and `Studies/*.md`, run `factory board`, and the
+Delete `Home.md`, `Board.html`, `Features/*.md` and `Campaigns/*.md`, run `factory board`, and the
 files come back byte-identical. The test is in the vault's `CLAUDE.md`.
 
 Three rules make that true.
@@ -394,7 +395,7 @@ current assignments, each with the duplicate that was removed:
 |---|---|---|
 | `Artifacts/` | `tool/ext_artifacts.py` | `probe.rescue_build`, which overwrote an archived record under the same label; `probe.rescue_review` now only lists |
 | `## Since yesterday`, `## Elsewhere` | `tool/ext_artifacts.py` | core's own blocks in `compose_home`, which rendered the heading twice |
-| `Studies/*.md` | `tool/ext_studies.py`, through the `outputs` hook | a write as a side effect of `home_sections` |
+| `Campaigns/*.md` | `tool/ext_campaigns.py`, through the `outputs` hook | nothing: the notes are new |
 | the `.tmp` of every state write | `config.write_text_atomic`, a unique `mkstemp` name | the shared `<name>.tmp`, which made two concurrent boards collide in `os.replace` |
 | the pipeline doctor row | `tool/ext_refresh.py` | core's `no worktree has a frozen pipeline`, a third row about the same nine worktrees |
 | `Board.html` | `tool/ext_board_html.py`, through the `outputs` hook | nothing: the page is new, and it reuses `render.atomic_write`, `render.guard_path` and `snapshot.Store.stamp` rather than copying them |
@@ -460,7 +461,19 @@ def outputs(ctx) -> dict                                # write this extension's
 
 `outputs` is called by `render.sync` before `Features.base` and `Home.md`, so an extension's own
 generated notes are written by the renderer rather than as a side effect of `home_sections`, and a
-refused note reaches the board's exit code. `tool/ext_studies.py` uses it for `Studies/<id>.md`.
+refused note reaches the board's exit code. `tool/ext_campaigns.py` uses it for `Campaigns/<id>.md`.
+
+Three more exports let an extension put a card of its own kind on the board:
+
+```python
+def board_cards(ctx) -> list[BoardCard]     # id, kind, posture, next_action, flags, why, note_folder
+def find_card(ctx, id) -> BoardCard | None  # `factory next <id>` asks this after the feature cards
+NOTE_FOLDER: str                            # `factory status <id>` looks for the note here after Features/
+```
+
+`compose_home` merges every `BoardCard` into the six posture groups, the needs-you table and its
+cap included, and the masthead counts each kind. `Board.html` renders each kind in the same six
+columns.
 
 `NO_CTX_VERBS` exists because a probe round costs about 6.5 s. A verb that only reads a log should
 not pay it: `tick-status` declares itself and gets a context with paths, state and the clock only.
@@ -575,7 +588,7 @@ Two disciplines on that projection, each a closed hole.
 1. The Next steps print as **plain bullets**. A `- [ ]` in the generated body is a trap: the body is
    recomposed on every board run, so a tick Max makes in Obsidian is erased within 120 s, and
    `probe.note` reads ticked boxes out of the head block only, so it is never read back either. Same
-   rule as the two analysis gates in `## Studies`.
+   rule as the proposal boxes on a campaign note.
 2. Every projected string passes through `_clip`, which **escapes `<!--`**. A handoff that names one
    of `probe.MARKERS` in prose ("the board refused the note because it lost its
    `<!-- factory:body:end -->` marker") would otherwise plant a second fence inside the generated
@@ -705,7 +718,7 @@ it switches back to the MOOSE-native renderer on the day `vtk` joins the env pin
 
 ## Board.html
 
-The page is one generated file, written by `outputs(ctx)` like a study note. It reads nothing the
+The page is one generated file, written by `outputs(ctx)` like a campaign note. It reads nothing the
 board has not already derived. Three rules keep it honest. It prints a content stamp, never the
 clock, never an age, never a pid. It escapes every string through one function, because a
 pull-request title is arbitrary text. It allows three URL schemes only: `obsidian://`, `file://` and
@@ -713,8 +726,9 @@ pull-request title is arbitrary text. It allows three URL schemes only: `obsidia
 
 The six columns are `model.POSTURE` in order, so the page and `Home.md` can never disagree. The
 needs-you column is sorted by `FeatureCard.priority_key` and is not capped: a column scrolls, a table
-does not. Every other column sorts by id. Each study is one compact card in the column its posture
-maps to. The done column is compact.
+does not. Every other column sorts by id. A campaign is a full card in the column its posture maps
+to: the question, the budget line, the verdict counts, the last finding, the proposals as text, the
+next move and the gallery thumbnails. The done column is compact.
 
 Flag colour is by severity, not by flag. Critical: `ci-red`, `conflicting`, `blocked`, `stalled`,
 `changes-requested`, `review-findings`, `foreign-worktree`, `branch-mismatch`. Warning:
@@ -744,7 +758,7 @@ Three more rules, each one a defect that was live.
   `{"counts": {}, "refused": ["Board.html"]}` instead. That is what reaches exit code 2.
 
 Three strings on a card are markdown a human wrote (the handoff's first Next step, a compact why, a
-study's why), so they go through `esc_md`: escape first, then paired backticks become `<code>`. The
+campaign's why), so they go through `esc_md`: escape first, then paired backticks become `<code>`. The
 handoff template mandates a backticked command on every step, and raw backticks read as punctuation.
 A PR title is cut on a word boundary with a visible `...`, because a silently cut title states a
 title that does not exist. A PR-derived flag (`ci-red`, `conflicting`, `changes-requested`) is
@@ -758,14 +772,25 @@ Obsidian with full filesystem access, and a copy with no recorded upstream relea
 be told from a tampered one. Obsidian keeps the Restricted-mode switch in its own local storage, so
 the hint says to turn it off by hand once.
 
-## Studies
+## Campaigns
 
-`tool/ext_studies.py` reads `analysis/studies/*/card.yaml` and nothing else, maps `StudyState` onto
-posture, and renders `Studies/<id>.md`. It re-implements that schema rather than importing the
-analysis package, so the board does not fail when the toolkit moves. The analysis toolkit stays the
-only writer of a card, so a study row is exactly as fresh as Max's last reconcile, and the row
-prints the card's own stamp plus a reconcile hint past a day. The two analysis gates are printed as
-words, never as checkboxes: a tick the factory never reads back would be a trap.
+`tool/ext_campaigns.py` reads every `<root>/campaigns/<id>/` under the `campaign_roots` setting:
+`campaign.md`, `LEDGER.md`, `FINDINGS.md`, `handoff.md`, `gallery/` and `runs/*/manifest.yaml`. The
+formats are `campaign/formats/`. The adapter writes nothing into a campaign directory. It renders
+`Campaigns/<id>.md` with the four markers and the two prose regions of a feature note, one
+`## Campaigns` table on `Home.md`, and one card in the six posture groups of `Home.md` and
+`Board.html`. It writes `Campaigns.base` once when absent and never overwrites it, like
+`Features.base`: a table of the note frontmatter and a `cards` view grouped by posture.
+
+The spent budget is computed from the manifests on every run and is never stored. The proposal
+boxes print as text on the note and the board. The tick lives in `campaign.md`, which opens in the
+vault through the `Specs/<id>` link, so a box ticked there is saved to the repository file.
+`Gallery/<id>` links `<campaign dir>/gallery`. Both links follow the rules of the feature links.
+
+`factory start|stop|attach|logs|release <id>` dispatch a campaign like a feature. The workspace is
+the project root, the lease is `<campaign dir>/.factory-lease/`, and the default prompt is
+`/campaign <id>`. `reset`, `teardown`, `archive` and `refresh-pipeline` refuse a campaign id. The
+module docstring holds the posture rules and the flag vocabulary.
 
 ## The tick
 
@@ -828,7 +853,7 @@ cd ~/projects/moose-factory && git bundle create ~/moose-factory-backup.bundle -
 
 # 4. Drop the generated view only.
 rm -f ~/projects/moose-factory/Home.md ~/projects/moose-factory/Board.html \
-      ~/projects/moose-factory/Features/*.md ~/projects/moose-factory/Studies/*.md
+      ~/projects/moose-factory/Features/*.md ~/projects/moose-factory/Campaigns/*.md
 
 # 5. Drop the vault, once the bundle is somewhere safe.
 #    Obsidian prunes the registration at its next launch.
@@ -844,7 +869,6 @@ only runs it with `--yes`, by hand, never from a tick or a hook.
 
 ## Two rules that are easy to break
 
-1. `$ANALYSIS_VAULT` must never point at `~/projects/moose-factory`. `analysis/tool/vault.py`
-   has its own `write_home` and would fight `render.py` for `Home.md`.
-2. The factory never runs `analysis reconcile` and never writes a study card. A study row is
-   exactly as fresh as Max's last reconcile, so it prints the card's own stamp.
+1. The factory never writes a campaign file. The tick and the budget belong to you, in
+   `campaign.md`; the ledger and the findings belong to the campaign tool and the loop.
+2. The factory never runs the `campaign` CLI. Every campaign command on a card is a string to copy.

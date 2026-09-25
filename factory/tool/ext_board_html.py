@@ -14,9 +14,9 @@ What this extension is
 ----------------------
 
 One more generated output, written through the renderer's ``outputs`` hook
-exactly like ``Studies/<id>.md``:
+exactly like ``Campaigns/<id>.md``:
 
-    Board.html     six columns, one card per feature, one compact card per study
+    Board.html     six columns, one card per feature and one per campaign
 
 Five rules, the first three inherited from the rest of the package:
 
@@ -120,6 +120,13 @@ WARNING_FLAGS = frozenset(
         # Not in model.FLAGS yet: the handoff extension raises it. Listed here
         # so it renders as a warning the day it appears, with no edit.
         "handoff-stale",
+        # The campaign flags that mean a decision is overdue. proposal-pending
+        # stays neutral: a tick waiting is the normal state of a campaign.
+        "over-budget",
+        "refuted",
+        "unjudged-run",
+        "unreadable",
+        "marker-missing",
     }
 )
 
@@ -173,7 +180,7 @@ def esc_md(text: Any) -> str:
     """Escape, then render paired backticks as ``<code>``.
 
     Three strings on a card come from markdown a human wrote: the handoff's
-    first Next step, a compact card's why, and a study's why. The handoff
+    first Next step, a compact card's why, and a campaign's question and why. The handoff
     template mandates ``- [ ] <step> - `<command or file>` ``, so nearly every
     real Next line carries a backticked command, and raw backticks on the page
     read as punctuation while the next-move command two lines above is in a
@@ -369,14 +376,10 @@ def reclaimable(card: Any, ctx: Any) -> str:
         return ""
 
 
-def studies(ctx: Any) -> List[Any]:
-    """Every study, already loaded by ``ext_studies.collect``. Never written."""
+def ext_cards(ctx: Any) -> List[Any]:
+    """Every extension card (``render.board_cards``), already loaded. Never written."""
     try:
-        from . import ext_studies
-    except Exception:
-        return []
-    try:
-        return list(ext_studies.studies_for(ctx))
+        return list(render.board_cards(ctx))
     except Exception:
         return []
 
@@ -602,40 +605,92 @@ def feature_card(card: Any, ctx: Any, compact: bool = False) -> str:
 
 
 # --------------------------------------------------------------------------
-# One study card: compact, and marked as a study
+# One campaign card: the question, the budget, the verdicts, the queue
 # --------------------------------------------------------------------------
 
 
-def study_card(study: Any, ctx: Any) -> str:
+def campaign_card(item: Any, ctx: Any, compact: bool = False) -> str:
+    """A full card for a campaign, from ``ext_campaigns``' own record.
+
+    The proposal boxes are text, never ``<input>``: the tick lives in
+    ``campaign.md``, and a box on a generated page saves nothing.
+    """
+    from . import ext_campaigns as camp
+
     cfg = ctx.config
-    out = ['<article class="card compact study">']
+    c = item.data
+    flags = list(getattr(item, "flags", None) or [])
+    cls = ["card", "campaign"]
+    if compact:
+        cls.append("compact")
+    if any(str(f) in CRITICAL_FLAGS for f in flags):
+        cls.append("crit")
+    out: List[str] = ['<article class="%s">' % (" ".join(cls),)]
     out.append(
         '<p class="name">%s %s</p>'
         % (
-            link(obsidian_url(cfg, "Studies/" + study.id), study.id, "wl"),
-            chip("study", "study"),
+            link(obsidian_url(cfg, "%s/%s" % (camp.NOTE_FOLDER, item.id)), item.id, "wl"),
+            chip("campaign", "campaign"),
         )
     )
-    chips = [chip(study.lane, "lane")]
-    progress = _study_progress(study)
-    if progress:
-        chips.append(chip(progress))
+    chips = [chip(c.status or "unknown", "lane"), chip(c.autonomy), chip(c.cluster)]
+    chips += [flag_chip(f) for f in flags]
     out.append('<p class="chips">%s</p>' % ("".join(chips),))
-    if study.why:
-        out.append('<p class="why">%s</p>' % (esc_md(study.why),))
+
+    if compact:
+        why = item.next_action.why or item.next_action.verb
+        if why:
+            out.append('<p class="why">%s</p>' % (esc_md(why),))
+        out.append("</article>")
+        return "\n".join(out)
+
+    if c.question:
+        out.append('<p class="title">%s</p>' % (esc(clip_title(c.question, 200)),))
+    out.append(
+        '<p class="meta"><span class="lbl">budget</span> %s</p>' % (esc(camp.budget_line(c)),)
+    )
+    out.append(
+        '<p class="meta"><span class="lbl">runs</span> %s</p>' % (esc(camp.verdict_str(c)),)
+    )
+    last = camp.last_finding_heading(c)
+    if last:
+        out.append(
+            '<p class="meta"><span class="lbl">last finding</span> %s</p>'
+            % (esc(clip_title(last, 160)),)
+        )
+    if c.proposals:
+        rows = []
+        for p in c.proposals:
+            rows.append(
+                "<li><code>[%s]</code> %s</li>"
+                % ("x" if p.get("ticked") else "&nbsp;", esc(clip_title(camp.proposal_line(p), 160)))
+            )
+        out.append('<ul class="props">%s</ul>' % ("".join(rows),))
+
+    na = item.next_action
+    out.append(
+        '<p class="next"><span class="verb">%s</span> %s</p>' % (esc(na.verb), esc_md(na.why))
+    )
+    if na.command:
+        out.append('<p class="cmd"><code>%s</code></p>' % (esc(na.command),))
+
+    shots = gallery_strip(item, ctx)
+    if shots:
+        out.append(shots)
+
+    hand = str((c.handoff or {}).get("handoff_next") or "")
+    if hand:
+        out.append(
+            '<p class="hand"><span class="lbl">handoff</span> %s</p>' % (esc_md(_one_line(hand)),)
+        )
+
+    links = [link(obsidian_url(cfg, "%s/%s" % (camp.NOTE_FOLDER, item.id)), "note")]
+    links.append(link(vscode_uri(c.path(camp.CAMPAIGN_MD)), "campaign.md"))
+    links.append(link(vscode_uri(c.path(camp.LEDGER_MD)), "ledger"))
+    links.append(link(vscode_uri(c.path(camp.FINDINGS_MD)), "findings"))
+    out.append('<p class="links">%s</p>' % (" ".join(links),))
     out.append("</article>")
     return "\n".join(out)
-
-
-def _study_progress(study: Any) -> str:
-    try:
-        from . import ext_studies
-
-        if (study.counts or {}).get("total"):
-            return ext_studies.progress_str(study.counts)
-    except Exception:
-        pass
-    return ""
 
 
 # --------------------------------------------------------------------------
@@ -644,28 +699,30 @@ def _study_progress(study: Any) -> str:
 
 
 def column_cards(posture: str, ctx: Any) -> List[Tuple[str, Any]]:
-    """``[("feature", card), ("study", study)]`` in Home.md's order.
+    """``[("feature", card), ("campaign", item)]`` in Home.md's order.
 
     The kind travels with the row, so nothing downstream has to guess which
-    dataclass it holds. Features first, studies after them.
+    dataclass it holds. The needs-you column merges both kinds by
+    ``priority_key``, exactly like Home.md's table; every other column is
+    features by id, then the extension cards by id.
     """
-    cards = [c for c in ctx.cards if c.posture == posture]
+    rows: List[Tuple[str, Any]] = [("feature", c) for c in ctx.cards if c.posture == posture]
+    extra = [x for x in ext_cards(ctx) if x.posture == posture]
     if posture == NEEDS_YOU:
+        rows += [(str(getattr(x, "kind", "") or "card"), x) for x in extra]
         try:
-            cards.sort(key=lambda c: c.priority_key())
+            rows.sort(key=lambda r: r[1].priority_key())
         except Exception as exc:
             # The flag precedence is the only sort on this page that reads a
             # card's contents, so it is the only one an odd flag can break. Id
             # order is wrong but readable; not writing the page at all is not.
             ctx.log("Board.html: the needs-you order fell back to id order: %s" % (exc,))
-            cards.sort(key=lambda c: c.id)
+            rows.sort(key=lambda r: r[1].id)
     else:
-        cards.sort(key=lambda c: c.id)
-    rows: List[Tuple[str, Any]] = [("feature", c) for c in cards]
-    rows.extend(
-        ("study", s)
-        for s in sorted((s for s in studies(ctx) if s.posture == posture), key=lambda s: s.id)
-    )
+        rows.sort(key=lambda r: r[1].id)
+        rows += [
+            (str(getattr(x, "kind", "") or "card"), x) for x in sorted(extra, key=lambda x: x.id)
+        ]
     return rows
 
 
@@ -684,8 +741,8 @@ def column(posture: str, ctx: Any) -> str:
         # so a single odd-typed probe field on one card meant the whole kanban
         # was not rewritten and the stale page stayed on disk unannounced.
         try:
-            if kind == "study":
-                out.append(study_card(row, ctx))
+            if kind == "campaign":
+                out.append(campaign_card(row, ctx, compact=(posture == DONE)))
             else:
                 out.append(feature_card(row, ctx, compact=(posture == DONE)))
         except Exception as exc:
@@ -713,8 +770,9 @@ def masthead(ctx: Any) -> str:
     cfg = ctx.config
     cards = ctx.cards
     open_prs = sum(len(c.open_prs()) for c in cards)
-    n_studies = len(studies(ctx))
-    n_needs = len([c for c in cards if c.posture == NEEDS_YOU])
+    extra = ext_cards(ctx)
+    n_campaigns = len([x for x in extra if getattr(x, "kind", "") == "campaign"])
+    n_needs = len([c for c in list(cards) + extra if c.posture == NEEDS_YOU])
 
     sub = [
         "Regenerated by <code>factory board</code>. This picture was established "
@@ -734,7 +792,7 @@ def masthead(ctx: Any) -> str:
         '<span class="count"><b>%d</b> %s</span>'
         % (open_prs, plural(open_prs, "open PR", "open PRs")),
         '<span class="count"><b>%d</b> %s</span>'
-        % (n_studies, plural(n_studies, "study", "studies")),
+        % (n_campaigns, plural(n_campaigns, "campaign", "campaigns")),
     ]
     return "\n".join(
         [
@@ -867,7 +925,11 @@ h1 small code { background: transparent; padding: 0; }
 .chip.crit { background: var(--crit-bg); color: var(--crit); }
 .chip.warn { background: var(--warn-bg); color: var(--warn); }
 .chip.ok { background: var(--ok-bg); color: var(--ok); }
-.chip.study { background: var(--now-bg); color: var(--now); }
+.chip.campaign { background: var(--now-bg); color: var(--now); }
+.card .props { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12.5px; color: var(--ink-2); }
+.card .props li + li { margin-top: 2px; }
+.card .props code { background: transparent; padding: 0 2px 0 0; }
+.card.campaign .meta { margin-top: 4px; }
 .card .pr { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; margin-top: 7px; }
 .card .pr .pr { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
 .card .title { color: var(--ink-2); font-size: 12.5px; margin-top: 2px; }
@@ -941,7 +1003,7 @@ def compose_board(ctx: Any) -> str:
         '<div class="how"><p><strong>How to act on this page.</strong> A card name opens its '
         "note in Obsidian. A command is copyable. This page is generated: "
         "<code>factory board</code> rewrites it and every edit here is lost.</p>"
-        "<p>One next move: <code>factory next &lt;feature&gt;</code>. "
+        "<p>One next move: <code>factory next &lt;feature or campaign&gt;</code>. "
         "What is misconfigured: <code>factory doctor</code>.</p></div>"
     )
     out.append("</div>")

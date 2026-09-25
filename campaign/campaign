@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# No-install launcher for the campaign tool.
+#
+# Runs the CLI as a package (`python -m tool.cli`) with this directory on
+# PYTHONPATH, so relative imports resolve without `pip install`. A copy of
+# analysis/analysis, with the interpreter search of factory/factory.
+#
+# Nothing here names a user, a home directory or a machine. The per-machine
+# settings live in the factory's file, under a [campaign] table:
+#
+#   ~/.config/moose-factory/config.toml      ($MOOSE_FACTORY_CONFIG overrides)
+#
+# Interpreter selection (first that imports yaml and tomllib wins):
+#   1. $CAMPAIGN_PYTHON, if set
+#   2. /opt/homebrew/bin/python3
+#   3. python3 / python on PATH (the HPC container's python has PyYAML)
+#   4. the conda `moose` env python
+#
+# Usage:  ./campaign <command> [args...]
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+has_deps() { "$1" -c 'import yaml, tomllib' >/dev/null 2>&1; }
+
+pick_python() {
+  if [ -n "${CAMPAIGN_PYTHON:-}" ]; then echo "$CAMPAIGN_PYTHON"; return; fi
+  for c in /opt/homebrew/bin/python3 python3 python; do
+    if command -v "$c" >/dev/null 2>&1 && has_deps "$c"; then echo "$c"; return; fi
+  done
+  # conda `moose` env fallback. conda is often a shell function absent from a
+  # non-interactive PATH, so probe the known env paths directly.
+  base=""
+  command -v conda >/dev/null 2>&1 && base="$(conda info --base 2>/dev/null || true)"
+  for p in ${base:+"$base/envs/moose/bin/python"} \
+           "$HOME/miniforge/envs/moose/bin/python" \
+           "$HOME/miniforge3/envs/moose/bin/python" \
+           "$HOME/miniconda3/envs/moose/bin/python" \
+           "$HOME/anaconda3/envs/moose/bin/python"; do
+    if [ -x "$p" ] && has_deps "$p"; then echo "$p"; return; fi
+  done
+  echo ""
+}
+
+PY="$(pick_python)"
+if [ -z "$PY" ]; then
+  echo "campaign: no python 3.11+ with PyYAML found. Set CAMPAIGN_PYTHON=/path/to/python" >&2
+  echo "  (needs: pip install PyYAML), or activate the moose conda env." >&2
+  exit 3
+fi
+
+# -P keeps the current working directory off sys.path, so a project directory
+# that holds its own `tool` package can never shadow this one.
+exec env PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$PY" -P -m tool.cli "$@"

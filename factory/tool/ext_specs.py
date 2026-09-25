@@ -185,6 +185,36 @@ def collect(ctx: Any) -> None:
             continue
         obs["specs"] = rec
         table[feature] = rec
+    # Campaigns: `Specs/<id>` links the whole campaign directory, so
+    # campaign.md, LEDGER.md, FINDINGS.md and handoff.md open in the vault and a
+    # box ticked in campaign.md is written through to the repository file.
+    try:
+        from . import ext_campaigns
+
+        targets = list(ext_campaigns.link_targets(ctx))
+    except Exception as exc:
+        ctx.log("specs: the campaign targets raised: %s" % (exc,))
+        targets = []
+    for cid, cdir, _gdir, _grec in targets:
+        if cid in table:
+            continue
+        try:
+            status = maintain_link(ctx, cid, cdir)
+            seen.append(cid)
+        except Exception as exc:
+            ctx.log("specs: campaign %s failed: %s" % (cid, exc))
+            continue
+        table[cid] = {
+            "dir": str(cdir),
+            "files": [],
+            "reviews": [],
+            "unsafe": [],
+            "link": str(link_path(ctx, cid)),
+            "link_target": str(cdir),
+            "link_status": status,
+            "refused": None,
+            "kind": "campaign",
+        }
     ctx.meta["specs"] = table
     sweep(ctx, seen)
 

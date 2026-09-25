@@ -12,3 +12,4 @@ compile_commands.json
 *.err
 *.out
 specs/gallery/
+__pycache__/

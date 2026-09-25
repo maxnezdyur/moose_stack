@@ -27,6 +27,11 @@ Verbs, all of them through ``VERBS``:
 
 Nothing here ever calls ``claude rm``: that removes a worktree.
 
+A campaign (``tool/ext_campaigns.py``) is dispatched the same way. Its workspace
+is the project root, its lease is ``<campaign dir>/.factory-lease/``, its default
+prompt is ``/campaign <id>``, and the caps and the registry are the same. The lane
+refusals do not apply: a campaign has no lane. ``reset`` refuses a campaign.
+
 Two seams exist for the tests, and for rehearsing a launch outside the real
 worktrees. Both are opt-in and neither changes the shipped behaviour:
 
@@ -650,8 +655,18 @@ def builds_today(ctx: Any, feature: str, now: str) -> int:
     return len([t for t in (data.get("builds") or []) if (now_ts - float(t)) < 86400])
 
 
-def bg_id_for(ctx: Any, feature: str, worktree: Any, rows: List[Dict[str, Any]]) -> Tuple[Optional[str], str]:
-    """The background id to act on, and where it came from."""
+def bg_id_for(
+    ctx: Any,
+    feature: str,
+    worktree: Any,
+    rows: List[Dict[str, Any]],
+    lease_home: Any = None,
+) -> Tuple[Optional[str], str]:
+    """The background id to act on, and where it came from.
+
+    ``lease_home`` is where the lease lives when that is not the workspace: a
+    campaign's lease is in its campaign directory, its session in the project.
+    """
     if worktree:
         for row in sessions_under(rows, worktree):
             if str(row.get("kind") or "") != "interactive" and short_of(row):
@@ -659,8 +674,9 @@ def bg_id_for(ctx: Any, feature: str, worktree: Any, rows: List[Dict[str, Any]])
     reg = registry(ctx, feature)
     if reg.get("bg_id"):
         return (str(reg["bg_id"]), "the registry")
-    if worktree:
-        rec = read_lease(worktree) or {}
+    home = lease_home or worktree
+    if home:
+        rec = read_lease(home) or {}
         if rec.get("bg_id"):
             return (str(rec["bg_id"]), "the lease")
     return (None, "")
@@ -907,7 +923,8 @@ def _args(
     p.add_argument("--dry-run", action="store_true", dest="dry_run")
     p.add_argument("--offline", action="store_true")
     if prompt:
-        p.add_argument("--prompt", default=DEFAULT_PROMPT)
+        # None, not DEFAULT_PROMPT: the default depends on the kind of card.
+        p.add_argument("--prompt", default=None)
         p.add_argument("--force", action="store_true")
         p.add_argument("--no-board", action="store_true", dest="no_board")
     if yes:
@@ -918,14 +935,50 @@ def _args(
 
 
 def resolve(ctx: Any, args: Any) -> Tuple[Optional[FeatureCard], Optional[Path]]:
-    """``(card, worktree)``. ``--root`` wins, so a rehearsal never needs a card."""
+    """``(card, worktree)``. ``--root`` wins, so a rehearsal never needs a card.
+
+    A campaign resolves to its project root, the directory the session runs in.
+    """
+    card, workspace, _lease, _camp = target(ctx, args)
+    return (card, workspace)
+
+
+def campaign_of(ctx: Any, feature: str) -> Any:
+    """The campaign with this id when no feature card has it, else None."""
+    if hasattr(ctx, "card") and ctx.card(feature) is not None:
+        return None
+    try:
+        from . import ext_campaigns
+
+        return ext_campaigns.find(ctx, feature)
+    except Exception:
+        return None
+
+
+def campaign_prompt(cid: str) -> str:
+    return "/campaign %s" % (cid,)
+
+
+def target(
+    ctx: Any, args: Any
+) -> Tuple[Optional[FeatureCard], Optional[Path], Optional[Path], Any]:
+    """``(card, workspace, lease home, campaign)``.
+
+    For a feature the workspace and the lease home are both the worktree. For
+    a campaign the workspace is the project root and the lease home is the
+    campaign directory, so two campaigns in one project each hold their own.
+    """
     feature = config.validate_id(args.feature)
     card = ctx.card(feature) if hasattr(ctx, "card") else None
     if getattr(args, "root", None):
-        return (card, Path(args.root).expanduser() / feature)
+        wt = Path(args.root).expanduser() / feature
+        return (card, wt, wt, None)
     if card is not None and card.worktree:
-        return (card, Path(card.worktree))
-    return (card, None)
+        return (card, Path(card.worktree), Path(card.worktree), None)
+    camp = campaign_of(ctx, feature) if card is None else None
+    if camp is not None:
+        return (None, Path(camp.root), Path(camp.dir), camp)
+    return (card, None, None, None)
 
 
 # --------------------------------------------------------------------------
@@ -940,8 +993,13 @@ def refusals(
     rows: List[Dict[str, Any]],
     rows_ok: bool,
     args: Any,
+    campaign: Any = None,
 ) -> List[Tuple[str, str]]:
-    """Steps 3 to 6, in the plan's order. The first entry wins."""
+    """Steps 3 to 6, in the plan's order. The first entry wins.
+
+    A campaign has no lane and no branch, so the card refusals skip it; the
+    session, concurrency, per-day and disk refusals apply unchanged.
+    """
     cfg = ctx.config
     bad: List[Tuple[str, str]] = []
 
@@ -993,7 +1051,7 @@ def refusals(
                 )
             )
 
-    if not args.force:
+    if not args.force and campaign is None:
         if card is None:
             bad.append(
                 (
@@ -1063,8 +1121,10 @@ def run_start(rest: List[str], ctx: Any) -> int:
     args = _args("start", rest, prompt=True)
     cfg = ctx.config
     now = getattr(ctx, "now", "") or probe.iso()
-    card, worktree = resolve(ctx, args)
-    if worktree is None:
+    card, worktree, home, camp = target(ctx, args)
+    if not args.prompt:
+        args.prompt = campaign_prompt(args.feature) if camp is not None else DEFAULT_PROMPT
+    if worktree is None or home is None:
         err(
             "no workspace for %r. `factory start` dispatches into a worktree; pass "
             "--root PATH to rehearse elsewhere." % (args.feature,)
@@ -1081,7 +1141,7 @@ def run_start(rest: List[str], ctx: Any) -> int:
     # taking it first wrote `.factory-lease/` into a legacy checkout that a
     # refused start is not allowed to touch at all. The lease still guards the
     # launch: it is taken below, immediately before the launch itself.
-    bad = refusals(ctx, card, worktree, rows, rows_ok, args)
+    bad = refusals(ctx, card, worktree, rows, rows_ok, args, campaign=camp)
     if bad:
         name, why = bad[0]
         err("refused (%s): %s" % (name, why))
@@ -1091,13 +1151,13 @@ def run_start(rest: List[str], ctx: Any) -> int:
 
     # --- 2. the lease -----------------------------------------------------
     if dry:
-        existing = read_lease(worktree)
+        existing = read_lease(home)
         if existing:
             err(
                 "refused (lease): %s already holds %s (pid %s, %s)"
                 % (
                     existing.get("bg_id") or "a session",
-                    lease_path(worktree),
+                    lease_path(home),
                     existing.get("pid"),
                     lease_state(existing, sessions_under(rows, worktree), now),
                 )
@@ -1106,7 +1166,7 @@ def run_start(rest: List[str], ctx: Any) -> int:
         held = None
     else:
         try:
-            held = acquire(worktree, args.feature, args.prompt, now)
+            held = acquire(home, args.feature, args.prompt, now)
         except LeaseHeld as exc:
             rec = exc.record
             state = lease_state(rec, sessions_under(rows, worktree), now)
@@ -1129,7 +1189,7 @@ def run_start(rest: List[str], ctx: Any) -> int:
 
     def give_back() -> None:
         if held is not None:
-            ok, why = release(worktree, require_dead=False)
+            ok, why = release(home, require_dead=False)
             if not ok:
                 err("warning: could not release the lease I just took: %s" % (why,))
 
@@ -1137,6 +1197,8 @@ def run_start(rest: List[str], ctx: Any) -> int:
     if dry:
         out("would run, with cwd %s:" % (worktree,))
         out("  %s" % (" ".join(cmd),))
+        if home != worktree:
+            out("lease would be %s" % (lease_path(home),))
         out("lease, registry, timeline and board: all skipped (dry run)")
         return OK
 
@@ -1169,7 +1231,7 @@ def run_start(rest: List[str], ctx: Any) -> int:
     }
     record_dispatch(ctx, args.feature, record, launched_at)
     confirm_lease(
-        worktree,
+        home,
         {
             "bg_id": bg_id or None,
             "session_id": session_id or None,
@@ -1186,6 +1248,7 @@ def run_start(rest: List[str], ctx: Any) -> int:
                 "session_id": session_id or None,
                 "prompt": args.prompt,
                 "lane": card.lane if card else None,
+                "kind": "campaign" if camp is not None else "feature",
                 "via": "factory start",
                 "why": "confirmed by %s" % (how,) if how else "id not confirmed",
             },
@@ -1237,9 +1300,9 @@ def run_stop(rest: List[str], ctx: Any) -> int:
     config.hostname_guard()
     args = _args("stop", rest)
     now = getattr(ctx, "now", "") or probe.iso()
-    card, worktree = resolve(ctx, args)
+    card, worktree, home, _camp = target(ctx, args)
     rows, _ok = live_sessions(ctx)
-    bg, source = bg_id_for(ctx, args.feature, worktree, rows)
+    bg, source = bg_id_for(ctx, args.feature, worktree, rows, home)
     if not bg:
         err(
             "nothing to stop for %r: no live session, no registry entry, no lease."
@@ -1261,13 +1324,13 @@ def run_stop(rest: List[str], ctx: Any) -> int:
             args.feature,
             {"at": now, "event": "dispatch-stopped", "bg_id": bg, "via": "factory stop"},
         )
-    if worktree and lease_path(worktree).exists():
+    if home and lease_path(home).exists():
         # Give the process a moment to exit before the lease is judged.
         for _ in range(6):
-            if _pid_alive((read_lease(worktree) or {}).get("pid")) is not True:
+            if _pid_alive((read_lease(home) or {}).get("pid")) is not True:
                 break
             time.sleep(CONFIRM_POLL)
-        ok, why = release(worktree)
+        ok, why = release(home)
         if ok:
             out("lease released")
         else:
@@ -1280,10 +1343,10 @@ def run_attach(rest: List[str], ctx: Any) -> int:
     """Print the attach command and what the session is doing. Touches nothing."""
     config.hostname_guard()
     args = _args("attach", rest)
-    card, worktree = resolve(ctx, args)
+    card, worktree, home, _camp = target(ctx, args)
     rows, rows_ok = live_sessions(ctx)
     here = sessions_under(rows, worktree) if worktree else []
-    bg, source = bg_id_for(ctx, args.feature, worktree, rows)
+    bg, source = bg_id_for(ctx, args.feature, worktree, rows, home)
     if not bg:
         err(
             "no session for %r%s. Start one: `factory start %s`."
@@ -1324,9 +1387,9 @@ def run_attach(rest: List[str], ctx: Any) -> int:
 def run_logs(rest: List[str], ctx: Any) -> int:
     config.hostname_guard()
     args = _args("logs", rest)
-    card, worktree = resolve(ctx, args)
+    card, worktree, home, _camp = target(ctx, args)
     rows, _ok = live_sessions(ctx)
-    bg, source = bg_id_for(ctx, args.feature, worktree, rows)
+    bg, source = bg_id_for(ctx, args.feature, worktree, rows, home)
     if not bg:
         err("no background id for %r: nothing to read." % (args.feature,))
         return MISSING
@@ -1355,20 +1418,20 @@ def run_release(rest: List[str], ctx: Any) -> int:
     config.hostname_guard()
     args = _args("release", rest, yes=True)
     now = getattr(ctx, "now", "") or probe.iso()
-    card, worktree = resolve(ctx, args)
-    if worktree is None:
+    card, worktree, home, _camp = target(ctx, args)
+    if worktree is None or home is None:
         err("no workspace for %r" % (args.feature,))
         return MISSING
-    rec = read_lease(worktree)
+    rec = read_lease(home)
     if not rec:
-        out("no lease at %s" % (lease_path(worktree),))
+        out("no lease at %s" % (lease_path(home),))
         return OK
     rows, _ok = live_sessions(ctx)
     state = lease_state(rec, sessions_under(rows, worktree), now)
     out(
         "lease %s: bg %s, session %s, pid %s, host %s, taken %s (%s)"
         % (
-            render.tilde(lease_path(worktree)),
+            render.tilde(lease_path(home)),
             rec.get("bg_id") or "unknown",
             rec.get("session_id") or "unknown",
             rec.get("pid"),
@@ -1390,7 +1453,7 @@ def run_release(rest: List[str], ctx: Any) -> int:
     if not agreed:
         err("kept. %s" % (why or "answered no",))
         return REFUSED
-    ok, why = release(worktree)
+    ok, why = release(home)
     if not ok:
         err("refused: %s" % (why,))
         return REFUSED
@@ -1453,6 +1516,12 @@ def run_reset(rest: List[str], ctx: Any) -> int:
     config.hostname_guard()
     args = _args("reset", rest, yes=True, reason=True)
     now = getattr(ctx, "now", "") or probe.iso()
+    if not getattr(args, "root", None) and campaign_of(ctx, args.feature) is not None:
+        err(
+            "refused: %s is a campaign, and `factory reset` rewrites a feature blueprint; "
+            "a campaign has none." % (args.feature,)
+        )
+        return REFUSED
     card, worktree = resolve(ctx, args)
     if worktree is None:
         err("no workspace for %r" % (args.feature,))
