@@ -33,7 +33,9 @@ Read `diff_path` once and build a file index in `repo_root` first from `git ls-f
 
 - One issue per comment, one short matter-of-fact paragraph, written as a reviewer stating the issue. No mention of tooling, agents, models, or how the finding was produced.
 - MOOSE's convention (`framework/doc/content/framework/reviewing.md`): a must-fix reads in the imperative ("Mark this parameter `const` because ...") and carries `"kind": "required"`; an optional improvement reads "I suggest ..." or "Consider ..." and carries `"kind": "suggested"`. Minor objective fixes (typos, grammar, doc strings) are required. Every finding is one or the other.
-- A concrete drop-in fix goes in a GitHub `suggestion` fence of at most 3 lines. It replaces the target lines wholesale, so it holds the full replacement lines with their exact leading whitespace.
+- Write a drop-in fix whenever you know the replacement text. The author applies a GitHub `suggestion` fence with one click, so a fence beats a paragraph that describes the edit. A `suggested` finding carries a fence too: pair "Consider ..." or "I suggest ..." with the fence that shows the idea.
+- A `suggestion` fence holds at most 15 lines. It replaces the target lines wholesale, so it holds the full replacement lines with their exact leading whitespace, and it spans the whole range from `start_line` to `line`.
+- Omit the fence in three cases: the correct replacement is not knowable (a missing include path), the fix needs more than 15 lines, or the fix touches more than one file. Then state the change in prose.
 - A multi-line range adds `start_line` and `start_side` beside `line` and `side`. A deleted line uses `"side": "LEFT"`.
 - Rollup: when the same rule is violated more than 3 times in one file, comment inline at the first 3 sites and post one more inline comment at the 4th site listing every remaining site ("Same issue at lines 88, 104, 210."). The rollup gets no `body_findings` entry. If the 4th site is outside every hunk, fold the list into the 3rd comment. Different rules at different lines stay separate comments.
 
