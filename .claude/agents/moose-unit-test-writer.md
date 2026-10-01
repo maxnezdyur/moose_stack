@@ -1,8 +1,8 @@
 ---
 name: moose-unit-test-writer
 description: Authors gtest unit tests under <repo>/unit for moose, moose/modules/<m>, blackbear, or isopod, builds the unit binary, and runs the new suite. Spawned by moose-feature-loop for a test-plan unit of kind unit; delegate to it when the user wants a new gtest for a class or asks whether a check belongs in a unit test or a regression test.
-model: sonnet
-effort: high
+model: opus
+effort: low
 tools: Read, Grep, Glob, Edit, Write, Bash, Agent, mcp__codegraph__codegraph_explore
 skills:
   - moose-unit-test-standards

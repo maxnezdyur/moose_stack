@@ -1,8 +1,8 @@
 ---
 name: moose-test-reviewer
 description: "Reviews `tests` specs, `.i` inputs, and `gold/` files in a MOOSE diff against the moose-test-standards skill and writes its findings JSON to out_path. Spawned by the moose-pr-reviewer agent (which /moose-pr-review runs in PR mode and /moose-build runs in local mode); not invoked directly."
-model: sonnet
-effort: high
+model: opus
+effort: low
 tools: Read, Grep, Glob, Bash, Write
 skills:
   - moose-review-protocol

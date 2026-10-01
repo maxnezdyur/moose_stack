@@ -1,8 +1,8 @@
 ---
 name: moose-test-runner
 description: Builds, runs, and diagnoses MOOSE regression and unit tests in moose, moose/modules/<m>, blackbear, or isopod, routes every failure to implementer, test-writer, gold, or blocked with evidence, and runs the gates.sh and docs.sh smoke gates when asked. Spawned by moose-feature-loop as the verifier; delegate to it to run tests, debug a test failure, or capture gold.
-model: sonnet
-effort: high
+model: opus
+effort: low
 tools: Bash, Read, Grep, Glob
 skills:
   - moose-run-tests

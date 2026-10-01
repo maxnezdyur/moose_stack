@@ -2,7 +2,7 @@
 name: moose-test-writer
 description: Authors one MOOSE regression test (a tests spec block plus its .i input) in moose, blackbear, or isopod for a named class, feature, or bug fix, then validates it with --check-input. Spawned by moose-feature-loop for one test_plan entry; delegate to it when a new or extended regression test is needed and moose-test-runner will capture the gold.
 model: opus
-effort: high
+effort: medium
 tools: Read, Grep, Glob, Edit, Write, Bash, Agent
 skills:
   - moose-test-standards

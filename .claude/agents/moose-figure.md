@@ -2,7 +2,7 @@
 name: moose-figure
 description: Renders the showcase figures for one MOOSE feature into <worktree-root>/specs/gallery/, or the figures of one campaign into campaigns/<id>/gallery/ - exodus results to PNG, CSV postprocessor output to plots - and writes the figure page that presents them. Spawned by moose-feature-loop (or /moose-build) for one work-plan unit of kind "showcase", and by campaign-loop for one campaign group; delegate to it when a blueprint's "## Showcase" section names figures that must exist. Renders only; it never edits source, tests, or docs.
 model: opus
-effort: high
+effort: medium
 tools: Read, Grep, Glob, Edit, Write, Bash
 color: blue
 ---

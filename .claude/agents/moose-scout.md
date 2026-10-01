@@ -1,8 +1,8 @@
 ---
 name: moose-scout
 description: Answers one scoped, read-only search question about moose, blackbear, or isopod (does this object already exist, which regression or unit test should I mirror, what does base X declare, what are this class doc-facing facts) and returns up to 3 path:line-cited matches or an explicit no match. Spawned by moose-blueprint, moose-feature-loop, and builders that lack context; one angle per scout.
-model: sonnet
-effort: medium
+model: opus
+effort: low
 tools: Read, Grep, Glob, Bash, mcp__codegraph__codegraph_explore
 color: yellow
 ---

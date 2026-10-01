@@ -1,8 +1,8 @@
 ---
 name: moose-dry-reviewer
 description: Reviews the new C++ files and newly registered objects of one moose diff for code that duplicates what the framework, the modules, or the diff itself already provides and writes its findings as JSON to out_path. Dry-bucket reviewer spawned by the moose-pr-reviewer agent (from /moose-pr-review in PR mode and /moose-build in local mode) only when the diff adds code files or registers objects; not invoked directly.
-model: sonnet
-effort: high
+model: opus
+effort: low
 tools: Read, Grep, Glob, Bash, Write, mcp__codegraph__codegraph_explore
 skills:
   - moose-review-protocol

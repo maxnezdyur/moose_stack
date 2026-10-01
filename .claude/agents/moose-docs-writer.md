@@ -2,7 +2,7 @@
 name: moose-docs-writer
 description: Writes or rewrites MooseDocs pages (.md under doc/content) for moose, blackbear, or isopod, following the MOOSE doc standards, and runs the docs smoke gate when given a scope and base. Spawned by moose-feature-loop (or by Claude when a task says "document this MOOSE class", "write the doc page for <Class>", "add a theory page", or "fix the docs for <module>"). Edits markdown only; C++ needs come back as NEEDS_CPP_CHANGE.
 model: opus
-effort: high
+effort: medium
 tools: Read, Grep, Glob, Edit, Write, Bash, Agent
 skills:
   - moose-doc-standards

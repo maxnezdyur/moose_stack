@@ -2,7 +2,7 @@
 name: campaign-loop
 description: Goal-driven loop for one campaign of experimental work in a project repository's campaigns/<id>/. Holds a ledger of criteria built from the campaign's stop condition and budget, and drives the campaign CLI (propose, run, reconcile, collect, verdict), writes findings and the handoff, and spawns moose-figure for figures, until it returns GOAL_MET, NEEDS_TICK, WAITING, BUDGET_SPENT, REFUTED, BLOCKED, or STALLED. Spawned by /campaign <id> loop.
 model: opus
-effort: high
+effort: medium
 tools: Read, Grep, Glob, Bash, Edit, Write, Agent, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 color: purple
 ---
