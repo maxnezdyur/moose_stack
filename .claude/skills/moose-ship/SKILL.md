@@ -39,7 +39,7 @@ git -C <worktree> commit -m "Bump <sub> to <short sha>"
 
 ## Fix-ups after the PR exists
 
-A change to the PR while it is a draft or under review (a CIVET failure, a review comment, a loosened tolerance) is amended into the existing commit and pushed with `git push --force-with-lease`, never added as a second commit, and carries no code comment explaining the fix; the PR conversation is where that goes. The meta-repo pointer bump is redone the same way.
+A change to the PR while it is a draft or under review (a CIVET failure, a review comment, a loosened tolerance) is amended into the existing commit and pushed with `git push --force-with-lease`, never added as a second commit, and carries no code comment explaining the fix; the PR conversation is where that goes. The meta-repo pointer bump is redone the same way. A CIVET failure is triaged with the `civet-ci-failures` skill before any amend: a job that also fails on other authors' PRs is CIVET's environment, not the branch, and gets no code change and no push.
 
 ## Report
 

@@ -148,4 +148,5 @@ Read the named file before acting on a failure.
 | `FAIL` with any other reason (`EXIT CODE N != 0`, `ERRMSG`, `EXPECTED ERROR/ASSERT/OUTPUT MISSING`, `OUTPUT NOT ABSENT`, `Application not found`, `MEMORY ERROR`) | `references/failure-diagnosis.md` |
 | `TIMEOUT`; `RACE`; passes `-j 1` and fails `-p 2`; `ERROR: UNKNOWN/INVALID CAPABILITIES`; fails only under `--dbg`, `--recover`, or `--valgrind`; a regression you caused (skip versus revert) | `references/failure-diagnosis.md` |
 | `SKIP` with a `[bracket]` caveat | Skip-caveat decoder above |
+| A PR is red on CIVET and the cause is not yet known | the `civet-ci-failures` skill, before anything here |
 | Green locally, red on CIVET; the exact CI invocation or per-test timings; stepping through the app in gdb or lldb | `references/ci-and-debugging.md` |

@@ -97,6 +97,7 @@ NON_DURABLE_LANES = frozenset({BUILDING})
 
 FLAGS: Tuple[str, ...] = (
     "ci-red",
+    "ci-infra",
     "ci-pending",
     "conflicting",
     "changes-requested",
@@ -126,6 +127,7 @@ FLAG_SET = frozenset(FLAGS)
 # One line each, printed by `factory status` and in the note.
 FLAG_WHY: Dict[str, str] = {
     "ci-red": "a CIVET context reported FAILURE or ERROR on the current head",
+    "ci-infra": "every failed CIVET job also fails on other authors' pull requests, so the red is not this branch",
     "ci-pending": "a CIVET context is still PENDING or EXPECTED",
     "conflicting": "GitHub says the PR cannot merge; nothing else can land",
     "changes-requested": "a reviewer asked for changes",
@@ -299,6 +301,8 @@ class FeatureCard:
         for i, name in enumerate(NEEDS_YOU_PRIORITY):
             if name not in reasons:
                 continue
+            if name == "ci-red" and "ci-infra" in reasons:
+                continue  # the red is CIVET's environment, not a reason to act
             slot = 2 * i
             if name in self.REMOTE_ONLY_CI and not self.worktree:
                 slot = floor - 1

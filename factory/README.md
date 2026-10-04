@@ -35,6 +35,7 @@ factory/
   tool/ext_handoff.py    rescue specs/handoff.md into Artifacts/; the ## Handoff card section; handoff-stale
   tool/ext_gallery.py    the specs/gallery/ listing, the Gallery/<feature> symlink, the ## Gallery card section
   tool/ext_teardown.py   teardown and archive, plus the reclaimable-bytes number
+  tool/ext_civet.py      CIVET triage: `ci-infra`, the `ci` verb, the note's CIVET triage section
   tool/ext_tick.py       the loop's policy: change gate, notifier, tick-status, doctor checks
   install.sh             install or remove the launchd agent; --status, --uninstall
   moose-factory-tick.sh  the 120 s tick, installed to ~/.local/bin/
@@ -67,6 +68,7 @@ factory/
 | `archive <feature>` | `git mv` the note into `Archive/` once the worktree and the PR are gone | the vault |
 | `refresh-pipeline <feature>` | diff the canonical `.claude` against a worktree's frozen copy | a worktree, on `--confirm` |
 | `campaigns [<id>]` | the campaigns under `campaign_roots`: status, posture, runs, budget, next move | nothing |
+| `ci <feature> [--refresh]` | the CIVET triage of the card's red pull requests: the branch, or CIVET's environment | `state/civet-triage.json` with `--refresh` |
 | `tick-status` | what the 120 s loop looks like right now | nothing |
 
 Every verb that writes accepts `--dry-run`.
@@ -280,7 +282,7 @@ commit sha) applies at once.
 A flag can never move a lane. CIVET colour, review decision and mergeability are flags
 *because* they oscillate.
 
-`ci-red`, `ci-pending`, `conflicting`, `changes-requested`, `review-findings`, `blocked`,
+`ci-red`, `ci-infra`, `ci-pending`, `conflicting`, `changes-requested`, `review-findings`, `blocked`,
 `stalled`, `build-stale`, `invalid-blueprint`, `view-stale`, `stale-pipeline`,
 `pr-closed-unmerged`, `branch-mismatch`, `foreign-worktree`, `partial-ship`, `two-sessions`,
 `handoff-stale`,
@@ -290,6 +292,20 @@ A flag can never move a lane. CIVET colour, review decision and mergeability are
 lazily and returns UNKNOWN on every merged or closed PR. The probe re-polls once, then records
 `mergeable_unknown`, and the note says "not yet computed". Never set `conflicting` from it.
 
+A red rollup is not always the branch's. `tool/ext_civet.py` runs `scripts/civet_triage.py` on
+every open pull request that is red on its current head. The script compares each failed job with
+the same job on the 20 most recently updated open pull requests and on the `next` and `devel` tips.
+A job is `widespread` when at least two other authors' heads fail it, and at least half of the
+heads that ran it since the first failure. When every failed job on every red pull request of a
+card is widespread, the verdict is `infra` and the card gets `ci-infra` beside `ci-red`. Such a
+card is waiting, not needs-you, and its next move is `wait-ci`: CIVET's environment broke, and
+there is nothing to fix in the branch. Any other verdict keeps `fix-ci`, and the why names only
+the jobs that are the branch's own. `factory ci <feature>` prints the per-job evidence, and
+`--refresh` measures it again. A verdict is cached in `state/civet-triage.json` for 30 minutes per
+head sha. A cold round is bounded at 45 s; a pull request past the bound keeps its last verdict.
+The triage reads commit statuses only, because `civet.inl.gov` answers 403 off the INL network.
+The `civet-ci-failures` skill is the procedure for a `fix-ci` card.
+
 A rollup proves nothing about a head it was not computed for. Every repo state carries its
 current sha, and a rollup whose `headRefOid` differs is discarded: no colour, no `conflicting`,
 and one line in the note that says so.
@@ -298,10 +314,10 @@ and one line in the note that says so.
 
 | posture | rule |
 |---|---|
-| needs-you | a gate that is due now, or `review-findings`, `changes-requested`, `ci-red` or `conflicting` on an open PR, or `blocked`, `branch-mismatch`, `foreign-worktree`, `partial-ship`, `invalid-blueprint`, `marker-missing` |
+| needs-you | a gate that is due now, or `review-findings`, `changes-requested`, `ci-red` without `ci-infra`, or `conflicting` on an open PR, or `blocked`, `branch-mismatch`, `foreign-worktree`, `partial-ship`, `invalid-blueprint`, `marker-missing` |
 | running | a live session, or lane `building` with a fresh pulse |
 | ready | lane `built` with no findings and `ship` pending; or lane `approved` with the gate granted and nothing dispatched |
-| waiting | an open PR with green or pending CI and no requested changes |
+| waiting | an open PR with green or pending CI, or a red that is `ci-infra`, and no requested changes |
 | parked | everything else below `shipped`, plus `stalled`. A `scaffolded` workspace is parked only after `park_idle_days` of silence |
 | done | `merged`, `archived`, `abandoned`, `closed-unmerged` |
 

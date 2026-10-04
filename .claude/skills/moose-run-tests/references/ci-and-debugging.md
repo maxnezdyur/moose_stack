@@ -15,6 +15,13 @@ permutations a local run does not.
 CIVET to MooseDocs integration: `moose/python/MooseDocs/extensions/civet.py`,
 `moose/python/mooseutils/civet_results.py`, `moose/python/TestHarness/resultsstore/civetstore.py`.
 
+## A red CIVET run on a PR
+
+Load the `civet-ci-failures` skill. It decides first whether each failed job is the branch's or
+CIVET's own environment (`scripts/civet_triage.py`), then reads the failing tests and build errors
+from the job logs (`scripts/civet_ci_failures.py`). The table below applies only after a job is
+shown to be the branch's.
+
 ## CIVET-only failures (passes locally, fails CI)
 
 | Likely cause | Reproduce locally |

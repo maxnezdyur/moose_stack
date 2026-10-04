@@ -129,12 +129,19 @@ def flags_of(obs: Dict[str, Any], cfg: config.Config, now_ts: float, lane: str) 
 
     prs = obs.get("prs") or []
     openp = [p for p in prs if (p.get("state") or "").upper() == "OPEN"]
+    red = infra = 0
     for pr in openp:
         fresh_rollup = rollup_applies(pr, obs)
         ci = pr.get("ci")
         if fresh_rollup:
             if ci == "red":
                 add("ci-red")
+                red += 1
+                # ext_civet.collect attaches the verdict. `infra` means every
+                # failed job also fails on other authors' heads.
+                triage = pr.get("triage")
+                if isinstance(triage, dict) and triage.get("verdict") == "infra":
+                    infra += 1
             elif ci == "pending":
                 add("ci-pending")
             # UNKNOWN is unknown: not clean and not conflicting.
@@ -142,6 +149,9 @@ def flags_of(obs: Dict[str, Any], cfg: config.Config, now_ts: float, lane: str) 
                 add("conflicting")
         if pr.get("reviewDecision") == "CHANGES_REQUESTED":
             add("changes-requested")
+    # One red pull request that is the branch's own keeps the card his.
+    if red and infra == red:
+        add("ci-infra")
 
     # A PR closed without merging is a decision, not an absence. Without a flag
     # the clamp releases to scaffolded and the board says "plan it", about work
@@ -518,7 +528,9 @@ def posture_of(
     for flag in NEEDS_YOU_FLAGS:
         if card.has(flag):
             return NEEDS_YOU
-    if openp and (card.has("ci-red") or card.has("conflicting")):
+    # A red that is CIVET's own environment is nothing he can fix: it waits.
+    own_red = card.has("ci-red") and not card.has("ci-infra")
+    if openp and (own_red or card.has("conflicting")):
         return NEEDS_YOU
 
     if card.session:
@@ -655,10 +667,43 @@ def next_action(card: FeatureCard, cfg: config.Config) -> NextAction:
             also = ", and %s carries work no PR covers" % (
                 ", ".join(unshipped) or "another repo",
             )
+        triage = pr.get("triage") if isinstance(pr.get("triage"), dict) else {}
+        jobs = [j for j in (triage.get("jobs") or []) if isinstance(j, dict)]
+        if card.has("ci-infra"):
+            names = [str(j.get("context")) for j in jobs]
+            return NextAction(
+                "wait-ci",
+                "%s ci %s" % (_factory(cfg), card.id),
+                "%s is red on %s, which also fail%s on other authors' pull requests: CIVET's "
+                "environment, not this branch. Change nothing and re-run when it recovers%s"
+                % (
+                    _pr_label(pr),
+                    ", ".join(names[:4]) + (", and %d more" % (len(names) - 4,) if len(names) > 4 else ""),
+                    "s" if len(names) == 1 else "",
+                    also,
+                ),
+            )
+        verdict = ""
+        if jobs:
+            # Name the jobs that are his, not the ones every pull request fails.
+            own = [str(j.get("context")) for j in jobs if j.get("verdict") != "widespread"]
+            shared = len(jobs) - len(own)
+            shown = ", ".join(own[:4]) + (", and %d more" % (len(own) - 4,) if len(own) > 4 else "")
+            verdict = "; triage says %s%s" % (
+                triage.get("verdict"),
+                (", and %d more job%s fail%s on everyone's pull requests"
+                 % (shared, "" if shared == 1 else "s", "s" if shared == 1 else ""))
+                if shared else "",
+            )
         return NextAction(
             "fix-ci",
-            "gh pr checks %s --repo %s" % (pr.get("number"), slug),
-            "%s is red%s%s" % (_pr_label(pr), (" (%s)" % shown) if shown else "", also),
+            "python3 %s --repo %s --pr %s --errors"
+            % (
+                config.display_path(cfg.repo_root / "scripts" / "civet_triage.py"),
+                slug,
+                pr.get("number"),
+            ),
+            "%s is red%s%s%s" % (_pr_label(pr), (" (%s)" % shown) if shown else "", verdict, also),
         )
     if card.has("changes-requested") and pr:
         return NextAction(
