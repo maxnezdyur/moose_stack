@@ -822,14 +822,20 @@ def next_action(card: FeatureCard, cfg: config.Config) -> NextAction:
     if card.lane == SCAFFOLDED:
         return NextAction(
             "blueprint",
-            "cd %s && claude \"/moose-blueprint\"" % (wt,),
-            "a worktree with no blueprint. Plan it, or tear it down.",
+            "cd %s && claude \"/moose-blueprint <idea>\"" % (wt,),
+            "a worktree with no blueprint. Plan it at the terminal, or unattended: "
+            "%s start %s --prompt \"/moose-blueprint --unattended <idea>\". Or tear it down."
+            % (_factory(cfg), card.id),
         )
     if card.lane == BLUEPRINT_DRAFT:
+        bp = card.blueprint or {}
+        page = os.path.join(os.path.dirname(bp.get("path") or os.path.join(wt, "specs", "x")), "blueprint.html")
         return NextAction(
             "approve",
-            "code %s" % ((card.blueprint or {}).get("path") or wt,),
-            "a draft blueprint. Read it, tick the clarifications, set status: approved.",
+            "open %s" % (page,),
+            "a draft blueprint with %s open decision%s. Answer on the page, press Respond, "
+            "paste into /moose-blueprint in the worktree; it ticks the boxes and sets status: approved."
+            % (bp.get("unticked") or 0, "" if bp.get("unticked") == 1 else "s"),
         )
     if card.lane == APPROVED:
         return NextAction(

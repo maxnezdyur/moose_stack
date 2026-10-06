@@ -55,7 +55,7 @@ Spawn one `moose-feature-loop` (Agent, background) with the blueprint path, `cap
 frontmatter `status:` to `building`; tell the user the goal and the criteria in a few lines, then let it run.
 The loop posts a one-line SendMessage at each round boundary: on each one edit the matching unit's `"status"`
 in the fenced JSON (`idle`, `running`, `done`, `failed`), and edit the `gates` entries from your own gate runs.
-Edit nothing else in the file; saving re-renders `blueprint.html` through the hook. Reconcile every status at
+Edit nothing else in the file; the human's view is `blueprint.html`, packed from `blueprint-page.html`, and a status edit to the markdown does not change it. Reconcile every status at
 the end and set the frontmatter `status:` to `built` on success.
 
 On `GOAL_MET`, run Gate B: `bash <meta-root>/.claude/skills/moose-build/scripts/gates.sh <repo> all --base

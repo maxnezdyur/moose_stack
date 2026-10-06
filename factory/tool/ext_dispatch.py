@@ -70,6 +70,14 @@ OK, LOOK, REFUSED, MISSING = 0, 1, 2, 3
 LEASE_DIR = ".factory-lease"
 LEASE_FILE = "lease.json"
 DEFAULT_PROMPT = "/moose-build"
+PLANNING_PROMPT = "/moose-blueprint"
+
+
+def is_planning_prompt(prompt: Optional[str]) -> bool:
+    """A ``/moose-blueprint`` session plans; it edits ``specs/`` only and runs
+    before the lane is approved, so the lane refusal does not apply to it. The
+    skill itself runs unattended under a lease, with or without the flag."""
+    return bool(prompt) and prompt.strip().split(None, 1)[0] == PLANNING_PROMPT
 
 LAUNCH_TIMEOUT = 180          # seconds: `claude --bg` prints and returns at once
 STOP_TIMEOUT = 60
@@ -1060,12 +1068,13 @@ def refusals(
                     "or pass --force to dispatch anyway." % (args.feature,),
                 )
             )
-        elif rank(card.lane) < rank(APPROVED):
+        elif rank(card.lane) < rank(APPROVED) and not is_planning_prompt(args.prompt):
             bad.append(
                 (
                     "lane",
                     "lane is %s, below approved. Approve the blueprint first, or "
-                    "pass --force." % (card.lane,),
+                    "pass --force. A planning session needs no approval: "
+                    "--prompt \"/moose-blueprint --unattended <idea>\"." % (card.lane,),
                 )
             )
 

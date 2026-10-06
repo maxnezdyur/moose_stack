@@ -1,7 +1,7 @@
 ---
 name: moose-grill
-description: Grills a planned MOOSE C++ change against the real class hierarchy before code exists. Picks the base class with codegraph, confirms overrides, validParams shape, and coupling with the user, captures the math verbatim, and prints a plan. Use for "/moose-grill <plan>", "which base class should this derive from", "grill my kernel plan", or as the grill phase of /moose-blueprint.
-argument-hint: "<planned C++ work>"
+description: Grills a planned MOOSE C++ change against the real class hierarchy before code exists. Picks the base class with codegraph, confirms overrides, validParams shape, and coupling with the user, captures the math verbatim, and prints a plan. With --unattended it asks nothing, settles every fork itself and lists the decisions taken. Use for "/moose-grill <plan>", "which base class should this derive from", "grill my kernel plan", or as the grill phase of /moose-blueprint.
+argument-hint: "[--unattended] <planned C++ work>"
 ---
 
 # /moose-grill
@@ -9,6 +9,10 @@ argument-hint: "<planned C++ work>"
 Stress-test a MOOSE C++ plan against the class hierarchy in this checkout, explored live with codegraph rather than remembered. The output is a printed plan with a confirmed base class, contract, coupling, and math that `/moose-blueprint` folds into `specs/blueprint.html`; a standalone run copies the plan wherever it is needed. This skill prints only. It writes no files and no code, and reading the codebase is its only source interaction.
 
 The plan is `$ARGUMENTS`. When it is empty, ask "What MOOSE C++ work are you planning?" with `AskUserQuestion` first.
+
+When `$ARGUMENTS` starts with `--unattended`, the rest is the plan and the grill asks nothing (the
+"Unattended" section below). `/moose-blueprint` calls it this way when it runs as a background
+session with nobody at the terminal, and without the flag when the user is there to grill.
 
 ## Rounds
 
@@ -27,6 +31,22 @@ Contract. Read the base plus one representative subclass with `codegraph node <C
 Coupling and pitfalls. Load the `moose-code-standards` skill for this round. Settle what the class consumes (variables, material properties, functors) and produces. For a dual-flavor object ask which shape applies: one `is_ad`-templated class (the default), a separate pair, AD-only, or dropped-in-AD (that skill's "AD and non-AD variants" section). Ask which object names, indices, or physical assumptions the design would hardcode; each becomes a typed name parameter or a documented assumption (its "Input parameters" section). Raise the base-class pitfalls the standards skill does not cover, such as `usingMooseObjectMembers` in templated bases, member initialization order, and `_qp` indexing, as "does this apply, and how does the plan avoid it?"; skip only the ones that clearly do not apply.
 
 Math. Ask once: "Write the residual or contribution form in plain math or LaTeX; what does `computeQpResidual` (or the equivalent override) return?" Push back on hand-waving, because vague math becomes vague code. Codegraph shows structure, not whether the physics is right: the user owns the math, and it goes into the plan verbatim and unvalidated.
+
+## Unattended
+
+The same rounds, with the user's chair empty. Each question that a round would have asked is
+settled by you, from the codebase: pick the answer the evidence supports, the one that would have
+been the recommended first option. Record it as a decision with the alternatives you rejected and
+the evidence for the pick, as `file:line` where there is one. The math round has no user to push
+back on: take the residual form from the plan text when it gives one, else write the form the base
+class and the reference subclass imply, mark it `assumed`, and make it a decision. Spawn the same
+scouts; wait for the ones a decision depends on.
+
+Settle, do not hedge: a fork left open is useless to a blueprint written without a human. A fork
+with no evidence either way is still settled, by the simpler option, and its decision line says
+`no evidence; simpler`. The whole list goes to `/moose-blueprint`, which turns each line into one
+question on the review page with your pick as the default, so the user sees every fork and changes
+only the ones they disagree with.
 
 ## Output
 
@@ -60,4 +80,11 @@ When every round is settled, print this plan to the terminal with these headings
 ### Predicted files to touch
 - <repo>/include/<area>/<NewClass>.h
 - <repo>/src/<area>/<NewClass>.C
+
+### Decisions taken
+- <question, 15 words at most> -- chose: <answer>; alternatives: <a>, <b>; because: <evidence, file:line>
 ```
+
+`### Decisions taken` appears only in an unattended run: one line per fork settled without the
+user, in the order the rounds met them. An interactive run has no such section, because the user
+answered each fork as it came.

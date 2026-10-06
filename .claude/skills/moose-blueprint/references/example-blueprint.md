@@ -202,6 +202,13 @@ Needed: yes. Pages: `framework/doc/content/source/problems/ArcLengthProblem.md`,
 `.../vectorpostprocessors/ArcLengthHistory.md`, `.../postprocessors/ArcLengthLoadParameter.md`.
 Existing coverage: none.
 
+## Showcase
+
+Example: `moose/test/tests/problems/arc_length/arch.i`
+
+- `arch_path.png`: $\lambda$ against apex displacement through the limit point; proves the path is traced past it.
+- `load_control_vs_arc.png`: the same arch under load stepping, diverging where the arc continues; proves the comparison against the method replaced.
+
 ## Out of scope
 
 - Per-timestep continuation ("Mode B", $\lambda: 0 \to 1$ within each real time step). Future work.
@@ -216,8 +223,9 @@ Existing coverage: none.
 
 ## Needs clarification
 
-- [x] Is `Q` the full end-of-step load or the $\lambda$-scaled load? Full load; PETSc scales (`al.c:267-276`).
-- [x] Does `correction_type` default to `exact` or `normal`? `exact` (`al.c:708`; the header comment is wrong).
+- [x] Q1 · Which load does the callback vector `Q` carry? — The full end-of-step load; PETSc scales it (`al.c:267-276`).
+- [x] Q2 · What is the default for `correction_type`? — `exact` (`al.c:708`; the header comment is wrong).
+- [x] Q3 · Which figures must the showcase render? — `arch_path.png` and `load_control_vs_arc.png`; the Bratu fold was not wanted.
 
 ## Work plan
 
@@ -255,7 +263,10 @@ Existing coverage: none.
       "test": "bratu_source" },
     { "id": "T6", "kind": "test", "agent": "moose-test-writer", "deps": ["T2"], "status": "idle",
       "test": "double_tag_error", "notes": "Same-file edge with T2." },
-    { "id": "D1", "kind": "doc", "agent": "moose-docs-writer", "deps": [], "status": "idle" }
+    { "id": "D1", "kind": "doc", "agent": "moose-docs-writer", "deps": [], "status": "idle" },
+    { "id": "S1", "kind": "showcase", "agent": "moose-figure", "deps": ["U1", "U2", "U3", "U4"], "status": "idle",
+      "example": "moose/test/tests/problems/arc_length/arch.i",
+      "files": ["specs/gallery/arch_path.png", "specs/gallery/load_control_vs_arc.png"] }
   ],
   "gates": {
     "A1": { "criterion": "C1", "status": "done" },
@@ -272,3 +283,4 @@ Existing coverage: none.
 
 - 2026-08-24: created from `/moose-blueprint`.
 - 2026-09-12: converted to the markdown format as the reference example.
+- 2026-10-06: clarification ids and the showcase added to match `example-blueprint-page.html`.

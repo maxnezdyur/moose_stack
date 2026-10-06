@@ -1,13 +1,17 @@
 # blueprint.md format
 
-The blueprint is one markdown file, `<worktree-root>/specs/blueprint.md`. It is the source of
-truth: agents read it whole (about 15 KB), the user edits it by hand, and `/moose-build` updates
-the status fields in its JSON block. `specs/blueprint.html` is a generated view: the
-`render-blueprint.sh` hook runs pandoc with `blueprint.template.html` and `workplan.html` from
-this directory whenever `blueprint.md` is written (MathML for equations, so the page is
-self-contained and renders in Safari). Never edit the HTML. `example-blueprint.md` here is a
-complete, real blueprint for a large framework feature; write yours in the same shape, at the length
-your feature needs (a one-class feature is a fraction of it).
+The blueprint is one markdown file, `<worktree-root>/specs/blueprint.md`. It is the contract:
+agents read it whole (about 15 KB), the factory reads its frontmatter, its work-plan JSON and its
+unticked clarification boxes, and `/moose-build` updates the status fields in its JSON block. The
+human reads `specs/blueprint.html` instead: the packed copy of the hand-written review page
+`specs/blueprint-page.html` (format: `page-format.md`), which the `render-blueprint.sh` hook packs
+on every save of the page source. Never edit the packed HTML. `example-blueprint.md` here is a
+complete, real blueprint for a large framework feature and `example-blueprint-page.html` is its
+page; write yours in the same shape, at the length your feature needs (a one-class feature is a
+fraction of it).
+
+A worktree with a `blueprint.md` and no `blueprint-page.html` beside it gets the legacy pandoc
+render of the markdown from the same hook (`blueprint.template.html`, `workplan.html`).
 
 ## Frontmatter
 
@@ -23,7 +27,8 @@ created: YYYY-MM-DD
 ---
 ```
 
-`status: approved` is legal only when every box under `## Needs clarification` is checked.
+`status: approved` is legal only when every box under `## Needs clarification` is checked. The
+user's answers from the page, applied by `/moose-blueprint` in Respond mode, are what ticks them.
 
 ## Sections, in this order, with these exact `##` headings
 
@@ -36,7 +41,7 @@ created: YYYY-MM-DD
 | `## Doc plan` | `Needed: yes` or `Needed: no`; the page paths; `Existing coverage:` every page already documenting the feature and the placement the user chose |
 | `## Showcase` | optional; omit the heading entirely when the feature needs no figure. `Example:` the input to build, as a `code` path; then one bullet per figure, `<file>: <what it shows and which claim it proves>`, the file named exactly as it will land in `specs/gallery/` and spelled so the projector can link it (see below) |
 | `## Out of scope` | explicit non-goals, one bullet each |
-| `## Needs clarification` | `- [ ]` per open question from the grill; when answered, tick it and append the answer |
+| `## Needs clarification` | one `- [ ] Qn · <question> — proposed: **<answer>**` per decision, `Q1`, `Q2`, … in the order the page asks them; the same `Qn` is the `doc-ask id` on the page and the proposed answer is its `checked` option. An answer from the page ticks the box and replaces `proposed:` with the answer: `- [x] Qn · <question> — <answer>` |
 | `## Work plan` | exactly one fenced `json` block, below |
 | `## Amendments` | append-only dated log |
 
@@ -112,5 +117,7 @@ none a placeholder, with `## Showcase` present only when the feature has figures
 no cycle; edge-free units list disjoint files; each `test` unit names a `###` test heading and
 each `implement` unit a `###` physics subsection; each `showcase` unit's `files` match the
 `## Showcase` bullets one for one; every `Requirement:` line is one sentence; and
-`status: approved` only with every clarification box ticked. When pandoc is installed the hook
-has written `specs/blueprint.html`; when it is not, say so (the markdown is still the blueprint).
+`status: approved` only with every clarification box ticked; and every `Qn` here has a `doc-ask`
+with the same id on the page and the same proposed answer `checked`. The hook has packed
+`specs/blueprint.html` from the page (node is required; pandoc only for `doc-math`); when it has
+not, run `pack-blueprint.py` by hand and fix what it reports.

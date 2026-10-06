@@ -1,7 +1,7 @@
 """The specs link: the blueprint, the handoff and the reviews, readable from the vault.
 
 ``<worktree>/specs/`` is where a session leaves what a human reads: ``blueprint.md``
-and its rendered ``blueprint.html``, ``handoff.md``, and one ``review-<label>.md``
+and its review page ``blueprint.html``, ``handoff.md``, and one ``review-<label>.md``
 per clean-context review. ``ext_gallery`` links one subdirectory of it. This module
 links the directory itself as ``<vault>/Specs/<feature>``, a **symlink**, so the
 blueprint opens in Obsidian without opening the workspace. Obsidian writes through
