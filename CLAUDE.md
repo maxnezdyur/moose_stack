@@ -33,6 +33,8 @@ A git-oriented skill (`branch-diff`, `commit`) targets the submodule I am workin
 
 Feature work happens in `~/projects/moose-worktrees/<feature>/`, a full copy of this layout that `/new-feature` creates. Skills and scripts run inside the worktree they are invoked from.
 
+Agent frontmatter sets each agent's model. Do not pass model or effort when you spawn a project agent, except model opus to escalate.
+
 ## Environment
 
 Check `hostname` before any env, build, or test command:

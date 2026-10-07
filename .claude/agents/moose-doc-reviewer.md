@@ -1,12 +1,13 @@
 ---
 name: moose-doc-reviewer
 description: Reviews the markdown files of one moose diff against the MOOSE documentation standards plus prose clarity and referenced-file existence, and writes its findings as JSON to out_path. Doc-bucket reviewer spawned by the moose-pr-reviewer agent (from /moose-pr-review in PR mode and /moose-build in local mode); not invoked directly.
-model: opus
-effort: low
+model: haiku
+effort: high
 tools: Read, Grep, Glob, Bash, Write
 skills:
   - moose-review-protocol
   - moose-doc-standards
+  - haiku-discipline
 color: blue
 ---
 

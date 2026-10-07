@@ -1,11 +1,12 @@
 ---
 name: moose-completeness-reviewer
 description: Reviews the newly registered objects of one moose diff for what should exist and does not (doc stub, addClassDescription, any test) plus linked-issue deliverables the diff never delivers, and writes findings JSON to out_path. Completeness-bucket reviewer spawned by the moose-pr-reviewer agent (from /moose-pr-review in PR mode and /moose-build in local mode); not invoked directly.
-model: opus
-effort: low
+model: haiku
+effort: high
 tools: Read, Grep, Glob, Bash, Write
 skills:
   - moose-review-protocol
+  - haiku-discipline
 color: yellow
 ---
 

@@ -1,12 +1,13 @@
 ---
 name: moose-test-reviewer
 description: "Reviews `tests` specs, `.i` inputs, and `gold/` files in a MOOSE diff against the moose-test-standards skill and writes its findings JSON to out_path. Spawned by the moose-pr-reviewer agent (which /moose-pr-review runs in PR mode and /moose-build runs in local mode); not invoked directly."
-model: opus
-effort: low
+model: haiku
+effort: high
 tools: Read, Grep, Glob, Bash, Write
 skills:
   - moose-review-protocol
   - moose-test-standards
+  - haiku-discipline
 color: green
 ---
 
@@ -39,7 +40,8 @@ review-only rules:
   inputs under `examples/` and `tutorials/` are meant to be realistic.
 - Gold is checked strictly in both directions against the working tree, not the basename index:
   every gold file the diff adds or modifies is referenced by its spec, and every gold a spec
-  names exists in the diff or the working tree.
+  names exists in the diff or the working tree. Do not Read a gold file: check it against its spec
+  and give it a ledger row from the diff hunks only.
 - A missing `requirement`, `design`, or `issues` anchors on the leaf's block-opener line; a
   missing gold has no line and is a body finding.
 
