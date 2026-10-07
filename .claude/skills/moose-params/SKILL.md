@@ -1,6 +1,6 @@
 ---
 name: moose-params
-description: Looks up the registered parameters of exact MOOSE object type names (e.g. ADDirichletBC) by booting a built app binary, so the answer matches the current checkout. Use for "what params does X take", "params for X", "dump X", or /moose-params <Type>... [--param <name> | --full]. Needs a built app and takes 15-30 s. Does not choose objects; find candidates with codegraph_explore.
+description: Looks up the registered parameters of exact MOOSE object type names (e.g. ADDirichletBC) by booting a built app binary, so the answer matches the current checkout. Use for "what params does X take", "params for X", "dump X", or /moose-params <Type>... [--param <name> | --full]. Needs a built app and takes 15-30 s. Does not choose objects; find candidates with grep or a moose-scout.
 argument-hint: "<TypeName>... [--param <name> | --full]"
 ---
 

@@ -26,7 +26,7 @@ registered, and every parameter it lists as required must be supplied. Parameter
 invented. A type `moose-params` reports as `NO_NODE` is not real; pick another or BLOCK. Look up
 a single parameter (`--param`) only when its cpp_type or default drives a decision. Mirror block
 layout from existing inputs under `*/test/tests/**/*.i` and module test dirs; use
-`codegraph_explore "<TypeName>"` to learn what an object does or to choose between candidates.
+read the object's `addClassDescription` and its doc page under `doc/content/source/` to learn what it does or to choose between candidates.
 
 ## Interview (create mode)
 
