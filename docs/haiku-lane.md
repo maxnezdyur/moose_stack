@@ -1,5 +1,7 @@
 # Haiku 5.5 lane
 
+For the current texts, the corrected numbers, and the procedure for another machine, see [haiku-migration-playbook.md](haiku-migration-playbook.md). This file keeps the decisions and the rollout for this machine.
+
 A plan to run the cheap, repeatable parts of this system on Claude Haiku 5.5 and keep the judgment parts on Opus. Written 2026-10-07, the day Haiku 5.5 shipped, from the Anthropic docs, the Claude Code 2.1.293 docs, five live probes on this machine, a 104-agent design and review workflow, and a repricing of the last 30 days of local transcripts. Applied 2026-10-07 (sections 5, 6, 7, 10 and the `fb` alias), then reviewed by a 46-agent pass whose 20 confirmed findings were fixed the same day. Still pending: the test-runner pilot (it stays on Opus because it captures gold), the vault trial and its model pins, and the `work` alias. Git is yours: nothing is committed.
 
 ## 1. Haiku 5.5 in one table
