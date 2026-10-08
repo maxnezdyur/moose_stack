@@ -127,7 +127,9 @@ Interactive, then offer with `AskUserQuestion`: write it, keep grilling about a 
 move the open questions to the page (they become unticked decisions with your best default, for
 the user to answer there later), or cancel ("No blueprint saved. Re-run when ready."). Unattended,
 a fact the codebase cannot settle is a decision with the working assumption as its default, never
-a question left open; write when the sections are full.
+a question left open; write when the sections are full. Nobody reads the terminal until the run
+ends, so run each step you decide on instead of announcing it, and end the turn only when both
+files are written and checked.
 
 ### Write
 

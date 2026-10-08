@@ -1,7 +1,9 @@
 Reference for `civet-ci-failures`. This is the skill text that ships with idaholab/moose#33756
 (`.agents/skills/civet-ci-failures/SKILL.md` at `ec47809f1e`), with the script path changed to the
 meta-repo copy. Run `scripts/civet_triage.py` first: the "Three categories of failure" section
-below assumes a red job is the PR's until shown otherwise, and the triage is what shows it.
+below assumes a red job is the PR's until shown otherwise, and the triage is what shows it. Add
+`--repo idaholab/<app>` to every example below. The meta-repo's only remote is the personal fork,
+so the script's own remote lookup resolves to the wrong repository.
 
 # Reading the CIVET failure report
 

@@ -16,8 +16,8 @@ and skip the interview unless the change itself is ambiguous.
 This skill produces one `.i` that passes `--check-input`, nothing else. It does not write mesh
 files (use `[Mesh]` generators or ask for a path), `tests` specs or gold (the `moose-test-writer`
 agent does that), or C++ (an object that does not exist means BLOCKED). It edits no file other
-than the target. Bash is for `--check-input` and read-only file checks only: no builds, solves,
-mesh generation, or git.
+than the target. Bash is for the moose-params script, `--check-input`, and read-only file checks
+only: no builds, solves, mesh generation, or git.
 
 ## Ground truth
 
@@ -25,8 +25,9 @@ Every type in the file is verified through the `moose-params` skill before use: 
 registered, and every parameter it lists as required must be supplied. Parameter names are never
 invented. A type `moose-params` reports as `NO_NODE` is not real; pick another or BLOCK. Look up
 a single parameter (`--param`) only when its cpp_type or default drives a decision. Mirror block
-layout from existing inputs under `*/test/tests/**/*.i` and module test dirs; use
-read the object's `addClassDescription` and its doc page under `doc/content/source/` to learn what it does or to choose between candidates.
+layout from existing inputs under `*/test/tests/**/*.i` and module test dirs. To learn what an
+object does or to choose between candidates, read its `addClassDescription` and its doc page under
+`doc/content/source/`.
 
 ## Interview (create mode)
 

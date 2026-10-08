@@ -44,8 +44,8 @@ regeneration, flaky tests._
 
 ## Map
 
-_Rewritten every session. Files touched and why, tests and gold, the review file, the build record
-path._
+_Rewritten every session. Files touched and why, tests and gold, every file in `specs/gallery/`
+with its `gallery.md` section heading, the review file, the build record path._
 
 | what | where | why |
 |---|---|---|

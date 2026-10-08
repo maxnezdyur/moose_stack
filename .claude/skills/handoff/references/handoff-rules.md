@@ -14,7 +14,7 @@ It repeats neither.
 | `## Do not repeat` | append only | One line per dead end, dated. |
 | `## Decisions` | append only | One line per decision, dated, with the rejected option. |
 | `## Gotchas` | append only | Env, build and test quirks: wall-clock times, gold regeneration, flaky tests. |
-| `## Map` | rewrite | Files touched and why, tests and gold, the review file, the build record path. |
+| `## Map` | rewrite | Files touched and why, tests and gold, every file in `specs/gallery/` with its `gallery.md` section heading, the review file, the build record path. |
 | `## Sessions` | append only | One line per session: stamp, id or label, skill or mode, what it did. |
 
 Rewrite means replace the section body and keep the heading. Append only means add lines at the end
@@ -33,7 +33,7 @@ writing session).
   libmoose.so; evidence specs/review-tri-remeshing.md; retry only if -j 6 also fails.
 ```
 
-Four parts, in order: the date, what was tried verbatim, why it failed, where the evidence is, and
+Five parts, in order: the date, what was tried verbatim, why it failed, where the evidence is, and
 the condition under which it is worth trying again. A line with no evidence path and no retry
 condition is a complaint, not a handoff. A line that says "tests failed" names nothing and saves
 nobody any time.

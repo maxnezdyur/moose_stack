@@ -18,6 +18,9 @@ a ParaView replacement: a figure shows one thing and carries only the controls t
 
     bash scripts/conda-run.sh -C moose -- python scripts/exodus-view.py [<file.e>] [--open]
 
+The first launch serves until killed: start it with `run_in_background: true`. A later launch
+prints the URL of the running server and exits at once.
+
 Run it from the meta-repo root or the worktree root, every time: one server per machine on port
 8765, and a second launch reuses the running one and prints its URL. It needs only numpy and
 scipy, opens any file through `?file=<abs path>`, and rereads a file that changed on disk. On an

@@ -26,8 +26,8 @@ with "This skill only reviews idaholab/moose PRs."
   stash or force-checkout.
 - `gh pr view <N> --repo idaholab/moose --json state,title,body,author,baseRefName,headRefName
   > /tmp/moose-pr-<N>-meta.json`. `state` is `OPEN`; otherwise ask once whether to review it
-  anyway. Pass the file as `meta_path`; the orchestrator's snapshot script rewrites the meta
-  JSON that the reviewers actually read (it adds `commits`).
+  anyway. Pass the file as `meta_path`. The orchestrator replaces it with the snapshot script's own
+  `/tmp/moose-review-pr-<N>-meta.json`, which adds `commits`, and the reviewers read that file.
 
 ## Hand-off and relay
 

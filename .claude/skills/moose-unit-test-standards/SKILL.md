@@ -72,8 +72,9 @@ There are two fixtures and no `GtestApp` class; the convention is `<Name>UnitApp
 - `MFEMObjectUnitTest` (`moose/unit/include/MFEMObjectUnitTest.h`): same shape, builds an
   `MFEMMesh` and `MFEMProblem` from a real `.mesh` file; gated by `#ifdef MOOSE_MFEM_ENABLED`.
 
-Both expose `addObject<T>(type, name, params)`, which calls `_fe_problem->addObject<T>` and returns
-the single created object.
+Both expose `addObject<T>(type, name, params)`, which forwards to the fixture's problem
+(`_fe_problem->addObject<T>` or `_mfem_problem->addObject<T>`) and returns the single created
+object. `MFEMObjectUnitTest` exposes `_app`, `_factory`, and `_mfem_problem`, not `_fe_problem`.
 
 ```cpp
 class ParsedFunctionTest : public MooseObjectUnitTest

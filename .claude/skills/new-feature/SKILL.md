@@ -18,14 +18,13 @@ allowed-tools:
   - Bash(mkdir *)
   - Bash(cp *)
   - Bash(sed *)
-  - Bash(sqlite3 *)
 ---
 
 # /new-feature
 
 Creates `~/projects/moose-worktrees/<feature>/` with branch `<feature>` on the meta-repo and on `moose`, `blackbear`, `isopod`, so the meta-repo can bump submodule pointers cleanly later. Local conda host only. The name is kebab-case; without one, ask. Any failed step stops the run with a report and leaves the workspace as it is.
 
-Four facts:
+Three facts:
 - This skill does not run `git submodule update --init` in the worktree; the submodule worktrees are the source of truth.
 - This skill does not `mv` the tracked `moose_stack.code-workspace`; it copies it (the copy is gitignored).
 - This skill does not tear down a partial workspace; the user decides what to clean up.
@@ -80,8 +79,9 @@ cat > ~/projects/moose-worktrees/<feature>/specs/gallery/gallery.md <<'EOF'
 EOF
    ```
    Then write `specs/.factory-env`, the env provenance no later probe can recover (`combined-opt` alone
-   cannot tell skipped from failed). Write it here with what preflight knows, and rewrite the four
-   outcome keys as steps 4 to 7 finish, each as `done`, `skipped: <reason>`, or `failed: <reason>`.
+   cannot tell skipped from failed). Write it here with what preflight knows, and rewrite the three
+   outcome keys as steps 4 to 6 finish: `env_reused` as `true` or `false` (teardown removes the env only on
+   `false`), and `hydration` and `clangd` each as `done`, `skipped: <reason>`, or `failed: <reason>`.
    ```bash
 cat > ~/projects/moose-worktrees/<feature>/specs/.factory-env <<EOF
 feature: <feature>

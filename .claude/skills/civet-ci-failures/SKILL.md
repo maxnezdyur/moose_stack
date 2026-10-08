@@ -48,7 +48,7 @@ Even with a readable log, classify the cause before you fix it. A `curl`, `git c
 ## 3. What to do with the result
 
 - `infra`, or an environmental cause in the log: change nothing and push nothing. State which jobs, how many other PRs share them, and that a re-run is needed after the environment recovers. Invalidating the event or re-pushing is the user's decision.
-- The branch: reproduce with the logged command through `scripts/conda-run.sh`, fix, and hand the amend to `/moose-ship`. Batch the fixes into one push, because every push restarts the whole matrix.
+- The branch: reproduce with the logged command (through `scripts/conda-run.sh` on the local machine, bare inside the container on INL HPC; check `hostname`), fix, and hand the amend to `/moose-ship`. Batch the fixes into one push, because every push restarts the whole matrix.
 - Mixed: fix only the branch's own failures, and name the widespread ones as left alone.
 - Unreadable or unexplained: say what you found and what you could not determine. Do not apply a remedy on a hunch.
 

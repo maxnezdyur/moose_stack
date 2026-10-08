@@ -14,7 +14,7 @@ into the handoff as a Gotchas or Decisions line. The formats are the contract:
 `<meta_repo>/campaign/formats/{campaign,ledger,findings,manifest}.md`. Read the format of every
 file before you write to it.
 
-!`C="${MOOSE_FACTORY_CONFIG:-$HOME/.config/moose-factory/config.toml}"; M="$(sed -n -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*meta_repo[[:space:]]*=[[:space:]]*//p' "$C" 2>/dev/null | head -n 1 | tr -d '"')"; M="${M:-$HOME/projects/moose_stack}"; M="${M/#\~/$HOME}"; L="$M/campaign/campaign"; echo "meta_repo: $M"; if [ -x "$L" ]; then echo "launcher: $L"; else echo "launcher: MISSING at $L"; fi; R="$PWD"; while [ "$R" != "/" ] && [ ! -d "$R/campaigns" ]; do R="$(dirname "$R")"; done; if [ -d "$R/campaigns" ]; then echo "project root: $R"; else echo "project root: none (no campaigns/ above $PWD)"; fi; [ -x "$L" ] && "$L" status $1 2>&1 | head -n 30; true`
+!`C="${MOOSE_FACTORY_CONFIG:-$HOME/.config/moose-factory/config.toml}"; M="$(sed -n -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*meta_repo[[:space:]]*=[[:space:]]*//p' "$C" 2>/dev/null | head -n 1 | tr -d '"')"; M="${M:-$HOME/projects/moose_stack}"; M="${M/#\~/$HOME}"; L="$M/campaign/campaign"; echo "meta_repo: $M"; if [ -x "$L" ]; then echo "launcher: $L"; else echo "launcher: MISSING at $L"; fi; R="$PWD"; while [ "$R" != "/" ] && [ ! -d "$R/campaigns" ]; do R="$(dirname "$R")"; done; if [ -d "$R/campaigns" ]; then echo "project root: $R"; else echo "project root: none (no campaigns/ above $PWD)"; fi; [ -x "$L" ] && "$L" status $0 2>&1 | head -n 30; true`
 
 ## Resolve and refuse
 
@@ -131,7 +131,7 @@ that cites the finding.
 
 ## report
 
-A digest for the human, three to eight lines, no pasted evidence. It writes nothing.
+A digest the human can scan in one look: only the six items below, no pasted evidence. It writes nothing.
 
 1. Findings since the date of the last `## Sessions` line, one heading each (`F<n>. <claim>`).
 2. Spent over budget from `<launcher> spent <id>`: core-hours, runs, wall days.

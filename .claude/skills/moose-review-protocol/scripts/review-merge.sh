@@ -10,8 +10,8 @@
 #   /tmp/moose-review-<label>-<bucket>.json         reviewer findings, first pass
 #   /tmp/moose-review-<label>-<bucket>-retry.json   reviewer findings, retry (optional)
 # for bucket in: code test doc ad dry newobj. The findings JSON shape and the
-# two ledger invariants are defined once, in ../SKILL.md ("Output JSON schema"
-# and "files_reviewed is a coverage ledger"). This script re-checks them:
+# two ledger invariants are defined once, in ../SKILL.md ("Findings JSON"
+# and "The files_reviewed ledger"). This script re-checks them:
 #   1. files_reviewed[].path is set-equal to the bucket file (no extras, no
 #      duplicates, nothing missing);
 #   2. sum(files_reviewed[].inline) == length(inline_comments) and

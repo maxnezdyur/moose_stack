@@ -95,7 +95,8 @@ Docs on (`Needed: yes` in the doc plan): spawn `moose-docs-writer` with the scop
 report. `NEEDS_CPP_CHANGE`: one hop only, a one-shot `moose-implementer` for the named change, a one-shot
 `moose-test-runner` on the registered tests, then wake the writer. `DONE_WITH_CONCERNS`: `AskUserQuestion`:
 extend the doc budget, escalate to the implementer, or ship as-is. `NEEDS_CONTEXT`: one-shot `moose-scout`
-with its QUESTION, then wake the writer with the MATCHES. `BLOCKED`: surface. ASCII-gate hits in `.md` files
+with its QUESTION, kind `doc`, the `<repo>` directories as scope and at most 8 files to open, then wake the
+writer with the MATCHES. `BLOCKED`: surface. ASCII-gate hits in `.md` files
 (from the loop's payload or Gate B) go to the writer too; with docs off they are surfaced.
 
 Docs off with no pages authored: Gate B's `docs` line (`docs.sh <repo> smoke --diff devel`) is the check,
