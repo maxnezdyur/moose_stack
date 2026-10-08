@@ -317,6 +317,8 @@ The first version of this plan preloaded a nine-rule skill into every Haiku agen
 
 ### 6.3 Two user-level agents
 
+Both live in the `claude-skills` repository (`github.com/maxnezdyur/claude-skills`, `.claude/agents/`) and are symlinked into `~/.claude/agents/` the same way that repository's skills are symlinked into `~/.claude/skills/`. On a new machine, clone it and run its README's symlink loop; the texts below are the current versions.
+
 `~/.claude/agents/Explore.md` overrides the built-in Explore, which runs on Opus under a Fable session and is the most frequent automatic delegation:
 
 ```markdown
