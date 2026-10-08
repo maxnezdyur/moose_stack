@@ -7,7 +7,6 @@ tools: Read, Grep, Glob, Bash, Write
 skills:
   - moose-review-protocol
   - moose-doc-standards
-  - haiku-discipline
 color: blue
 ---
 

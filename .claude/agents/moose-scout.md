@@ -4,8 +4,6 @@ description: Answers one scoped, read-only search question about moose, blackbea
 model: haiku
 effort: high
 tools: Read, Grep, Glob, Bash
-skills:
-  - haiku-discipline
 color: yellow
 ---
 

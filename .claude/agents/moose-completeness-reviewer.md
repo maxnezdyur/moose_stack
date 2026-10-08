@@ -6,7 +6,6 @@ effort: high
 tools: Read, Grep, Glob, Bash, Write
 skills:
   - moose-review-protocol
-  - haiku-discipline
 color: yellow
 ---
 
