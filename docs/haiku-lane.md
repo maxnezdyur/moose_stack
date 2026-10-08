@@ -239,6 +239,17 @@ Not on Haiku: `/moose-input-writer` (physics and solver choices with only a pars
 7. After 7 days, rerun reprice.py. Targets: general-purpose Opus cost down at least 50%; Fable main requests per active day and Bash calls in Fable down at least 25%; scout and runner cost down more than 90%; no rise in Gate B reds or CIVET failures per PR.
 8. Weekly: the thrash grep, `grep -il refus` over subagent transcripts, review re-spawn rate under 20%, implementer rounds per feature at most 3. Revert an agent to its old frontmatter line after 2 thrash aborts or 2 misroutes in a week.
 
+## 11b. Workflow stage calibration (2026-10-07)
+
+Where the money went in three of the day's workflows: 62% to 73% in the Opus judge and refuter stages; Haiku search was 1%. Two calibrations then put Haiku in those stages:
+
+| Stage | Haiku against Opus on the same items | Cost |
+|---|---|---|
+| mechanical judging: open every cited line, score correct/incorrect, count false claims (120 answers) | verdict agreement 120/120; false claims 31 vs 36; citations valid 955/957 vs 944/949; the one divergence was the graded "key items found" score, 81% vs 94% | $0.80 vs $18.83 |
+| adversarial refutation: is this audit finding real, would its fix break a contract (38 findings, 2 lenses) | final-verdict agreement 26/38, 25/32 after excluding items the world changed under; Haiku refuted 16 where Opus refuted 8, and missed 2 of Opus's 8 | $0.57 vs $13.04 |
+
+So: mechanical verification and yes/no scoring go to Haiku at high effort; refutation, graded quality, and anything that decides a fix stays on Opus. The Workflow section of `~/.claude/CLAUDE.md` carries the rule.
+
 ## 12. Still open
 
 - Does one Haiku token draw less from the Max 5-hour and weekly bars than one Opus token? The docs say the limits are shared across models and say nothing about weighting. Test: note the `/usage` session bar, run the same read-heavy `claude -p` on Haiku and then on Opus in one window with nothing else running, compare the bar change per million tokens.

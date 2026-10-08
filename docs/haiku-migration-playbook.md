@@ -410,7 +410,17 @@ Check every added sentence against the agent's preloaded standards skills. On th
 
 ### 6.6 Workflow stages
 
-In every Workflow script, name `{model: 'haiku', effort: 'high'}` on search, extract, classify, check, and command stages, and `{model: 'opus'}` on synthesis, design, authoring, and verdict stages. A stage with `agentType` set to an agent whose frontmatter names a model gets no model option.
+Measured on the first machine: in three large workflows, 62% to 73% of the cost sat in Opus judge and refuter stages, and Haiku search was 1%. Two calibrations on the same items set the line:
+
+| Stage | Model, effort | Evidence |
+|---|---|---|
+| search, extract, enumerate | haiku high | 198 judged runs, equal to Opus |
+| mechanical verify: cited line exists and supports the claim, test passes, output parses, count within tolerance | haiku high | 120/120 verdict agreement with Opus judges, same false-claim count, at 1/23 the cost |
+| classify against a written rubric | haiku high | 10/10 planted defects, 6/6 ledger, both arms |
+| refute a claim, decide whether a fix breaks something, score quality | opus medium | Haiku agreed with Opus on 26/38 final verdicts, refuted twice as often, and missed 2 of Opus's 8 refutations |
+| design, synthesis, answer keys, final verdict | opus high | defines what counts |
+
+Rules for the script: give a haiku stage a yes/no schema, not a graded score (the one divergence in the judge calibration was a graded sub-score); verify in two tiers, a haiku gate then opus refuters on the survivors; keep one stage's model and effort uniform so siblings share a cache prefix; a stage with `agentType` set to an agent whose frontmatter names a model gets no model option.
 
 ### 6.7 Whole sessions on Haiku
 
