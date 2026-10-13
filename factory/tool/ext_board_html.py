@@ -195,6 +195,43 @@ def plural(n: Any, one: str, many: str) -> str:
     return one if n == 1 else many
 
 
+#: The masthead counts that filter the board, in masthead order. A count is a
+#: ``<label>`` for a hidden radio; the CSS hides every card without the
+#: matching ``f-<id>`` class. The page runs no script: the board reader's
+#: iframe sandbox withholds ``allow-scripts``, so the filter is pure CSS.
+FILTERS: Tuple[str, ...] = ("needs", "feature", "pr", "campaign")
+
+
+def filter_classes(kind: str, row: Any) -> List[str]:
+    """The ``f-<id>`` classes of one card, one per :data:`FILTERS` it matches."""
+    out = ["f-" + kind] if kind in ("feature", "campaign") else []
+    if getattr(row, "posture", None) == NEEDS_YOU:
+        out.append("f-needs")
+    if kind == "feature" and row.open_prs():
+        out.append("f-pr")
+    return out
+
+
+def filter_css() -> str:
+    """One rule set per filter: hide the other cards, then the emptied columns."""
+    rules = []
+    for f in FILTERS:
+        on = ".page:has(#f-%s:checked)" % (f,)
+        rules.append(
+            "%s .card:not(.f-%s), %s .empty, %s .col:not(:has(.card.f-%s)) { display: none; }"
+            % (on, f, on, on, f)
+        )
+        rules.append(
+            '%s .count[for="f-%s"] { display: none; }\n'
+            '%s .count.clear[data-f="%s"] { display: inline-flex; }' % (on, f, on, f)
+        )
+        rules.append(
+            '.page:has(#f-%s:focus-visible) .count[for="f-%s"] '
+            "{ outline: 2px solid var(--accent); outline-offset: 2px; }" % (f, f)
+        )
+    return "\n".join(rules) + "\n"
+
+
 def board_path(cfg: Any) -> Path:
     """``<vault>/Board.html``, from ``config.Config.board_html``.
 
@@ -537,7 +574,7 @@ def gallery_strip(card: Any, ctx: Any) -> str:
 
 def feature_card(card: Any, ctx: Any, compact: bool = False) -> str:
     cfg = ctx.config
-    cls = ["card"]
+    cls = ["card"] + filter_classes(str(getattr(card, "kind", "") or "feature"), card)
     if compact:
         cls.append("compact")
     if is_critical(card):
@@ -620,7 +657,7 @@ def campaign_card(item: Any, ctx: Any, compact: bool = False) -> str:
     cfg = ctx.config
     c = item.data
     flags = list(getattr(item, "flags", None) or [])
-    cls = ["card", "campaign"]
+    cls = ["card", "campaign"] + filter_classes("campaign", item)
     if compact:
         cls.append("compact")
     if any(str(f) in CRITICAL_FLAGS for f in flags):
@@ -784,16 +821,28 @@ def masthead(ctx: Any) -> str:
         sub.append(
             "Unknown this run: " + esc(", ".join(stale)) + " (last good values carried forward)."
         )
-    counts = [
-        '<span class="count%s"><b>%d</b> %s</span>'
-        % (" crit" if n_needs else "", n_needs, plural(n_needs, "needs you", "need you")),
-        '<span class="count"><b>%d</b> %s</span>'
-        % (len(cards), plural(len(cards), "card", "cards")),
-        '<span class="count"><b>%d</b> %s</span>'
-        % (open_prs, plural(open_prs, "open PR", "open PRs")),
-        '<span class="count"><b>%d</b> %s</span>'
-        % (n_campaigns, plural(n_campaigns, "campaign", "campaigns")),
+    tiles = [
+        ("needs", n_needs, plural(n_needs, "needs you", "need you"), " crit" if n_needs else ""),
+        ("feature", len(cards), plural(len(cards), "card", "cards"), ""),
+        ("pr", open_prs, plural(open_prs, "open PR", "open PRs"), ""),
+        ("campaign", n_campaigns, plural(n_campaigns, "campaign", "campaigns"), ""),
     ]
+    counts = []
+    for f, n, label, crit in tiles:
+        # A zero has nothing to filter to, so it stays a plain count.
+        if not n:
+            counts.append('<span class="count%s"><b>%d</b> %s</span>' % (crit, n, label))
+            continue
+        counts.append(
+            '<label class="count filter%s" for="f-%s" title="Show only these">'
+            "<b>%d</b> %s</label>" % (crit, f, n, label)
+        )
+        # Shown in place of the tile while its filter is on; a click clears it.
+        counts.append(
+            '<label class="count filter clear on%s" for="f-all" data-f="%s" '
+            'title="Show every card"><b>%d</b> %s <span class="x">&times;</span></label>'
+            % (crit, f, n, label)
+        )
     return "\n".join(
         [
             '<header class="masthead">',
@@ -882,6 +931,19 @@ h1 small code { background: transparent; padding: 0; }
 }
 .count.crit { background: var(--crit-bg); border-color: transparent; color: var(--crit); }
 .count.crit b { color: var(--crit); }
+.filter-radio {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); border: 0;
+}
+.count.filter { cursor: pointer; user-select: none; }
+.count.filter:hover { border-color: var(--accent); }
+.count.crit.filter:hover { border-color: var(--crit); }
+.count.clear { display: none; }
+.count.on { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-ink); }
+.count.on b { color: var(--accent-ink); }
+.count.crit.on { background: var(--crit-bg); border-color: var(--crit); color: var(--crit); }
+.count.crit.on b { color: var(--crit); }
+.count .x { font-size: 14px; line-height: 1; }
 .rail { margin-top: 22px; overflow-x: auto; padding-bottom: 10px; }
 .cols {
   display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr);
@@ -987,10 +1049,19 @@ def compose_board(ctx: Any) -> str:
         '<meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>moose factory board</title>",
-        "<style>" + CSS + "</style>",
+        "<style>" + CSS + filter_css() + "</style>",
         "</head>",
         "<body>",
         '<div class="page">',
+        '<input class="filter-radio" type="radio" name="filter" id="f-all" checked '
+        'aria-label="Show every card">',
+    ]
+    out += [
+        '<input class="filter-radio" type="radio" name="filter" id="f-%s" '
+        'aria-label="Filter: %s">' % (f, f)
+        for f in FILTERS
+    ]
+    out += [
         masthead(ctx),
         '<div class="rail">',
         '<div class="cols">',
@@ -1001,7 +1072,8 @@ def compose_board(ctx: Any) -> str:
     out.append("</div>")
     out.append(
         '<div class="how"><p><strong>How to act on this page.</strong> A card name opens its '
-        "note in Obsidian. A command is copyable. This page is generated: "
+        "note in Obsidian. A count at the top shows only its cards; click it again for all. "
+        "A command is copyable. This page is generated: "
         "<code>factory board</code> rewrites it and every edit here is lost.</p>"
         "<p>One next move: <code>factory next &lt;feature or campaign&gt;</code>. "
         "What is misconfigured: <code>factory doctor</code>.</p></div>"
