@@ -1,7 +1,6 @@
 ---
 name: moose-build
 description: Drives one MOOSE feature from specs/blueprint.md to a green tree with the standing gates passed, docs gated, and a clean-context review whose findings are applied before it stops; execution is the moose-feature-loop agent. Use for "/moose-build [blueprint.md] [--core]", "build the blueprint", "build this feature". Manual invoke only; ends at a suggested commit message and never commits.
-disable-model-invocation: true
 argument-hint: "[blueprint.md] [--core]"
 effort: medium
 ---

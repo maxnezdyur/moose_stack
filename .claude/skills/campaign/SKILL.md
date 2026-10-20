@@ -1,7 +1,6 @@
 ---
 name: campaign
 description: Drives one campaign of open-ended experimental work (one question, a stop condition, a budget, an append-only record of runs and findings) in a project repository's campaigns/<id>/ through the campaign CLI; loop mode is the campaign-loop agent. Use for "/campaign <id> [new|propose|run|learn|report|loop] [note]", "start a campaign", "propose the next runs", "run the ticked proposals", "judge the runs", "campaign report". Manual invoke only; never commits and never raises a budget.
-disable-model-invocation: true
 argument-hint: "<id> [new|propose|run|learn|report|loop] [note]"
 effort: high
 ---

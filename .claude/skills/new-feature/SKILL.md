@@ -1,7 +1,6 @@
 ---
 name: new-feature
 description: Scaffolds a moose_stack feature workspace under ~/projects/moose-worktrees/<feature> with matching branches on the meta-repo and all three submodules, the shared pinned conda env, remapped clangd DBs, and a combined-opt hydrated from the canonical MOOSE seed. Use for "/new-feature <name>", "new feature worktree", "start a feature". Manual invoke only.
-disable-model-invocation: true
 argument-hint: "<feature-name>"
 effort: medium
 allowed-tools:

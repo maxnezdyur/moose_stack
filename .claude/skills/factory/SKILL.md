@@ -1,7 +1,6 @@
 ---
 name: factory
 description: Regenerates the moose-factory board and relays the masthead and the needs-you rows. Use for "/factory", "show the board", "what needs me". Manual invoke only.
-disable-model-invocation: true
 effort: low
 ---
 

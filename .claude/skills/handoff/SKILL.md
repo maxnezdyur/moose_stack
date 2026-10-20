@@ -1,7 +1,6 @@
 ---
 name: handoff
 description: 'Writes or updates the cross-session memory of one feature worktree (specs/handoff.md) or one campaign (campaigns/<id>/handoff.md): State, Next, Do not repeat, Decisions, Gotchas, Map, Sessions. Use for "/handoff [<note>]", "write the handoff", "save this for the next session", "hand this off". Manual invoke only.'
-disable-model-invocation: true
 argument-hint: "[<note>]"
 effort: low
 ---

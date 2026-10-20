@@ -1,7 +1,6 @@
 ---
 name: moose-pr-review
 description: Reviews an idaholab/moose pull request. Guards a clean moose/ tree, confirms the PR is open, then spawns the moose-pr-reviewer agent, which pulls the PR with gh pr checkout, runs the MOOSE code, test, doc, and lens reviewers, and posts one PENDING GitHub review that the user submits from the GitHub UI. Refuses blackbear and isopod PRs. Use for "/moose-pr-review <N or URL>", "review moose PR 12345".
-disable-model-invocation: true
 argument-hint: "<PR number | PR URL>"
 effort: medium
 ---

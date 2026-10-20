@@ -1,7 +1,6 @@
 ---
 name: moose-blueprint
 description: Turns a feature idea into specs/blueprint.md for /moose-build plus a review page, specs/blueprint.html, where every decision is a question on the claim it changes. Interactive at a terminal: grills the user through moose-grill and AskUserQuestion. Unattended under factory start or --unattended: settles every fork with a defensible default and never blocks, so the user answers on the page later and pastes the response back. Scouts moose, blackbear and isopod with moose-scout agents either way. Use for "/moose-blueprint <idea>", "plan this MOOSE feature", "write a blueprint", "spec this kernel, material, or postprocessor", and "/moose-blueprint <pasted Respond output>" to apply the user's answers.
-disable-model-invocation: true
 argument-hint: "[--unattended|--interactive] <feature idea> | <pasted '# Re:' response> | restart <feature idea>"
 effort: high
 ---
