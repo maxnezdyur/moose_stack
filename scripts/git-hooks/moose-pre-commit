@@ -1,0 +1,20 @@
+#!/bin/bash
+# Pre-commit hook to run clang-format on all staged c++ files.
+# Body from moose/scripts/install_format_hook.sh; tool lookup added.
+# Find git-clang-format: PATH first, else the newest moose conda env.
+if ! command -v git-clang-format >/dev/null 2>&1; then
+    for d in $(ls -d "$HOME"/miniforge/envs/moose*/bin 2>/dev/null | sort -V -r); do
+        if [[ -x "$d/git-clang-format" ]]; then export PATH="$d:$PATH"; break; fi
+    done
+fi
+if ! command -v git-clang-format >/dev/null 2>&1; then
+    echo "pre-commit: git-clang-format not found; commit not formatted" >&2
+    exit 0
+fi
+
+cpp_file_paths="framework/src framework/include modules/*/src modules/*/include test unit examples tutorials stork"
+changed_cpp_files=$(git diff --staged --diff-filter=ACMR --name-only -- $cpp_file_paths)
+[[ -z "$changed_cpp_files" ]] && exit 0
+
+git clang-format -- $changed_cpp_files
+git add $changed_cpp_files

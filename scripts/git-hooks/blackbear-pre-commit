@@ -1,0 +1,23 @@
+#!/bin/bash
+# Body from blackbear/scripts/install-format-hook.sh; tool lookup added.
+# Find git-clang-format: PATH first, else the newest moose conda env.
+if ! command -v git-clang-format >/dev/null 2>&1; then
+    for d in $(ls -d "$HOME"/miniforge/envs/moose*/bin 2>/dev/null | sort -V -r); do
+        if [[ -x "$d/git-clang-format" ]]; then export PATH="$d:$PATH"; break; fi
+    done
+fi
+if ! command -v git-clang-format >/dev/null 2>&1; then
+    echo "pre-commit: git-clang-format not found; commit not formatted" >&2
+    exit 0
+fi
+
+patch=$(git clang-format --diff -- $(git diff --staged --name-only -- src include tests unit))
+if [[ "$patch" =~ "no modified files to format" || "$patch" =~ "clang-format did not modify any files" ]]; then
+    exit 0
+fi
+echo ""
+echo "Your code is not properly formatted." >&2
+echo "Run 'git clang-format' to resolve the following issues:" >&2
+echo ""
+echo "$patch"
+exit 1

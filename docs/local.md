@@ -58,6 +58,18 @@ If MOOSE deps change (petsc/libmesh/wasp), rebuild before `make`:
 ./moose/scripts/update_and_rebuild_wasp.sh
 ```
 
+## Format hooks
+
+Each submodule has a clang-format pre-commit hook. The hook in `moose` formats the staged C++ and stages it again. The hooks in `isopod` and `blackbear` refuse an unformatted commit and print the fix. Each hook finds `git-clang-format` on `PATH`, or else in the newest `moose*` conda env.
+
+Install or update the hooks after a fresh clone:
+
+```bash
+~/projects/moose_stack/scripts/install-format-hooks.sh
+```
+
+The hooks are in `scripts/git-hooks/`. One install covers all the worktrees of a submodule.
+
 ## Run
 
 ```bash
