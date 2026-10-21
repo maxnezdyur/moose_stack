@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Two-block thermomechanics with rows ties</title>
+<link rel="stylesheet" href="htmlplan.css">
+<script src="htmlplan.js" defer></script>
+<body>
+
+<header>
+  <h1>Two-block thermomechanics with rows ties</h1>
+  <doc-changes new="2" changed="1"></doc-changes>
+  <details class="thread"><summary>Why · 2 requests</summary>
+    <doc-quote via="doc" from="specs/scope.md">Replace [Physics/SolidMechanics/GlobalStrain] with rows ties ... With rows ties, each PRP face stays its own plane. That matches the table in main.pdf. ... Defaults: take main.pdf literally and use cm.</doc-quote>
+    <doc-quote via="prompt" from="Max">MAin.pdf is what we are trying ot be able to solve</doc-quote>
+  </details>
+</header>
+
+<main>
+<doc-plan>
+
+<!-- 1 · WHAT: the ties -->
+<doc-claim>
+  <p>Two rows ties keep the right and front faces planar. Global Strain leaves the input.</p>
+  <doc-code title="moosify_uel.i · the ties" lang="text" hl="5,11">
+<script type="text/plain">
+[Constraints]
+  [right_prp]
+    type = EqualValueBoundaryConstraint
+    variable = disp_x
+    secondary = right
+    formulation = rows
+  []
+  [front_prp]
+    type = EqualValueBoundaryConstraint
+    variable = disp_y
+    secondary = pdf_front
+    formulation = rows
+  []
+[]
+</script>
+    <doc-pin line="6" title="Exact tie">One DofMap row per node. No penalty, no residual.</doc-pin>
+    <doc-pin line="11" tone="warn" title="Renamed face">The generated "bottom" is y min, the main.pdf Front.</doc-pin>
+  </doc-code>
+  <doc-ask id="Q1">
+    <p>Which object ties each PRP face?</p>
+    <label><input type="radio" name="Q1" value="reuse" checked> EqualValueBoundaryConstraint, formulation = rows, as-is <small>NodalConstraint.C:36-43</small></label>
+    <label><input type="radio" name="Q1" value="extend"> Extend it with a face-normal option</label>
+    <label><input type="radio" name="Q1" value="parallel"> A new PRP constraint class</label>
+    <label><input type="radio" name="Q1" value="abandon"> Keep Global Strain</label>
+  </doc-ask>
+  <div data-if="Q1=abandon"><doc-note tone="warn"><strong>Cost</strong> Daniel's Global Strain code must come onto the branch. Both PRP faces then move as one cell stretch.</doc-note></div>
+
+  <doc-claim>
+    <p>A rename gives the sidesets the main.pdf face names, so every BC reads as Table 3.</p>
+    <doc-code title="moosify_uel.i · the face map" lang="text" hl="5-6">
+<script type="text/plain">
+[Mesh]
+  [faces]
+    type = RenameBoundaryGenerator
+    input = block_b
+    old_boundary = 'back       bottom    top      front'
+    new_boundary = 'pdf_bottom pdf_front pdf_back pdf_top'
+  []
+[]
+# main.pdf   plane        BC
+# Bottom     z = -0.04    disp_z = 0
+# Top        z =  0.04    pressure, convection
+# Left       x = -0.09    disp_x = 0
+# Right      x =  0.09    rows tie on disp_x
+# Front      y = -0.06    rows tie on disp_y
+# Back       y =  0.06    disp_y = 0
+</script>
+      <doc-pin line="5" tone="risk" title="The old input mixed these up">It put the pressure on y max and pinned disp_z on y min.</doc-pin>
+      <doc-pin line="6" title="pdf_ prefix">A rename into an existing name merges the two faces.</doc-pin>
+    </doc-code>
+  </doc-claim>
+
+  <doc-claim>
+    <p>The top pressure compresses the block.</p>
+    <doc-code title="moosify_uel.i · pressure" lang="text">
+<script type="text/plain">
+[pressure_function]
+  type = ParsedFunction
+  expression = 'if(t < 100000, -1e5, 0)'
+[]
+[top_pressure]
+  type = FunctionNeumannBC
+  variable = disp_z
+  boundary = pdf_top
+  function = pressure_function
+[]
+</script>
+    </doc-code>
+    <doc-ask id="Q2">
+      <p>Which sign does the top pressure take?</p>
+      <label><input type="radio" name="Q2" value="compress" checked> Compressive, traction -1e5 Pa in z <small>main.pdf prose: "uniform compressive pressure"</small></label>
+      <label><input type="radio" name="Q2" value="literal"> Fz = -p with p = -1e5, so tensile</label>
+    </doc-ask>
+  </doc-claim>
+<doc-claim>
+    <p>Two figures show the tie: rows against penalty, and the deformed block.</p>
+    <doc-tree caption="What lands in specs/gallery/.">
+  <script type="text/plain">
+  specs/gallery/
+    + prp_spread_rows_vs_penalty.png   # right-face spread and Newton its: rows vs penalty 1e14
+    + deformed_temperature_t1000.png   # deformed x1000 at t = 1000 s, colored by T
+    ~ gallery.md                       # the figure page
+  </script>
+    </doc-tree>
+    <doc-ask id="Q3">
+      <p>Which figures must the showcase render?</p>
+      <label><input type="checkbox" name="Q3" value="compare" checked> Rows against penalty <small>prp_spread_rows_vs_penalty.png</small></label>
+      <label><input type="checkbox" name="Q3" value="deformed" checked> The deformed block <small>deformed_temperature_t1000.png</small></label>
+      <label><input type="checkbox" name="Q3" value="history"> Temperature and reactions over the full run</label>
+    </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<!-- 2 · WHAT: the heat -->
+<doc-claim>
+  <p>Block A heats by phi squared, with phi as main.pdf writes it.</p>
+  <doc-math>
+<script type="text/plain">
+$$\rho c_p \frac{\partial T}{\partial t} = \nabla\cdot(k\nabla T) + \phi^2 \ \text{(Block A only)}$$
+
+$$\phi = (3000 - 2.9t)\left(1 - \frac{x^2}{81}\right),\ t \le 1000; \quad 100\left(1 - \frac{x^2}{81}\right),\ 1000 < t < t_{\mathrm{off}}; \quad 0 \text{ after}$$
+
+$$-k\nabla T\cdot\mathbf n = h(t)\,(T - T_\infty) \text{ on top}, \qquad h = 200\sin(\pi t/10^6)$$
+
+| symbol | meaning |
+|---|---|
+| $x$ | cm in main.pdf; the mesh is in m |
+| $t_{\mathrm{off}}$ | source shut-off time |
+| $T_\infty$ | 500 C before 1e5 s, 20 C after |
+</script>
+  </doc-math>
+
+  <doc-claim>
+    <p>The new <code>phi</code> multiplies the two factors. The old one added them.</p>
+    <doc-code title="moosify_uel.i · phi" lang="text" diff file="moose/modules/combined/examples/thermomechanics/moosify_uel.i" start="81">
+<script type="text/plain">
+   [phi_function]
+     type = ParsedFunction
+-    expression = 'if(t <= 1000, 3000 - 2.9 * t - x^2 / 0.0081 + 1, if(t < 100000, 100 - x^2 / 0.0081 + 1, 0))'
++    expression = 'if(t <= 1000, (3000 - 2.9 * t) * (1 - x^2 / 0.0081), if(t < 5e6, 100 * (1 - x^2 / 0.0081), 0))'
+   []
+</script>
+      <doc-pin line="84" title="0.0081 m2 = 81 cm2">phi falls to 0 at x = 9 cm.</doc-pin>
+    </doc-code>
+    <doc-ask id="Q4">
+      <p>Does x^2/81 assume x in cm?</p>
+      <label><input type="radio" name="Q4" value="cm" checked> Yes: the mesh is in m, so x^2 / 0.0081 <small>the faces sit at x = +-9 cm</small></label>
+      <label><input type="radio" name="Q4" value="m"> No: x in m, so x^2 / 81</label>
+    </doc-ask>
+    <div data-if="Q4=m"><doc-note tone="warn"><strong>Cost</strong> phi is then almost flat in x. The source has no spatial shape.</doc-note></div>
+    <doc-ask id="Q5">
+      <p>When does the heat source shut off?</p>
+      <label><input type="radio" name="Q5" value="5e6" checked> At 5e6 s, the main.pdf formula <small>the run ends at 1.05e5 s, so it never shuts off</small></label>
+      <label><input type="radio" name="Q5" value="1e5"> At 1e5 s, as Step 3 says <small>"phi goes to zero"</small></label>
+    </doc-ask>
+    <div data-if="Q5=1e5"><doc-note tone="info">Then the cooling step sees no source, as the Step 3 prose says.</doc-note></div>
+  </doc-claim>
+
+  <doc-claim>
+    <p>The film coefficient follows main.pdf literally.</p>
+    <doc-code title="moosify_uel.i · h(t)" lang="text">
+<script type="text/plain">
+[heat_transfer_coefficient]
+  type = ParsedFunction
+  expression = '200 * sin(pi * t / 1e6)'
+[]
+</script>
+    </doc-code>
+    <doc-ask id="Q6">
+      <p>What time scale does h(t) use?</p>
+      <label><input type="radio" name="Q6" value="literal" checked> 200 sin(pi t / 1e6), t in s <small>h is only 63 at the end of the run</small></label>
+      <label><input type="radio" name="Q6" value="run"> A half sine over the run, 200 sin(pi t / 1.05e5)</label>
+    </doc-ask>
+  </doc-claim>
+</doc-claim>
+
+<!-- 3 · WHAT: the materials -->
+<doc-claim>
+  <p>The placeholder UMAT computes the stress in both blocks and carries one state variable, Z.</p>
+  <doc-code title="moosify_uel.i · the UMAT" lang="text" hl="5,9">
+<script type="text/plain">
+[umat_a]
+  type = AbaqusUMATStress
+  block = block_a
+  constant_properties = '2e11 0.3'
+  plugin = '../../../solid_mechanics/test/plugins/elastic_incremental'
+  num_state_vars = 1
+  temperature = temperature
+  external_fields = phi
+  use_one_based_indexing = true
+[]
+# umat_b: the same with block = block_b and '4e11 0.15'
+[Z]
+  type = MaterialStdVectorAux
+  property = state_var
+  index = 0
+[]
+</script>
+    <doc-pin line="5" title="Placeholder">NNL's viscoplastic UMAT replaces this plugin.</doc-pin>
+    <doc-pin line="6" title="Z is state_var[0]">It stays 0 until the real UMAT writes it.</doc-pin>
+  </doc-code>
+  <doc-ask id="Q7">
+    <p>Which constitutive model does Block B use?</p>
+    <label><input type="radio" name="Q7" value="umat" checked> The UMAT, as for Block A <small>main.pdf section 4: both blocks visco-plastic</small></label>
+    <label><input type="radio" name="Q7" value="elastic"> Keep ComputeFiniteStrainElasticStress</label>
+  </doc-ask>
+  <div data-if="Q7=elastic"><doc-note tone="info">Then Block B stays elastic and only Block A carries Z.</doc-note></div>
+  <doc-ask id="Q8">
+    <p>How does Z get an aux before the NNL UMAT exists?</p>
+    <label><input type="radio" name="Q8" value="one" checked> num_state_vars = 1 and a MaterialStdVectorAux <small>tensile_umat_moose_umat.i:55-60</small></label>
+    <label><input type="radio" name="Q8" value="later"> No Z aux until the NNL UMAT arrives</label>
+  </doc-ask>
+  <div data-if="Q8=later"><doc-note tone="warn">With num_state_vars = 0, index 0 reads out of bounds (MaterialStdVectorAux.C:36).</doc-note></div>
+  <doc-ask id="Q9">
+    <p>Does mechanical dissipation feed back into the heat equation?</p>
+    <label><input type="radio" name="Q9" value="no" checked> No <small>eq. 1 has only phi^2; RPL is unused past AbaqusUMATStress.C:352</small></label>
+    <label><input type="radio" name="Q9" value="yes"> Yes, add the UMAT's RPL as a heat source</label>
+  </doc-ask>
+  <div data-if="Q9=yes"><doc-note tone="warn"><strong>Cost</strong> That needs new C++: AbaqusUMATStress must declare RPL as a property.</doc-note></div>
+</doc-claim>
+
+<!-- 4 · WHAT: the outputs -->
+<doc-claim>
+  <p>The outputs are the ones main.pdf section 7 asks for.</p>
+  <doc-tree caption="CSV and Exodus outputs.">
+<script type="text/plain">
+Postprocessors/
+  + react_{bottom,top,left,right,front,back}   # NodalSum of the save_in residual
+  + top_conduction                             # ADSideDiffusiveFluxIntegral, W
+  ~ top_heat_loss                              # ADConvectiveHeatTransferSideIntegral, W
+  + total_top_heat_loss                        # TimeIntegratedPostprocessor, J
+  + right_spread, front_spread                 # max - min of the normal disp
+AuxVariables/
+  + heat_flux_{x,y,z}                          # DiffusionFluxAux
+  + stress_xy, stress_xz, stress_yz            # the full S_ij
+  + Z                                          # state_var[0]
+</script>
+  </doc-tree>
+  <doc-ask id="Q10">
+    <p>How are the face reactions computed?</p>
+    <label><input type="radio" name="Q10" value="sideset"> SidesetReaction on all six faces <small>qp stress; missed the load by up to 12x</small></label>
+    <label><input type="radio" name="Q10" value="nodal" checked> save_in and NodalSum <small>exact nodal reaction; balances 2160 N</small></label>
+  </doc-ask>
+  <div data-if="Q10=tag"><doc-note tone="warn"><strong>Cost</strong> A rows tie has no residual, so the tied faces read zero.</doc-note></div>
+  <doc-ask id="Q11">
+    <p>Does the input output the heat flux vector field?</p>
+    <label><input type="radio" name="Q11" value="yes" checked> Yes, three DiffusionFluxAux components <small>main.pdf section 7 field outputs</small></label>
+    <label><input type="radio" name="Q11" value="no"> No, only the top integrals</label>
+  </doc-ask>
+</doc-claim>
+
+<!-- 5 · WHAT: tests -->
+<doc-claim>
+  <p>A parse check and a short CSVDiff run prove the example and the ties.</p>
+  <doc-code title="tests · thermomechanics" lang="text" hl="11">
+<script type="text/plain">
+[moosify_uel]
+  issues = '#33821'
+  design = 'source/constraints/EqualValueBoundaryConstraint.md source/materials/abaqus/AbaqusUMATStress.md'
+  capabilities = 'library_mode=dynamic & installation_type=in_tree'
+  valgrind = NONE
+  [check]
+    type = RunApp
+    input = moosify_uel.i
+    check_input = True
+  []
+  [prp_tie]
+    type = CSVDiff
+    input = moosify_uel.i
+    cli_args = 'Executioner/end_time=1000 Executioner/dt=250 Outputs/file_base=moosify_uel_short'
+    csvdiff = moosify_uel_short.csv
+  []
+[]
+</script>
+    <doc-pin line="9" title="moosify_uel_check">The old input fails here on active_directions.</doc-pin>
+    <doc-pin line="15" title="Asserts">right_spread and front_spread are 0; the reactions match gold.</doc-pin>
+    <doc-pin line="15" tone="warn" title="Mutation">Disabling right_prp gives a nonzero right_spread.</doc-pin>
+  </doc-code>
+  <doc-ask id="Q12">
+    <p>How is the example tested?</p>
+    <label><input type="radio" name="Q12" value="both" checked> check_input plus a short CSVDiff run</label>
+    <label><input type="radio" name="Q12" value="check"> check_input only, as Daniel's spec did</label>
+  </doc-ask>
+  <div data-if="Q12=check"><doc-note tone="warn"><strong>Cost</strong> Nothing then checks that the faces stay planar.</doc-note></div>
+  <doc-ask id="Q13">
+    <p>Which issue goes in the spec and the PR?</p>
+    <label><input type="radio" name="Q13" value="33821" checked> #33821 <small>the rows issue, open; #33820 is its PR</small></label>
+    <label><input type="radio" name="Q13" value="new"> A new issue for the example</label>
+  </doc-ask>
+  <div data-if="Q13=new"><doc-note tone="info">Then the issue gets filed first, from the repo template.</doc-note></div>
+  <doc-ask id="Q14">
+    <p>Does the example get a MooseDocs page?</p>
+    <label><input type="radio" name="Q14" value="no" checked> No, a header comment in the input <small>the objects already have pages</small></label>
+    <label><input type="radio" name="Q14" value="yes"> Yes, an example page in combined</label>
+  </doc-ask>
+</doc-claim>
+
+
+<!-- shared -->
+<doc-claim aux="shared">
+  <p>Shared: no new C++. One input, one spec, one gold file.</p>
+  <doc-tree caption="Unit ids match the work plan in blueprint.md.">
+<script type="text/plain">
+moose/modules/combined/examples/thermomechanics/
+  + moosify_uel.i              # T1 · the rewritten example
+  ~ tests                      # T1, T2 · parent block and two children
+  + gold/moosify_uel_short.csv # T2
+</script>
+  </doc-tree>
+  <doc-claim>
+    <p>Reuse: every object exists; the rows tie comes from 00e6cc777f.</p>
+    <doc-calls title="What the scouts matched" caption="A space row is reused as-is; ~ is a pattern; - is rejected." compact>
+<script type="text/plain">
+  EqualValueBoundaryConstraint rows   @ moose/framework/src/constraints/EqualValueBoundaryConstraint.C:24   -- reuse as-is
+  AbaqusUMATStress state_var          @ moose/modules/solid_mechanics/src/materials/abaqus/AbaqusUMATStress.C:80   -- reuse as-is
+- SidesetReaction                     @ moose/modules/solid_mechanics/src/postprocessors/SidesetReaction.C:42   -- rejected: qp stress, off by up to 12x
+  SideDiffusiveFluxIntegral           @ moose/framework/src/postprocessors/SideDiffusiveFluxIntegral.C:33   -- reuse as-is
+  DiffusionFluxAux                    @ moose/framework/src/auxkernels/DiffusionFluxAux.C:22   -- reuse as-is
+~ MaterialStdVectorAux on state_var   @ moose/modules/solid_mechanics/test/tests/uel/tensile_umat_moose_umat.i:55   -- pattern for Z
+~ combined umat spec                  @ moose/modules/combined/test/tests/umat/tests:1   -- pattern for the spec
+- MaterialStdVectorAux bounds check   @ moose/framework/src/auxkernels/MaterialStdVectorAux.C:36   -- off by one; follow-up
+</script>
+    </doc-calls>
+    <doc-note tone="info"><strong>Negative searches</strong> no 3D solid-mechanics input uses formulation = rows; no constraint has save_in.</doc-note>
+  </doc-claim>
+</doc-claim>
+
+<!-- scope -->
+<doc-claim aux="scope">
+  <p>Out of scope: the real UMAT, dissipation feedback, Daniel's Global Strain code.</p>
+  <ul>
+    <li>Daniel's Global Strain changes, his elastic.i plugin change, the "nnl" names.</li>
+    <li>The NNL viscoplastic UMAT and its Z evolution law.</li>
+    <li>Mechanical dissipation as a heat source; it needs C++.</li>
+    <li>The MaterialStdVectorAux bounds fix; a follow-up issue.</li>
+    <li>A temperature-dependent film coefficient h(T).</li>
+    <li>The full 1.05e5 s run in the test suite; only the showcase runs it.</li>
+  </ul>
+</doc-claim>
+
+</doc-plan>
+</main>
+</body>
+</html>
