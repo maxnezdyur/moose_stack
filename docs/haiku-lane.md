@@ -70,7 +70,7 @@ Legend: H = Haiku, O = Opus. "pilot" = switch on a scratch copy, adopt on the pa
 | Explore (built-in, runs on Opus under Fable) | O | H high, custom override | Most frequent automatic delegation; search with citations is Haiku-shaped. In the live probe haiku-high beat opus-low on both scout questions |
 | haiku-worker (new) | - | H high | The cheap lane for commands, logs, gh and CIVET queries, web lookups, file summaries. Takes over the Haiku-shaped part of the $226 general-purpose lane |
 | moose-scout | O low | H high | Probe: haiku-high found the exact mirror test that opus-low and haiku-medium both missed, and its citations were the most accurate. p50 81K |
-| moose-pr-reviewer | O medium | Sonnet medium | Script-driven orchestrator, p50 39K; judgment stays in the bucket reviewers; the review stays PENDING for you. Max's call: Sonnet over Haiku for the dispatcher |
+| moose-pr-reviewer | O medium | O medium | Script-driven orchestrator, p50 39K; judgment stays in the bucket reviewers; the review stays PENDING for you. Max's call: back to Opus medium (2026-10-21) |
 | moose-completeness-reviewer | O low | H high | Existence checks with a two-lookup rule, p50 19K. Switch directly |
 | moose-doc-reviewer, moose-test-reviewer | O low | H high, live pilot | Checklist against a written standard; CIVET and your pre-submit read are the backstop. p50 55-64K, p90 124-169K, so they need the window from section 5 and the read limits |
 | moose-dry-reviewer | O low | O low, pilot later | Its deciding step is semantic C++ equivalence; classification confidence was low |

@@ -1,7 +1,7 @@
 ---
 name: moose-pr-reviewer
 description: Orchestrates one moose review. PR mode, spawned by the /moose-pr-review skill, snapshots the PR, fans the bucket reviewers out, merges their findings, and posts one PENDING GitHub review that it never submits. Local mode, spawned by /moose-build as the clean-context review, has no GitHub interaction and returns the merged findings. Not invoked directly.
-model: sonnet
+model: opus
 effort: medium
 tools: Read, Bash, Agent
 color: purple
