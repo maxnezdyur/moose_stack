@@ -6,7 +6,7 @@
 <script src="htmlplan.js" defer></script>
 <!--
   The review page for example-blueprint.md, as it stood at draft time: the two clarifications are
-  still open decisions (Q1, Q2) and the showcase is a third (Q3). Pack it from this directory with
+  still open decisions (Q1, Q2), the showcase is a third (Q3) and the proof a fourth (Q4). Pack it from this directory with
     python3 ../runtime/pack-blueprint.py example-blueprint-page.html -o /tmp/example.html
   Rows that cite @ path:line warn here because no worktree is given; under --root <worktree> pack
   embeds the code and the warning goes away.
@@ -212,6 +212,22 @@ moose/test/tests/problems/arc_length/
       <doc-pin line="5" tone="warn" title="Mutation">Under load control the solve diverges at the limit point; no row past it exists.</doc-pin>
     </doc-code>
   </doc-claim>
+  <!-- 4.2 · verify: the claim a fresh tester checks -->
+  <doc-claim>
+    <p>A fresh tester sees lambda turn back while the apex keeps moving.</p>
+    <doc-code title="moose/test · the reproduce command" lang="text">
+<script type="text/plain">
+./moose_test-opt -i tests/problems/arc_length/arch.i
+-> arch_out_history_0001.csv: a row past the lambda maximum
+   with a larger apex_disp than the row at the maximum
+run_tests --re=tag
+run_tests --re=steady
+</script>
+      <doc-pin line="2" title="Claim">Falsifiable: a monotonic lambda column fails it.</doc-pin>
+      <doc-pin line="4" title="Must still work">U1 changes tag routing.</doc-pin>
+      <doc-pin line="5" title="Must still work">Steady solves without arc length.</doc-pin>
+    </doc-code>
+  </doc-claim>
 </doc-claim>
 
 <!-- ═════ 5 · WHAT: showcase ═════ -->
@@ -231,6 +247,25 @@ specs/gallery/
     <label><input type="checkbox" name="Q3" value="compare" checked> Load control against arc length <small>load_control_vs_arc.png</small></label>
     <label><input type="checkbox" name="Q3" value="bratu"> The Bratu fold <small>a second setting, lambda per increment</small></label>
   </doc-ask>
+  <!-- 5.1 · proof: what the PR shows -->
+  <doc-claim>
+    <p>The PR shows load stepping stop where arc length goes on.</p>
+    <doc-tree caption="Same mesh, tolerances and preconditioner for both runs.">
+<script type="text/plain">
+specs/proof/
+  + arch-before.md            # load stepping: last converged load, the step that diverges
+  + arch-after.md             # arc length: increments past the limit, iterations, wall time
+specs/gallery/
+  + load_control_vs_arc.png   # the showcase figure of the same two runs
+</script>
+    </doc-tree>
+    <doc-ask id="Q4">
+      <p>Which proof does the PR need?</p>
+      <label><input type="radio" name="Q4" value="comparison" checked> Load stepping against arc length <small>iterations, wall time, one figure</small></label>
+      <label><input type="radio" name="Q4" value="figure"> The showcase figures alone <small>arch_path.png, load_control_vs_arc.png</small></label>
+      <label><input type="radio" name="Q4" value="output"> The history CSV excerpt <small>arch_out_history_0001.csv</small></label>
+    </doc-ask>
+  </doc-claim>
 </doc-claim>
 
 <!-- ═════ shared ═════ -->

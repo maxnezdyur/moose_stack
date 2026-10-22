@@ -29,6 +29,8 @@ created: YYYY-MM-DD
 
 `status: approved` is legal only when every box under `## Needs clarification` is checked. The
 user's answers from the page, applied by `/moose-blueprint` in Respond mode, are what ticks them.
+Under `--auto` the skill ticks them itself, as `- [x] Qn · <question> — auto: **<answer>**
+(<reason>)`, and the gate it grants records `by: auto`.
 
 ## Sections, in this order, with these exact `##` headings
 
@@ -40,12 +42,66 @@ user's answers from the page, applied by `/moose-blueprint` in Respond mode, are
 | `## Test plan` | one `### <name> (<Tester>)` per test with three bullets: `Requirement:` one sentence in MOOSE's `The system shall ...` form, copied verbatim into the spec's `requirement =`; `Asserts:` the observable consequence (never "runs without error"); `Mutation:` what fails if this line of new code were a no-op; a test against an analytic solution also states the expected behaviour of the error under refinement. `gtest` is the Tester for tests under `unit/` |
 | `## Doc plan` | `Needed: yes` or `Needed: no`; the page paths; `Existing coverage:` every page already documenting the feature and the placement the user chose |
 | `## Showcase` | optional; omit the heading entirely when the feature needs no figure. `Example:` the input to build, as a `code` path; then one bullet per figure, `<file>: <what it shows and which claim it proves>`, the file named exactly as it will land in `specs/gallery/` and spelled so the projector can link it (see below) |
+| `## Proof` | what the pull request shows a reviewer that CI cannot: the kind, then one bullet per proof (see "Proof lines") |
+| `## Verify` | the claim a fresh tester checks after the build (gate B7): the three lines under "Verify lines" |
 | `## Out of scope` | explicit non-goals, one bullet each |
 | `## Needs clarification` | one `- [ ] Qn · <question> — proposed: **<answer>**` per decision, `Q1`, `Q2`, … in the order the page asks them; the same `Qn` is the `doc-ask id` on the page and the proposed answer is its `checked` option. An answer from the page ticks the box and replaces `proposed:` with the answer: `- [x] Qn · <question> — <answer>` |
 | `## Work plan` | exactly one fenced `json` block, below |
 | `## Amendments` | append-only dated log |
 
 Every `file:line` citation appears verbatim as the scout reported it.
+
+### Verify lines
+
+`/moose-build` gate B7 reads this section and sends fresh `moose-test-runner` testers at the built
+binary to check it. Write it so that a tester who has seen none of the build can falsify it.
+
+- `Claim:` one sentence: what the change does, as a MOOSE user sees it, with a number or an output
+  that can be wrong. "The L2 error of `u` falls at rate 2 under uniform refinement." Not "adds a
+  kernel".
+- `Reproduce:` one command from the scope root, then `->` and the result that proves the claim.
+  The command is `./<binary> -i <input> [<cli_args>]` or `run_tests --re=<spec name>`, on an input
+  the work plan creates or one that exists. The result is a value, a CSV column, a console line or
+  an error message, never "runs without error". For a fix, the command reproduces the bug at the
+  base ref.
+- `Must still work:` one bullet per neighbour behaviour that must not regress, each a
+  `run_tests --re=<names>` command of existing tests: the sibling objects, the AD or non-AD twin,
+  the tests of a base class the change touches.
+
+### Proof lines
+
+`/moose-build` captures each proof and `/moose-ship` puts it in the pull request, so a reviewer
+sees the change work without running it. A proof shows the numbers or the picture of a real run.
+CI already shows that the build, the tests and the precheck pass, so a test result, a gate result or
+a green run is never a proof.
+
+- `Kind:` one of `figure`, `convergence`, `comparison`, `output`, `none`. Take it from what the
+  claim in `## Verify` asserts:
+
+  | kind | the proof | before | after |
+  |---|---|---|---|
+  | `figure` | the `## Showcase` figures (a field, a refinement plot, a curve against the analytic solution) | the `-before` figure, for a fix | the showcase figures with the feature |
+  | `convergence` | a table of the error norm against `h` or `dt` and the observed rate, from the postprocessor CSV of a refinement study (`Mesh/uniform_refine=<k>` or `Executioner/dt=<v>` per run) | the table at the base ref, for a fix | the table with the feature |
+  | `comparison` | the new method against the method it replaces, on one input: nonlinear and linear iteration counts (`NumNonlinearIterations`, `NumLinearIterations`), wall time (`PerfGraphData`), and the result values side by side | the replaced method's numbers | the new method's numbers |
+  | `output` | an excerpt of the CSV, the exodus values (`scripts/exodus-view`) or the console lines that show the claim, including a new error message | the output at the base ref, for a fix | the output with the feature |
+  | `none` | a refactor, a dependency, a CI or a build change, or a docs-only change; CI covers it | | |
+
+- `Precondition:` the state that the proof needs to show the claim, for example "at least three
+  refinement levels", "the same mesh, tolerances and preconditioner for both methods" or "one rank,
+  an opt binary". Write `none` when there is no such state. A proof captured without its
+  precondition is weak.
+- Then one bullet per proof, `<file>: <what it shows and which claim it proves>`. A text file lands
+  in `specs/proof/`, an image in `specs/gallery/`. A `figure` kind names its `## Showcase` files,
+  and any other kind may name one showcase file too; the build renders it once. A before and after
+  pair is `<name>-before.<ext>` and `<name>-after.<ext>`. A text proof is a `.txt` or a `.md` file
+  of at most 60 lines. A probe script is `specs/proof/<name>-probe.sh`; it runs the binary from the
+  scope root through `scripts/conda-run.sh`, may carry its own input `specs/proof/<name>.i`, and
+  prints only what the claim needs. Every gallery filename obeys the pattern below.
+- A fix has a `before` proof that shows the problem. A new feature has a `before` only when it
+  replaces something visible; a `comparison` takes the replaced method's numbers from the same
+  binary instead.
+- `Kind: none` takes one more line, `Why:` one sentence. A change whose output a user sees (a value,
+  a message, a figure) is never `none`.
 
 ## The work-plan JSON
 
@@ -69,7 +125,8 @@ Every `file:line` citation appears verbatim as the scout reported it.
     "B3": { "criterion": "C4", "status": "idle" },
     "B4": { "criterion": "C5", "status": "idle" },
     "B5": { "criterion": "C6", "status": "idle" },
-    "B6": { "criterion": "DG", "status": "idle" }
+    "B6": { "criterion": "DG", "status": "idle" },
+    "B7": { "criterion": "C7", "status": "idle" }
   }
 }
 ```
@@ -111,8 +168,12 @@ Tables are pipe tables; a literal `|` inside a cell is `\|`.
 
 ## Checks before you stop
 
-Read the file back and confirm: the frontmatter fields above; the nine `##` headings in order,
-none a placeholder, with `## Showcase` present only when the feature has figures; one fenced
+Read the file back and confirm: the frontmatter fields above; the eleven `##` headings in order,
+none a placeholder, with `## Showcase` present only when the feature has figures; `## Verify` has
+`Claim:`, `Reproduce:` with its `->` result, and at least one `Must still work:` bullet; `## Proof`
+has `Kind:` and `Precondition:`, a kind other than `none` has at least one bullet and `none` has
+`Why:`, a `figure` kind has a `## Showcase` section and its bullets name those files, and a fix has
+a `-before` proof; one fenced
 `json` block that parses; every `deps` id exists and the graph has
 no cycle; edge-free units list disjoint files; each `test` unit names a `###` test heading and
 each `implement` unit a `###` physics subsection; each `showcase` unit's `files` match the

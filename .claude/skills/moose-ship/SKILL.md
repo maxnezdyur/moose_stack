@@ -29,13 +29,18 @@ Conventional subject under 72 characters (`feat(<area>): ...`, `fix(<area>): ...
 
 ```bash
 git -C <worktree>/<sub> push -u origin <branch>
-cd <worktree>/<sub> && gh pr create --repo idaholab/<app> --base next --head maxnezdyur:<branch> --draft \
-  --title "<subject>" --body-file /tmp/moose-ship-<branch>-pr.md
+cd <worktree>/specs/gallery && gh pr create --repo idaholab/<app> --base next --head maxnezdyur:<branch> --draft \
+  --title "<subject>" --body-file /tmp/moose-ship-<branch>-pr.md \
+  [--attach './<file>#<heading>' ...]
 git -C <worktree> add <sub>
 git -C <worktree> commit -m "Bump <sub> to <short sha>"
 ```
 
-`<branch>` is the submodule's current branch (the feature name); `<app>` is the submodule name. The PR body follows the app's `.github/PULL_REQUEST_TEMPLATE.md` when it has one (moose: Reason, Design, Impact); isopod has none, so use those three headings. The body carries the summary, the `refs #<issue>` line, the test counts, and the review counts (`required` and `suggested`, from the `/moose-build` report or `<worktree>/specs/review-<label>.md`, the copy that survives a reboot); no attribution trailer. It is short, in plain ASCII punctuation with no em dashes. Any further comment on the PR (figures, tables, replies to reviewers) is drafted for the user and posted only when they say so. The meta-repo commit stages only the gitlink; `specs/` and any other meta-repo change stay out. A rerun after a failure skips the steps that already happened: a clean tree with the branch ahead of `devel` means the commit exists; `git status -sb` up to date with `origin/<branch>` means the push happened; a hit from `gh pr list --repo idaholab/<app> --head <branch> --author @me` means the PR exists.
+`<branch>` is the submodule's current branch (the feature name); `<app>` is the submodule name. The PR body follows the app's `.github/PULL_REQUEST_TEMPLATE.md` when it has one (moose: Reason, Design, Impact); isopod has none, so use those three headings. The body carries the summary, the `refs #<issue>` line, the test counts, and the review counts (`required` and `suggested`, from the `/moose-build` report or `<worktree>/specs/review-<label>.md`, the copy that survives a reboot); no attribution trailer. It is short, in plain ASCII punctuation with no em dashes. After the template's headings it carries `## Proof` (below). Any further comment on the PR (more figures, tables, replies to reviewers) is drafted for the user and posted only when they say so. The meta-repo commit stages only the gitlink; `specs/` and any other meta-repo change stay out. A rerun after a failure skips the steps that already happened: a clean tree with the branch ahead of `devel` means the commit exists; `git status -sb` up to date with `origin/<branch>` means the push happened; a hit from `gh pr list --repo idaholab/<app> --head <branch> --author @me` means the PR exists.
+
+## Proof
+
+`## Proof` is what a reviewer can see without running the change, from `<worktree>/specs/proof/proof.md` and the blueprint's `## Proof`. One `### <title>` per proof from `proof.md`, in this order: the before, then the after. One sentence says what it shows and the precondition it met ("three uniform refinements, one rank"). An image is a `![<heading>](./<file>)` line, attached with `--attach './<file>#<heading>'` (`gh` 2.99 or later; `~/.claude/skills/playwright-cli/references/pr-attachments.md`), with the `Look at:` sentence of its `gallery.md` section. Attach only `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg` and `.mp4` files under 10 MB, only the ones a proof names, and run `gh pr create` from `<worktree>/specs/gallery/` so that each `./<file>` matches its `--attach` argument (the `cd` above). A text proof (a convergence table, an iteration and timing comparison, a CSV or exodus excerpt, console lines) goes in inline: a fenced block of at most 20 lines, inside `<details><summary><title></summary>` when it is longer than 8 lines. Cut it to the lines that show the claim. The repository is public: never paste a home path, a host name, a token or an internal URL; replace them with `<redacted>` or a scope-relative path. Leave out every proof that `proof.md` or the build report marks `weak` or `skipped`, and name it in the report instead. Never put a test result, a gate result or a CIVET run here; CI shows those. With `Kind: none`, with no `proof.md` (a build from before `## Proof`), or with no proof that is `ok`, omit the section. When some uploads fail, `gh` still creates the PR; report each failed file with its error. To add a figure to a PR that exists, run `gh pr edit <N> --repo idaholab/<app> --attach './<file>#<alt>'` from the gallery.
 
 ## Fix-ups after the PR exists
 
@@ -43,7 +48,7 @@ A change to the PR while it is a draft or under review (a CIVET failure, a revie
 
 ## Report
 
-The PR URL, the submodule commit (short sha and subject), the meta-repo bump commit, the files committed, and any step skipped or failed with its output. The PR stays a draft; the user marks it ready in the GitHub UI. Then run
+The PR URL, the submodule commit (short sha and subject), the meta-repo bump commit, the files committed, the proofs put in the body and the figures attached (and each weak, skipped or missing proof, with `/moose-build --verify-only` as the way to capture it again), and any step skipped or failed with its output. The PR stays a draft; the user marks it ready in the GitHub UI. Then run
 `~/projects/moose_stack/factory/factory board` (absolute path; no `factory/` exists in this worktree) so the
 board picks up the new PR, and say in one line that the card moved.
 Finally append the PR URL to `## State` in `<worktree>/specs/handoff.md` (one sentence, after what is

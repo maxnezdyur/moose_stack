@@ -209,6 +209,28 @@ Example: `moose/test/tests/problems/arc_length/arch.i`
 - `arch_path.png`: $\lambda$ against apex displacement through the limit point; proves the path is traced past it.
 - `load_control_vs_arc.png`: the same arch under load stepping, diverging where the arc continues; proves the comparison against the method replaced.
 
+## Proof
+
+- Kind: comparison
+- Precondition: the same arch mesh, nonlinear tolerances and preconditioner for both methods; one
+  rank, an opt binary.
+- `arch-before.md`: load stepping on `arch.i` (`Problem/type=FEProblem`, `Executioner/type=Transient`):
+  the load factor of the last converged step, and the step where Newton diverges.
+- `arch-after.md`: arc length on `arch.i`: the increments past the limit point, the nonlinear
+  iterations per increment and the wall time; proves the path continues where load control stops.
+- `load_control_vs_arc.png`: the showcase figure of the same two runs.
+
+## Verify
+
+- Claim: An `ArcLengthProblem` traces the arch through its limit point: $\lambda$ rises to a maximum,
+  then falls while the apex displacement keeps growing.
+- Reproduce: `./moose_test-opt -i tests/problems/arc_length/arch.i` from `moose/test` ->
+  `arch_out_history_0001.csv` has a row whose `lambda` is below the column maximum and whose
+  `apex_disp` is beyond the displacement at that maximum.
+- Must still work:
+  - `run_tests --re=tag`: the vector and matrix tag tests, because U1 changes tag routing.
+  - `run_tests --re=steady`: Steady solves without an arc-length problem.
+
 ## Out of scope
 
 - Per-timestep continuation ("Mode B", $\lambda: 0 \to 1$ within each real time step). Future work.
@@ -226,6 +248,7 @@ Example: `moose/test/tests/problems/arc_length/arch.i`
 - [x] Q1 · Which load does the callback vector `Q` carry? — The full end-of-step load; PETSc scales it (`al.c:267-276`).
 - [x] Q2 · What is the default for `correction_type`? — `exact` (`al.c:708`; the header comment is wrong).
 - [x] Q3 · Which figures must the showcase render? — `arch_path.png` and `load_control_vs_arc.png`; the Bratu fold was not wanted.
+- [x] Q4 · Which proof does the PR need? — `comparison`: load stepping against arc length on `arch.i`, citing `load_control_vs_arc.png`.
 
 ## Work plan
 
@@ -274,7 +297,8 @@ Example: `moose/test/tests/problems/arc_length/arch.i`
     "B3": { "criterion": "C4", "status": "idle" },
     "B4": { "criterion": "C5", "status": "idle" },
     "B5": { "criterion": "C6", "status": "idle" },
-    "B6": { "criterion": "DG", "status": "idle" }
+    "B6": { "criterion": "DG", "status": "idle" },
+    "B7": { "criterion": "C7", "status": "idle" }
   }
 }
 ```
@@ -284,3 +308,4 @@ Example: `moose/test/tests/problems/arc_length/arch.i`
 - 2026-08-24: created from `/moose-blueprint`.
 - 2026-09-12: converted to the markdown format as the reference example.
 - 2026-10-06: clarification ids and the showcase added to match `example-blueprint-page.html`.
+- 2026-10-22: `## Proof`, `## Verify`, Q4 and gate B7 added to match the new format.

@@ -1,7 +1,7 @@
 ---
 name: moose-blueprint
-description: Turns a feature idea into specs/blueprint.md for /moose-build plus a review page, specs/blueprint.html, where every decision is a question on the claim it changes. Interactive at a terminal: grills the user through moose-grill and AskUserQuestion. Unattended under factory start or --unattended: settles every fork with a defensible default and never blocks, so the user answers on the page later and pastes the response back. Scouts moose, blackbear and isopod with moose-scout agents either way. Use for "/moose-blueprint <idea>", "plan this MOOSE feature", "write a blueprint", "spec this kernel, material, or postprocessor", and "/moose-blueprint <pasted Respond output>" to apply the user's answers.
-argument-hint: "[--unattended|--interactive] <feature idea> | <pasted '# Re:' response> | restart <feature idea>"
+description: Turns a feature idea into specs/blueprint.md for /moose-build plus a review page, specs/blueprint.html, where every decision is a question on the claim it changes. Interactive at a terminal: grills the user through moose-grill and AskUserQuestion. Unattended under factory start or --unattended: settles every fork with a defensible default and never blocks, so the user answers on the page later and pastes the response back. With --auto (from /moose-auto): unattended, then ticks every decision and approves its own plan as "auto". Scouts moose, blackbear and isopod with moose-scout agents either way. Use for "/moose-blueprint <idea>", "plan this MOOSE feature", "write a blueprint", "spec this kernel, material, or postprocessor", and "/moose-blueprint <pasted Respond output>" to apply the user's answers.
+argument-hint: "[--auto|--unattended|--interactive] <feature idea> | <pasted '# Re:' response> | restart <feature idea>"
 effort: high
 ---
 
@@ -29,6 +29,40 @@ Pick unattended when any of these holds, in this order; otherwise interactive:
 
 Say which way you are running in the first line you print.
 
+`--auto` is unattended plus a self-approval; see "Auto mode". Strip the flag, run unattended, and
+obey that section for the whole run.
+
+## Auto mode
+
+`/moose-auto` runs this skill with `--auto` in a background session with no human present. The
+run is unattended in every way the sections below say, and then it approves its own plan. Every
+other rule of this skill still applies.
+
+- Call no `AskUserQuestion`. An empty idea ends the run: print `BLOCKED(no idea given)` and run the
+  board.
+- An existing blueprint that passes its checks: Resume, unattended. A blueprint that fails its
+  checks: Restart, with the warning.
+- The grill: `Skill(moose-grill)` with `--unattended <idea>`, as in "Grill".
+- A reuse halt: check reuse as-is when the match does the job, otherwise extend. Never pick
+  parallel and never abandon on your own.
+- A scout that fails: record "Scout failed: <reason>" as usual, and keep going. Two failed scouts
+  on the same angle end the run `BLOCKED(scout: <angle>)`.
+- The proof: take the kind from the table under "Proof lines" in the format document without
+  asking. A change whose output a user sees is never `none`. Record the kind and its reason as a
+  ticked `auto:` box.
+- Write both files as "Write" says. Then tick every open decision in `blueprint.md` in place:
+  `- [x] Qn · <question> — auto: **<answer>** (<one-line reason>)`. The page keeps the same
+  `checked` answers, so the user can still review it and change a decision through Respond.
+- After the "Checks before you stop" list passes, set `status: approved`, append
+  `- <today>: approved by auto mode; every auto: answer is under Needs clarification.` to
+  `## Amendments`, run `~/projects/moose_stack/factory/factory grant <feature> blueprint_approved
+  --auto`, then the board. The `--auto` grant records `by: auto`, so the card carries the `auto`
+  flag and shows that no human read the plan.
+- A failed check that you cannot fix leaves `status: draft` and ends the run
+  `BLOCKED(blueprint: <check>)`. Never grant over a failed check.
+- End with one line: `AUTO_APPROVED <worktree-root>/specs/blueprint.md` or the `BLOCKED(...)`
+  line. Do not print the review instructions of "Done".
+
 ## Modes
 
 `$ARGUMENTS` picks the mode.
@@ -37,6 +71,7 @@ Say which way you are running in the first line you print.
 |---|---|
 | starts with `# Re:` | **Respond.** Apply the user's answers from the page (below) |
 | `restart <idea>` | **Draft**, overwriting an existing blueprint |
+| `--auto <idea>` | **Draft**, unattended, then the self-approval of "Auto mode" |
 | `--unattended <idea>` / `--interactive <idea>` | **Draft**, with that way of settling decisions; combines with `restart` in either order |
 | anything else | **Draft.** When `specs/blueprint.md` already exists: unattended, stop with "A blueprint exists. Paste the Respond output from `specs/blueprint.html` to apply answers, or run `/moose-blueprint restart <idea>` to start over."; interactive, ask with `AskUserQuestion`: Resume (keep it, grill only the sections that are empty or placeholders and the unticked decisions), Restart, or Cancel |
 
@@ -83,6 +118,23 @@ Interactive, ask once, "which example should we build, and which picture proves 
 unattended, write both in and let the user untick on the page. A feature with nothing to look at
 (an error check, a refactor) gets `No showcase` as the default and the heading is omitted; do not
 invent figures to fill it.
+
+Write the `## Verify` section during the grill: the claim in one sentence with a number or an output
+that can be wrong, the reproduce command (a `./<binary> -i <input>` run or a `run_tests --re=<name>`)
+and the result that proves the claim, and the existing tests that must still pass. For a fix, take
+the reproduce command from the issue. `/moose-build` gate B7 sends fresh testers at the binary with
+it. A claim no command can falsify is a claim to rewrite, not a section to fill.
+
+Write the `## Proof` section right after the showcase decision. A proof is what the pull request
+shows a reviewer so that the review goes faster: the numbers or the picture of a real run. CI
+already shows the build, the tests and the precheck, so a test result is never a proof. Propose the
+kind from what the claim asserts (the table under "Proof lines" in the format document), the
+precondition the proof needs (three refinement levels, the same solver settings for both methods),
+and the files, with a `-before` for a fix. A `figure` kind reuses the `## Showcase` figures; any
+other kind may cite one showcase figure instead of a second render. The proof is one decision:
+interactive, ask once, "Is this the proof a reviewer needs?"; unattended, write the proposed kind in
+and let the user change it on the page. Choose `none` only for a refactor, a dependency, a CI or a
+build change, or a docs-only change, and write its `Why:`.
 
 Decomposition into work-plan units is this skill's job: one `implement` unit per new class
 from the predicted files, edges only for hard dependencies (derives from, consumes a property

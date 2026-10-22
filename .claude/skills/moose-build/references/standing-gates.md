@@ -3,7 +3,8 @@
 The checks every `/moose-build` run passes, whatever the blueprint asked for. A blueprint's work-plan JSON
 carries a `gates` object with these ids and criteria, and the rendered page draws them as strips; a blueprint
 cannot add, remove, reorder, or alter one. Gate A
-runs inside the loop; Gate B runs after `GOAL_MET`. Each row's criterion is its entry in `/moose-build`'s
+runs inside the loop; Gate B runs after `GOAL_MET`, and B7 runs after Gate B and the docs pass, before the
+clean-context review. Each row's criterion is its entry in `/moose-build`'s
 goal ledger, and a gate passes when its rows are green. Row ids are stable and `/moose-build` addresses Gate
 B rows by number; B1 is unused, because the clean-context review's code and dry lenses cover that check. The commands live in `scripts/gates.sh` beside this file: a new
 CIVET rejection becomes a gate there plus a row here, once, and every later run inherits it.
@@ -16,6 +17,7 @@ CIVET rejection becomes a gate there plus a row here, once, and every later run 
 | **B4** SQA | C5 | `gates.sh <repo> sqa`: every touched runnable `tests` block carries `requirement`, `design`, and `issues` at its own level or on an ancestor, then `moosedocs.py check` with errors filtered to in-diff files. |
 | **B5** ASCII | C6 | `gates.sh <repo> ascii`: added lines of code files (not `.md`, `.bib`, gold) hold only 7-bit ASCII; added `.md` lines carry no invisible character. |
 | **B6** Docs smoke | DG | `docs.sh <repo> smoke --diff devel`: the `docs` line of `gates.sh <repo> all`, or the docs-writer's SMOKE line when it authored pages. Skipped by `--core`. |
+| **B7** Claim verified | C7 | `/moose-build`'s claim round: 3 fresh `moose-test-runner` briefs (reproduce, variations, regression) written from the blueprint's `## Verify` section, or from `## Summary` and the test plan, reported in `<meta-root>/specs/verify/build-<k>.md`. Passes when the claim holds and the regression brief is GREEN. A failure goes back to the loop as repair evidence; at most 2 rounds. SKIPPED with `--verify 0`. A proof is never part of this row. |
 
 Two gotchas.
 

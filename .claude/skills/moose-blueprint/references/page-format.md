@@ -56,6 +56,8 @@ see. Level 2 is how a class does it. Level 3 is where, as `file:line`.
 | Code that exists and is reused or extended | 3 | `doc-code src="…" lines="a-b"` with a pin on the line that matters. Pack embeds it from the worktree |
 | Each test | 1 under a "Tests" claim, or 2 under the behaviour it proves | `doc-code lang="text"` of the spec stanza or the input, with the `Requirement:` sentence as the claim and the `Asserts:` and `Mutation:` lines as `doc-pin` titles |
 | Showcase figures | 1 | `doc-tree` of `specs/gallery/`, one row per figure with its `#` clause, and the `Example:` input as a child `doc-code` |
+| Verify | 2, under the "Tests" claim | `doc-code lang="text"` of the `Reproduce:` command and its expected result, with the `Claim:` sentence as the claim and each `Must still work:` command as a `doc-pin` |
+| Proof | 2, under the showcase claim, or 1 when there is no showcase | `doc-tree` of `specs/proof/` and `specs/gallery/`, one row per proof file with its `#` clause; the `Precondition:` as the caption. `Kind: none` is the claim alone, with the `Why:` sentence |
 | Reuse decisions | `aux="shared"` | `doc-calls` or `doc-tree` of the matched code, one `~` or space row per finding, `-- decision` at the end of the row |
 | Files and work plan units | `aux="shared"` | `doc-tree` of the new and changed files with `# U1`, `# T1` clauses naming the unit |
 | Out of scope | `aux="scope"` | a plain `<ul>` |
@@ -87,7 +89,8 @@ Without pandoc the block packs as plain text and the packer says so.
 
 ## Decisions
 
-Every open question from the grill, every reuse halt, and the showcase choice is a `doc-ask`. It
+Every open question from the grill, every reuse halt, the showcase choice and the proof kind is a
+`doc-ask`. It
 sits on the claim it changes, after that claim's exhibit, never in a list at the end.
 
 ```html
@@ -113,6 +116,8 @@ sits on the claim it changes, after that claim's exhibit, never in a list at the
   with the matched code as a `doc-code src=` exhibit on a child claim.
 - The showcase question is one `doc-ask` with checkboxes, one per proposed figure, the two
   default figures checked, plus a "No showcase" radio alternative when that is reasonable.
+- The proof question is one `doc-ask` with radios, one per plausible kind, the proposed kind
+  `checked`, and a `<small>` that names its files.
 - `data-if` shows a consequence under the answer that causes it. Use it for the cost of the
   alternative, not for the default.
 - A question that only the user can answer and that has no sensible default (the math itself, a
@@ -131,6 +136,8 @@ Write both files in one pass from the same facts. These must agree:
 | each level-2 class claim | one `### <Uid> <ClassName>` subsection under `## Physics` |
 | each test claim | one `### <name> (<Tester>)` under `## Test plan` |
 | each `doc-math` | the same formulas under `## Physics` |
+| the Verify claim and its `doc-code` | `Claim:`, `Reproduce:` and `Must still work:` under `## Verify` |
+| the Proof claim and its tree | `Kind:`, `Precondition:` and the bullets under `## Proof` |
 | the `aux="shared"` files tree | the `files` lists in the work-plan JSON |
 
 When a response changes a decision, change both: tick the box with the answer in the markdown,
