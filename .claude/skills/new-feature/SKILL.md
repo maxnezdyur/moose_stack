@@ -30,15 +30,19 @@ Three facts:
 
 ## Commands, in order
 
-1. Preflight. `env_name` is the shared env (one per moose-dev pin; existing is expected). `<feature>` must exist on none of the four repos. `moose_stack` must sit at `main` and each submodule at `devel`, with the three submodule SHAs equal to the gitlinks in `moose_stack/main`; stop before any mutation if a pair differs. Retain the SHA and lease that `preflight` prints; both later helper calls take that exact lease.
+1. Preflight. `env_name` is the shared env (one per moose-dev pin; existing is expected). `<feature>` must exist as a branch on none of the four repos, locally or on any of their remotes. `moose_stack` must sit at `main` and each submodule at `devel`, with the three submodule SHAs equal to the gitlinks in `moose_stack/main`; stop before any mutation if a pair differs. Retain the SHA and lease that `preflight` prints; both later helper calls take that exact lease.
    ```bash
    env_name=$(bash ~/projects/moose_stack/scripts/moose-env.sh ~/projects/moose_stack)
    ```
    ```bash
    for r in moose_stack moose_stack/moose moose_stack/blackbear moose_stack/isopod; do
      git -C ~/projects/$r branch --list <feature>
+     for remote in $(git -C ~/projects/$r remote); do
+       git -C ~/projects/$r ls-remote --heads "$remote" <feature>
+     done
    done
    ```
+   Any output from either command stops the run: name the repo, the remote and the ref. A branch on `origin` is earlier work on the fork; a branch on `upstream` is someone else's. A failed `ls-remote` also stops the run, since the name is then unverified.
    ```bash
    git -C ~/projects/moose_stack rev-parse HEAD main
    for r in moose blackbear isopod; do
@@ -132,6 +136,6 @@ EOF
 
 ## Report
 
-Workspace path; the `specs/gallery/` folder and its `gallery.md`, where figures for a human go; the `<feature>.code-workspace` file to open in VS Code; env name and whether it was reused or created; the four branches created; clangd DB/index status (seeded or skipped); donor SHA/lease; objects reused versus rebuilt locally; hydration timing/validation; a reminder to `conda activate <env-name>`. State that BlackBear and Isopod were worktreed but not hydrated or built. Point to `docs/local.md` if the branch later bumps `moose`. Then run `~/projects/moose_stack/factory/factory board` (absolute path; the new worktree has no `factory/`) so the board adopts the workspace, and say that the card is now on `~/projects/moose-factory/Home.md`. Next steps: `/moose-blueprint` in the worktree, then `/moose-build`, then `/moose-ship`.
+Workspace path; the `specs/gallery/` folder and its `gallery.md`, where figures for a human go; the `<feature>.code-workspace` file to open in VS Code; env name and whether it was reused or created; the four branches created; clangd DB/index status (seeded or skipped); donor SHA/lease; objects reused versus rebuilt locally; hydration timing/validation; a reminder to `conda activate <env-name>`. State that BlackBear and Isopod were worktreed but not hydrated or built. Point to `docs/local.md` if the branch later bumps `moose`. Then run `~/projects/moose_stack/factory/factory board` (absolute path; the new worktree has no `factory/`) so the board adopts the workspace, and say that the card is now on `~/projects/moose-factory/Home.md`. Next steps: `/moose-blueprint` in the worktree, then `/moose-build`, then `/moose-ship`. `/feature-sync` reports drift from `devel` later; `/feature-remove` checks for unsaved work before teardown.
 
 Host: !`hostname`
