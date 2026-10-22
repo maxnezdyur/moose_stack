@@ -36,7 +36,11 @@
 #                one bucket name per comment, same order as `comments`, so
 #              review-post.sh can demote a 422-rejected comment into the body
 #              under the right bucket heading.
-#   local mode /tmp/moose-review-<label>.md
+#              /tmp/moose-review-<label>.json
+#                every merged finding, each tagged with its bucket and kind,
+#              as one array of bucket objects (the input of
+#              review-prove-apply.py select; same order as the payload).
+#   both modes /tmp/moose-review-<label>.md
 #                every finding (inline and body) as
 #                `path:line -- [required|suggested] text`; all six bucket
 #              sections always present; reviewer failures and coverage gaps
@@ -46,7 +50,9 @@
 #                 "total":T,"ledger_ok":bool,"failed":null|"<reason>",
 #                 "missing":[...]}, ...},
 #                 "required":N,"suggested":M,"payload":<path|null>,
-#                 "markdown":<path|null>,"post":bool,"pr":<N|null>}
+#                 "markdown":<path>,"post":bool,"pr":<N|null>}
+#              pr mode adds "findings":<path> and "already_raised":[...];
+#              either mode adds "suggestions" when a fence exists (below).
 #              A failed reviewer has inline/body null, never 0: unknown is not
 #              clean. A bucket with total 0 had no files, so no reviewer ran.
 #              `post` is false when there is nothing to post (clean review, or
@@ -61,8 +67,23 @@
 # (the summary says which; the orchestrator retries that reviewer once and
 # re-runs this script); 2 = usage, or no snapshot files for the label.
 #
-# This script reads and writes only /tmp/moose-review-<label>* files, so it
-# does not resolve the meta-root and never touches a repository.
+# Already raised (pr mode): when review-discussion.sh wrote
+# /tmp/moose-review-<label>-threads.json, a finding that repeats an open or
+# resolved thread within 3 lines is dropped (review-dedup.py states the rule)
+# and listed in "already_raised": [{"path","line","by","status"}] and in an
+# "Already raised on the PR" note at the end of the markdown.
+#
+# Suggestion fences: every ```suggestion fence is checked by
+# suggestion-check.py against the checkout named by the meta file's `root`.
+# A fence that fails loses the fence and keeps its prose. When at least one
+# fence exists, the summary gains "suggestions": {"checked","kept",
+# "dropped":[{path,line,reason}]}, and the markdown ends with a
+# "Suggestions not posted" note when one was dropped. Both checks run before
+# any payload is written.
+#
+# This script writes only /tmp/moose-review-<label>* files. It reads the
+# checkout only to check suggestion fences, never writes a repository, and
+# never calls GitHub: review-post.sh does the post.
 # Bash 3.2 compatible (no associative arrays, no mapfile); needs jq.
 
 set -uo pipefail
@@ -276,6 +297,31 @@ done
 
 jq -s '.' "$tmp/code.json" "$tmp/test.json" "$tmp/doc.json" "$tmp/ad.json" "$tmp/dry.json" "$tmp/newobj.json" > "$tmp/all.json"
 
+here="$(cd "$(dirname "$0")" && pwd -P)"
+
+# --- already raised ----------------------------------------------------------
+# A finding that repeats an open or resolved thread near its line is dropped
+# here, so the review never says again what another reviewer said.
+already='[]'
+if [[ "$mode" == pr && -f "${prefix}-threads.json" ]]; then
+  already="$(python3 -I "$here/review-dedup.py" --all "$tmp/all.json" --threads "${prefix}-threads.json")" \
+    || { echo "error: the already-raised check failed" >&2; exit 2; }
+fi
+
+# --- suggestion fences -------------------------------------------------------
+# A ```suggestion fence becomes an "Apply" button on GitHub, so each one is
+# applied to a copy of its file and checked before it can reach a payload.
+# The checkout is the meta file's root (moose/ in pr mode, the scope
+# submodule in local mode); without one the check is skipped.
+suggestions='null'
+if grep -q '```suggestion' "$tmp/all.json"; then
+  checkout="$(jq -r '.root // empty' "${prefix}-meta.json" 2>/dev/null)"
+  if [[ -n "$checkout" && -d "$checkout" ]]; then
+    suggestions="$(python3 -I "$here/suggestion-check.py" --all "$tmp/all.json" --root "$checkout")" \
+      || { echo "error: suggestion check failed" >&2; exit 2; }
+  fi
+fi
+
 # --- shared jq helpers for rendering ---------------------------------------
 read -r -d '' RENDER_DEFS <<'JQ' || true
 def heading: {code:"Code", test:"Tests", doc:"Docs", ad:"AD", dry:"Reuse", newobj:"Completeness"}[.];
@@ -294,6 +340,7 @@ markdown_path="null"
 post=false
 
 if [[ "$mode" == "pr" ]]; then
+  cp "$tmp/all.json" "${prefix}.json" || { echo "error: could not write ${prefix}.json" >&2; exit 2; }
   payload="${prefix}-payload.json"
   jq "$RENDER_DEFS"'
     ([ .[] | select(.body_findings | length > 0)
@@ -315,36 +362,46 @@ if [[ "$mode" == "pr" ]]; then
     # reject it. The payload file is removed so a stale one cannot be posted.
     rm -f "$payload" "${prefix}-payload-buckets.json"
   fi
-else
-  markdown="${prefix}.md"
-  jq -r "$RENDER_DEFS"'
-    def section:
-      . as $r
-      | ($r.bucket | heading) as $h
-      | ([ $r.inline_comments[], $r.body_findings[] ]
-          | map("- " + loc + " -- [" + .kind + "] " + indented)) as $items
-      | ([ (if $r.failed != null then "- (reviewer failed: \($r.failed))" else empty end),
-           (if ($r.failed == null and ($r.missing | length) > 0)
-            then "- (incomplete coverage: did not review: \($r.missing | join(", ")))" else empty end),
-           (if ($r.failed == null and ($r.ledger_ok | not) and ($r.missing | length) == 0)
-            then "- (ledger counts did not match the findings arrays)" else empty end)
-         ]) as $notes
-      | "## \($h)\n"
-        + (if $r.total == 0 and $r.failed == null and ($items | length) == 0 then
-             (if ($r.bucket | is_lens) then "- (lens not triggered)"
-              else "- (no \($r.bucket) files in this branch)" end)
-           elif ($items | length) == 0 and ($notes | length) == 0 then "- (none)"
-           else ($items + $notes | join("\n")) end);
-    "# Local review -- \($label)\n\n" + (map(section) | join("\n\n")) + "\n"
-  ' --arg label "$label" "$tmp/all.json" > "$markdown" || { echo "error: could not write $markdown" >&2; exit 2; }
-  markdown_path="\"$markdown\""
+fi
+
+# --- markdown, both modes ---------------------------------------------------
+markdown="${prefix}.md"
+jq -r "$RENDER_DEFS"'
+  def section:
+    . as $r
+    | ($r.bucket | heading) as $h
+    | ([ $r.inline_comments[], $r.body_findings[] ]
+        | map("- " + loc + " -- [" + .kind + "] " + indented)) as $items
+    | ([ (if $r.failed != null then "- (reviewer failed: \($r.failed))" else empty end),
+         (if ($r.failed == null and ($r.missing | length) > 0)
+          then "- (incomplete coverage: did not review: \($r.missing | join(", ")))" else empty end),
+         (if ($r.failed == null and ($r.ledger_ok | not) and ($r.missing | length) == 0)
+          then "- (ledger counts did not match the findings arrays)" else empty end)
+       ]) as $notes
+    | "## \($h)\n"
+      + (if $r.total == 0 and $r.failed == null and ($items | length) == 0 then
+           (if ($r.bucket | is_lens) then "- (lens not triggered)"
+            else "- (no \($r.bucket) files in this branch)" end)
+         elif ($items | length) == 0 and ($notes | length) == 0 then "- (none)"
+         else ($items + $notes | join("\n")) end);
+  "# \($title) -- \($label)\n\n" + (map(section) | join("\n\n")) + "\n"
+' --arg label "$label" --arg title "$([[ "$mode" == pr ]] && echo "PR review" || echo "Local review")" "$tmp/all.json" > "$markdown" || { echo "error: could not write $markdown" >&2; exit 2; }
+markdown_path="\"$markdown\""
+if [[ "$suggestions" != null ]] && jq -e '.dropped | length > 0' <<<"$suggestions" >/dev/null; then
+  jq -r '"\n## Suggestions not posted\n\nThese findings keep their prose; the proposed replacement was removed.\n\n"
+         + (.dropped | map("- \(.path):\(.line) -- \(.reason)") | join("\n"))' <<<"$suggestions" >> "$markdown"
+fi
+if jq -e 'length > 0' <<<"$already" >/dev/null; then
+  jq -r '"\n## Already raised on the PR\n\nThese findings repeat a thread that another reviewer opened; they are not posted.\n\n"
+         + (map("- \(.path):\(.line) -- raised by \(.by) (\(.status))") | join("\n"))' <<<"$already" >> "$markdown"
 fi
 
 # --- summary ----------------------------------------------------------------
 pr_json="null"
 [[ -n "$pr" ]] && pr_json="$pr"
 jq -c --argjson payload "$payload_path" --argjson markdown "$markdown_path" \
-   --argjson post "$post" --argjson pr "$pr_json" '
+   --argjson post "$post" --argjson pr "$pr_json" --arg mode "$mode" --arg findings "${prefix}.json" \
+   --argjson already "$already" --argjson suggestions "$suggestions" '
   {
     reviewers: (map({
       key: .bucket,
@@ -364,7 +421,8 @@ jq -c --argjson payload "$payload_path" --argjson markdown "$markdown_path" \
     markdown: $markdown,
     post: $post,
     pr: $pr
-  }' "$tmp/all.json"
+  } + (if $mode == "pr" then {findings: $findings, already_raised: $already} else {} end)
+    + (if $suggestions == null then {} else {suggestions: $suggestions} end)' "$tmp/all.json"
 
 # Exit 1 when any reviewer that should have run failed or left a bad ledger.
 # A skipped bucket (total 0, no JSON) has ledger_ok true, so it never trips.

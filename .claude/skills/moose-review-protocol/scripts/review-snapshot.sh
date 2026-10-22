@@ -11,7 +11,8 @@
 # Files written (label is pr-<N> in pr mode; P = /tmp/moose-review-<label>):
 #   P.diff              unified diff the reviewers read
 #   P.files             every changed path, repo-relative, sorted, unique
-#   P-meta.json         gh pr view JSON (pr mode) or branch facts (local mode)
+#   P-meta.json         gh pr view JSON plus mode, root, number and head_sha
+#                       (pr mode), or branch facts (local mode)
 #   P-issues.md         linked-issue digest (pr mode only)
 #   P-<bucket>.files    code test doc ad dry newobj
 #
@@ -80,12 +81,27 @@ if [ "$mode" = "pr" ]; then
   command -v gh >/dev/null 2>&1 || die "gh not found on PATH"
   # gh reads the repo from cwd; -R pins it to upstream so the fork's origin
   # never answers. The dirty-tree guard already ran in the moose-pr-review skill.
-  ( cd "$root" && gh pr checkout "$pr" -R "$GH_REPO" ) || die "gh pr checkout $pr failed in $root"
+  # --force resets the local PR branch to the PR head, so a re-run after the
+  # author force-pushed (review-post.sh stale-head) does not stop on a
+  # non-fast-forward. The dirty-tree guard already ran, and the skill refuses
+  # the user's own PRs, so the reset never drops local work.
+  ( cd "$root" && gh pr checkout "$pr" -R "$GH_REPO" --force ) || die "gh pr checkout $pr failed in $root"
+  ( cd "$root" && gh pr view "$pr" -R "$GH_REPO" \
+      --json title,body,author,baseRefName,headRefName,headRefOid,commits ) > "$P-meta.raw.json" \
+    || die "gh pr view $pr failed"
+  # head_sha is the commit the review anchors on. review-post.sh pins
+  # commit_id to it and refuses to post when the PR or the checkout moved.
+  # The view runs after the checkout, so a push between the two shows here.
+  head_sha="$(jq -r '.headRefOid // ""' "$P-meta.raw.json")"
+  have="$(git -C "$root" rev-parse HEAD)" || die "cannot read HEAD in $root"
+  [ -n "$head_sha" ] && [ "$have" = "$head_sha" ] \
+    || die "PR #$pr head is ${head_sha:-unknown}, the checkout is at $have (a push landed during the checkout); run again"
+  jq --arg root "$root" --argjson n "$pr" --arg sha "$head_sha" \
+    '. + {mode: "pr", root: $root, number: $n, head_sha: $sha}' "$P-meta.raw.json" > "$P-meta.json" \
+    || die "could not write $P-meta.json"
+  rm -f "$P-meta.raw.json"
   ( cd "$root" && gh pr diff "$pr" -R "$GH_REPO" ) > "$P.diff" || die "gh pr diff $pr failed"
   ( cd "$root" && gh pr diff "$pr" -R "$GH_REPO" --name-only ) > "$P.files" || die "gh pr diff --name-only $pr failed"
-  ( cd "$root" && gh pr view "$pr" -R "$GH_REPO" \
-      --json title,body,author,baseRefName,headRefName,commits ) > "$P-meta.json" \
-    || die "gh pr view $pr failed"
   base="$(jq -r '.baseRefName // ""' "$P-meta.json")"
   sort -u -o "$P.files" "$P.files"
   tracked="$(wc -l < "$P.files" | tr -d ' ')"

@@ -3,12 +3,27 @@
 # the merged payload review-merge.sh wrote, and print one JSON result line.
 #
 # Usage:
-#   review-post.sh --pr <N> --payload <payload.json>
+#   review-post.sh --pr <N> --payload <payload.json> [--replace-pending <review id>]
 #
 # payload.json is {"body": "<markdown>", "comments": [<inline comment>, ...]}.
 # The request never carries an `event` field: omitting it leaves the review
 # PENDING, so the user submits it from the GitHub UI. This script never uses
-# `gh pr review` and never submits.
+# `gh pr review` and never submits. The request pins `commit_id` to the
+# reviewed head, so a comment can never land on a newer commit.
+#
+# The reviewed head and the checkout come from the snapshot's meta file,
+# /tmp/moose-review-pr-<N>-meta.json (head_sha, root), which
+# review-snapshot.sh --mode pr wrote.
+#
+# Checks before the post, each ending the run with posted:false and a reason:
+#   stale-head      the PR head on GitHub, the snapshot head_sha and the
+#                   checkout HEAD are not one commit. The author pushed, or
+#                   the checkout moved: snapshot and review again.
+#   pending-exists  I already hold a PENDING review on this PR. GitHub allows
+#                   one per user. The result names its id and url, so the
+#                   caller can ask the user, then run again with
+#                   --replace-pending <id>, which deletes that pending review
+#                   (only a PENDING review of mine, re-checked) and posts.
 #
 # 422 handling: GitHub rejects the whole review when one inline comment does not
 # anchor on a diff line ("line must be part of the diff"). The rejected comment
@@ -27,8 +42,9 @@
 # its sidecar stay index-aligned.
 #
 # Output (stdout, one line):
-#   {"posted":true,"demoted":K,"url":"<review html_url>"}      exit 0
-#   {"posted":false,"error":"<reason>"}                        exit 1
+#   {"posted":true,"number":N,"demoted":K,"id":ID,"url":"<review html_url>"}   exit 0
+#   {"posted":false,"number":N,"reason":"stale-head|pending-exists|error",
+#    "error":"<text>"[,"pending_id":ID,"pending_url":U]}                       exit 1
 # Bad arguments or an unusable payload print usage / an error and exit 2.
 #
 # Files written beside the payload: <payload>-request.json (the exact body sent,
@@ -44,7 +60,7 @@ GH_REPO="idaholab/moose"   # the only repo the review skill accepts
 GH="${REVIEW_POST_GH:-gh}"
 
 usage() {
-  echo "usage: review-post.sh --pr <N> --payload <payload.json>" >&2
+  echo "usage: review-post.sh --pr <N> --payload <payload.json> [--replace-pending <id>]" >&2
   exit 2
 }
 
@@ -52,8 +68,12 @@ die() { echo "review-post: $*" >&2; exit 2; }
 
 # Failure result: one JSON line on stdout, exit 1. The reason is a plain string
 # so the orchestrator can print it in its summary verbatim.
+# fail <reason> <text> [<extra json object>]
 fail() {
-  jq -n -c --arg e "$1" '{posted:false, error:$e}'
+  local x="${3:-}"
+  [ -n "$x" ] || x='{}'
+  jq -n -c --arg r "$1" --arg e "$2" --argjson x "$x" --arg n "${pr:-}" \
+    '{posted:false, number:($n | tonumber? // null), reason:$r, error:$e} + $x'
   exit 1
 }
 
@@ -69,19 +89,28 @@ meta_root() {
   printf '%s\n' "$d"
 }
 
-pr=""; payload=""
+pr=""; payload=""; replace=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --pr)      [ $# -ge 2 ] || usage; pr="$2";      shift 2 ;;
     --payload) [ $# -ge 2 ] || usage; payload="$2"; shift 2 ;;
+    --replace-pending) [ $# -ge 2 ] || usage; replace="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
 printf '%s' "$pr" | grep -Eq '^[0-9]+$' || usage
 [ -n "$payload" ] || usage
+[ -z "$replace" ] || printf '%s' "$replace" | grep -Eq '^[0-9]+$' || usage
 [ -f "$payload" ] || die "payload not found: $payload"
 command -v jq >/dev/null 2>&1 || die "jq not found on PATH"
 command -v "$GH" >/dev/null 2>&1 || die "gh not found on PATH"
+command -v git >/dev/null 2>&1 || die "git not found on PATH"
+META="/tmp/moose-review-pr-$pr-meta.json"
+[ -f "$META" ] || die "no snapshot meta at $META; run review-snapshot.sh --mode pr --pr $pr first"
+want="$(jq -r '.head_sha // ""' "$META")"
+[ -n "$want" ] || die "$META has no head_sha; run review-snapshot.sh --mode pr --pr $pr again"
+checkout="$(jq -r '.root // ""' "$META")"
+[ -d "$checkout" ] || die "$META names no checkout (root): ${checkout:-none}"
 jq -e 'type == "object" and ((.comments // []) | type == "array") and ((.body // "") | type == "string")' \
   "$payload" >/dev/null 2>&1 || die "payload is not {body: string, comments: array}: $payload"
 
@@ -94,6 +123,9 @@ fi
 workdir="$PWD"
 if mr="$(meta_root)" && [ -d "$mr/moose" ]; then workdir="$mr/moose"; fi
 
+# api <args...>: gh api run from the moose checkout (see meta_root).
+api() { ( cd "$workdir" && "$GH" api "$@" ); }
+
 stem="${payload%.json}"
 request="$stem-request.json"
 retry="$stem-retry.json"
@@ -105,11 +137,39 @@ stderr_file="$stem-stderr.txt"
 buckets_file="$stem-buckets.json"
 retry_buckets="$stem-retry-buckets.json"
 
+# --- check 1: one head --------------------------------------------------------
+have="$(git -C "$checkout" rev-parse HEAD 2>/dev/null)" || die "cannot read HEAD in $checkout"
+remote="$(api "repos/$GH_REPO/pulls/$pr" --jq '.head.sha' 2>"$stderr_file")" \
+  || fail error "could not read PR #$pr: $(head -n 3 "$stderr_file" | tr '\n' ' ')"
+if [ "$remote" != "$want" ] || [ "$have" != "$want" ]; then
+  fail stale-head "PR #$pr head is $remote, the review recorded $want, the checkout is at $have. Snapshot and review again" \
+    "$(jq -n -c --arg a "$remote" --arg b "$want" --arg c "$have" '{pr_head:$a, reviewed:$b, checkout:$c}')"
+fi
+
+# --- check 2: no pending review of mine ---------------------------------------
+me="$(api user --jq '.login' 2>"$stderr_file")" && [ -n "$me" ] \
+  || fail error "could not read the GitHub login: $(head -n 3 "$stderr_file" | tr '\n' ' ')"
+pending="$(api --paginate "repos/$GH_REPO/pulls/$pr/reviews" 2>"$stderr_file" \
+  | jq -s -c --arg me "$me" '[ .[][] | select(.state == "PENDING" and .user.login == $me) ] | first // empty')" \
+  || fail error "could not list the reviews of PR #$pr: $(head -n 3 "$stderr_file" | tr '\n' ' ')"
+if [ -n "$pending" ]; then
+  pid="$(printf '%s' "$pending" | jq -r '.id')"
+  if [ "$replace" != "$pid" ]; then
+    fail pending-exists "I already hold a pending review on PR #$pr; submit or delete it, or run again with --replace-pending $pid" \
+      "$(printf '%s' "$pending" | jq -c '{pending_id:.id, pending_url:.html_url}')"
+  fi
+  api -X DELETE "repos/$GH_REPO/pulls/$pr/reviews/$pid" >/dev/null 2>"$stderr_file" \
+    || fail error "could not delete pending review $pid: $(head -n 3 "$stderr_file" | tr '\n' ' ')"
+elif [ -n "$replace" ]; then
+  fail error "--replace-pending $replace names no pending review of mine on PR #$pr"
+fi
+
 # The request carries only what the reviews endpoint accepts. Reviewer-side
 # fields (kind, bucket, agent) stay in the payload for the demotion step but
 # would draw a 422 ("is not a permitted key") if sent, and `event` is dropped
 # on purpose: its absence is what keeps the review PENDING.
 to_request='{
+  commit_id: $sha,
   body: (.body // ""),
   comments: [ (.comments // [])[]
     | with_entries(select(.key | IN("path", "body", "line", "side", "start_line", "start_side", "position"))) ]
@@ -118,8 +178,7 @@ to_request='{
 # post <request file>: run the API call from the moose checkout, keep the body
 # and stderr, and return gh's exit status (non-2xx responses exit 1).
 post() {
-  ( cd "$workdir" && "$GH" api -X POST "repos/$GH_REPO/pulls/$pr/reviews" --input "$1" ) \
-    >"$response" 2>"$stderr_file"
+  api -X POST "repos/$GH_REPO/pulls/$pr/reviews" --input "$1" >"$response" 2>"$stderr_file"
 }
 
 # is_422: gh prints "gh: <message> (HTTP 422)" on stderr and the error body
@@ -143,8 +202,8 @@ error_text() {
 
 # success <demoted>: print the result line from the API response and exit 0.
 success() {
-  jq -c --argjson k "$1" --arg fb "https://github.com/$GH_REPO/pull/$pr/files" \
-    '{posted:true, demoted:$k, url:(.html_url // $fb)}' "$response"
+  jq -c --argjson k "$1" --arg fb "https://github.com/$GH_REPO/pull/$pr/files" --argjson n "$pr" \
+    '{posted:true, number:$n, demoted:$k, id:(.id // null), url:(.html_url // $fb)}' "$response"
   exit 0
 }
 
@@ -272,25 +331,26 @@ def add_to_body($h; $b):
     buckets: (if $buckets == null then null else [ $keep[] | $buckets[.] ] end) }'
 
 # First attempt.
-jq "$to_request" "$payload" >"$request" || die "could not build the request from $payload"
+jq --arg sha "$want" "$to_request" "$payload" >"$request" || die "could not build the request from $payload"
 if post "$request"; then success 0; fi
-is_422 || fail "$(error_text)"
+is_422 || fail error "$(error_text)"
 
 # 422: work out which comment GitHub refused, move it into the body, re-POST once.
 err="$(error_text)"
 hunks="$(hunks_json)" || hunks="null"
+[ -n "$hunks" ] || hunks="null"
 buckets="$(buckets_json)"
 demoted_json="$(jq -c --arg err "$err" --argjson hunks "$hunks" --argjson buckets "$buckets" \
   "$demote_jq" "$payload")" \
-  || fail "422 ($err); demotion step failed on $payload"
+  || fail error "422 ($err); demotion step failed on $payload"
 k="$(printf '%s' "$demoted_json" | jq '.demoted')"
-[ "$k" -gt 0 ] 2>/dev/null || fail "422 ($err); could not identify the rejected comment, nothing demoted"
+[ "$k" -gt 0 ] 2>/dev/null || fail error "422 ($err); could not identify the rejected comment, nothing demoted"
 
 # One rewrite per retry: the request, plus the trimmed sidecar when one was
 # read. Nothing downstream re-reads the sidecar (the review is re-POSTed once);
 # it is kept so the retry can be checked against its buckets after the fact.
-printf '%s' "$demoted_json" | jq '.payload' | jq "$to_request" >"$retry" \
-  || fail "422 ($err); could not write $retry"
+printf '%s' "$demoted_json" | jq '.payload' | jq --arg sha "$want" "$to_request" >"$retry" \
+  || fail error "422 ($err); could not write $retry"
 [ "$buckets" = "null" ] || printf '%s' "$demoted_json" | jq '.buckets' >"$retry_buckets"
 if post "$retry"; then success "$k"; fi
-fail "422 ($err); retry after demoting $k comment(s) failed: $(error_text)"
+fail error "422 ($err); retry after demoting $k comment(s) failed: $(error_text)"
