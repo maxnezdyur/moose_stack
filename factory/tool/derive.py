@@ -938,6 +938,11 @@ def derive_card(
         events.extend(lane_events)
 
         card.flags = flags_of(obs, cfg, now_ts, lane) + extra
+        # A plan the autonomous pipeline approved for itself says so on the
+        # card, so Max knows at ship that no human read the blueprint.
+        bp_gate = card.gates.get("blueprint_approved") or {}
+        if bp_gate.get("state") == GRANTED and bp_gate.get("by") == "auto":
+            card.add_flag("auto")
         # `factory board --du` measures it; every later run reads the cache, so
         # the next-action why and the note's Teardown section agree.
         kb = obs.get("reclaimable_kb")

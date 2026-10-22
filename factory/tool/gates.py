@@ -4,11 +4,13 @@
 ``blueprint_approved``, ``ship``, ``pr_ready`` and ``teardown``. Committed,
 because a grant is an input.
 
-Three channels, all human and all durable:
+Three human channels, all durable, plus one machine channel:
 
     verb        `factory grant <feature> <gate>`
     checkbox    a ticked box in the note's head block, read back before composing
     observed    a GitHub fact: an open PR proves `ship`, isDraft:false proves `pr_ready`
+    auto        `factory grant <feature> blueprint_approved --auto`, by "auto": the
+                autonomous pipeline approving its own plan. AUTO_GATES only.
 
 A gate never ungrants, so a double tick or an Obsidian conflict copy is
 harmless. ``pr_ready`` is human-only: ``/moose-ship`` is forbidden from setting
@@ -25,6 +27,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, probe
 from .model import GATES, GRANTED, PENDING
+
+# The gates the autonomous pipeline (/moose-auto) may grant itself, as
+# ``by: auto``. ``ship``, ``pr_ready`` and ``teardown`` are never here.
+AUTO_GATES: Tuple[str, ...] = ("blueprint_approved",)
 
 
 class GateStore:

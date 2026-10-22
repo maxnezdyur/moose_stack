@@ -113,6 +113,7 @@ CRITICAL_FLAGS = frozenset(
 WARNING_FLAGS = frozenset(
     {
         "probe-stale",
+        "auto",
         "lease-stale",
         "build-stale",
         "view-stale",

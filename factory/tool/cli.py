@@ -369,13 +369,25 @@ def run_grant(args: Any, cfg: config.Config) -> int:
     if args.gate not in GATES:
         err("unknown gate %r: one of %s" % (args.gate, ", ".join(GATES)))
         return REFUSED
+    # --auto is the autonomous pipeline's own approval of its plan. It is
+    # recorded as by "auto", so the note and the board never pass it off as
+    # Max's, and it is legal for blueprint_approved only: the other gates stay
+    # human.
+    auto = bool(getattr(args, "auto", False))
+    if auto and args.gate not in gates_mod.AUTO_GATES:
+        err(
+            "refused: --auto grants %s only; %s is yours"
+            % (", ".join(gates_mod.AUTO_GATES), args.gate)
+        )
+        return REFUSED
+    by, via = ("auto", "auto") if auto else ("max", "verb")
     store = gates_mod.GateStore(cfg.gates_dir, args.dry_run)
     now = probe.iso()
-    changed = store.grant(args.feature, args.gate, now, by="max", via="verb")
+    changed = store.grant(args.feature, args.gate, now, by=by, via=via)
     if changed and not args.dry_run:
         tl.TimelineWriter(cfg.timeline_dir).append(
             args.feature,
-            {"at": now, "event": "gate-granted", "gate": args.gate, "via": "verb"},
+            {"at": now, "event": "gate-granted", "gate": args.gate, "via": via, "by": by},
         )
     print(
         "%s %s: %s"
@@ -741,6 +753,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     p = sub.add_parser("grant", help=CORE_HELP["grant"], parents=[common])
     p.add_argument("feature")
     p.add_argument("gate", choices=list(GATES))
+    p.add_argument(
+        "--auto",
+        action="store_true",
+        help="record the grant as the autonomous pipeline's (blueprint_approved only)",
+    )
     sub.add_parser("doctor", help=CORE_HELP["doctor"], parents=[common])
     sub.add_parser("commit", help=CORE_HELP["commit"], parents=[common])
     p = sub.add_parser("dump-obs", help=CORE_HELP["dump-obs"], parents=[common])

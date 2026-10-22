@@ -52,7 +52,7 @@ factory/
 | `next <feature>` | the single next move, the lane, the flags and why | nothing |
 | `set <feature> key=value` | record one namespaced annotation; `lane` and the other projector fields are refused | `state/` |
 | `abandon <feature> "<reason>"` | record that you have given up on a card, with a reason | `.factory/timeline/` |
-| `grant <feature> <gate>` | grant one gate, monotonic and attributed | `.factory/gates/` |
+| `grant <feature> <gate> [--auto]` | grant one gate, monotonic and attributed; `--auto` records `by: auto` for `blueprint_approved` only | `.factory/gates/` |
 | `config [--json\|--sh\|--get K]` | the resolved per-machine settings and where each came from | nothing |
 | `doctor` | say what is misconfigured, core plus every extension | nothing |
 | `commit` | stage and commit the vault when it is dirty, no trailers; refused while `Home.md` is absent | the vault repo |

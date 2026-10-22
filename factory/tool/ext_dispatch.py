@@ -73,11 +73,22 @@ DEFAULT_PROMPT = "/moose-build"
 PLANNING_PROMPT = "/moose-blueprint"
 
 
+# The first line of every session prompt that /moose-auto writes. That session
+# plans first and builds only after its own blueprint grant, so it is a
+# planning launch too.
+AUTO_PROMPT_HEAD = "Autonomous run for "
+
+
 def is_planning_prompt(prompt: Optional[str]) -> bool:
     """A ``/moose-blueprint`` session plans; it edits ``specs/`` only and runs
     before the lane is approved, so the lane refusal does not apply to it. The
-    skill itself runs unattended under a lease, with or without the flag."""
-    return bool(prompt) and prompt.strip().split(None, 1)[0] == PLANNING_PROMPT
+    skill itself runs unattended under a lease, with or without the flag. A
+    ``/moose-auto`` session starts with the blueprint and reaches
+    ``/moose-build --auto`` only past ``blueprint_approved``."""
+    if not prompt or not prompt.strip():
+        return False
+    text = prompt.strip()
+    return text.split(None, 1)[0] == PLANNING_PROMPT or text.startswith(AUTO_PROMPT_HEAD)
 
 LAUNCH_TIMEOUT = 180          # seconds: `claude --bg` prints and returns at once
 STOP_TIMEOUT = 60
