@@ -71,10 +71,24 @@ Children of a requirement-grouping parent carry `detail` and no `requirement`, `
 
 - `capabilities = '<expr>'` gates on build capabilities (`'petsc>=3.18 & vtk'`, `'method=opt'`). The legacy `petsc_version`, `method`, `mumps`, and `slepc_version` params are not used in new tests.
 - `allow_test_objects = true` is required for test-only objects on module, blackbear, and isopod binaries.
-- `recover = true` is the default. Set `recover = false` for steady, `--mesh-only`, `--check-input`, custom-postprocessor, and multiapp-move tests. `restep = false` opts out of restep. `--recover` and `--test-restep` are incompatible, so the first leg of a manual checkpoint chain sets both to false.
+- `recover = true` is the default. Set `recover = false` for `--mesh-only` and `--check-input` tests, and for other tests only after a reproduced `--recover` failure (see Restrictions are exceptions). `restep = false` opts out of restep. `--recover` and `--test-restep` are incompatible, so the first leg of a manual checkpoint chain sets both to false.
 - An eigenvector's sign is arbitrary, so a mode shape cannot be diffed as written: diff the eigenvalues with `CSVDiff` (what the `eigen_problem` specs do), and when a mode shape must be diffed pass `exodiff_opts = '-eigen_relative'`, which compares absolute values.
-- A tolerance loosened because CIVET's machines drift from a local run (`rel_err`, `abs_zero`) is the loosest value that still fails the mutation, usually 1e-7 or 1e-8 rather than 1e-10, and gets no comment: drift is not a non-obvious tolerance.
+- A tolerance loosened because CIVET's machines drift from a local run (`rel_err`, `abs_zero`) is the loosest value that still fails the mutation, usually 1e-7 or 1e-8 rather than 1e-10.
 - `RunApp`-derived Testers also take `expect_out`, `absent_out`, `match_literal`, `errors`, `allow_warnings`, `allow_unused`, `allow_deprecated`. `FileTester`-derived Testers (Exodiff, CSVDiff, CheckFiles, ImageDiff, AnalyzeJacobian) take `gold_dir` (default `gold`), `abs_zero` (1e-10), `rel_err` (5.5e-6).
+
+## Restrictions are exceptions
+
+Every `max_parallel`, `min_parallel`, `max_threads`, `mesh_mode`, `recover = false`, and `restep = false` removes coverage in the mode it names. Add one only after these steps:
+
+1. Run the test without the restriction in the mode it would skip: `-p 2`, `-p 3`, `--distributed-mesh`, `--n-threads=2`, `--recover`, or `--restep`.
+2. Record the failure that results. No failure means no restriction.
+3. Find the cause, and fix the test when the test is at fault. For example, an eigenvector can change sign with the process count, so compare it with `exodiff_opts = '-eigen_relative'` instead of restricting the test to one process.
+4. Use the narrowest restriction that removes the failure.
+5. When the cause is a defect in the code, open an issue and add its number to `issues`.
+
+Do not copy a restriction from a neighboring test. Each restriction needs its own failure. Put the justification in the pull request description, not in a comment in the spec.
+
+A `rel_err` above `5e-5` or an `abs_zero` above `1e-8` is an exception with the same burden: measure the worst-case difference over the whole output and state it in the pull request description. When one column or variable needs slack, give it its own tolerance (`override_columns`, `custom_cmp`) instead of widening the whole test.
 
 ## Tester catalog
 
@@ -108,13 +122,17 @@ There is no `should_crash` on Exodiff; an expected failure is a `RunException`.
 
 ## Input file conventions
 
-- Nearly commentless. No comments on the first lines of a `.i`, and no header block of any size. Rationale (physics, derivation, expected result, path-dependence essays, literature citations, ASCII matrices, why the test exists) belongs in the spec's `requirement`/`detail` (and the class `.md`), not the input; a non-obvious tolerance or mutation guard is explained in the `tests` spec next to the parameter it justifies.
+- No comments, in the `.i` or in the `tests` spec. Rationale (physics, derivation, expected result, literature citations, why the test exists) belongs in the spec's `requirement`/`detail` and the class `.md`. The reason for a tolerance or a restriction belongs in the pull request description.
 - Tiny mesh (4x4 to 10x10).
 - Small `num_steps` (5-20).
 - `[Outputs]` last; `exodus = true` default.
 - No explicit `Outputs/file_base` unless parametrizing.
 - Mesh-only: `cli_args = '--mesh-only out.e'` plus `recover = false`.
 - `--check-input`: `recover = false`.
+
+## Before reporting a test done
+
+Run it serial, with `-p 3 --distributed-mesh`, and with `--recover`. A failure in one of those modes needs a fix or a justified restriction.
 
 ## Parametrization patterns
 
@@ -156,3 +174,5 @@ Test-only objects live under `<app>/test/src/` and register to `<App>TestApp`, n
 - `design` pointing at a deleted or renamed `.md`; grep the specs whenever renaming doc pages.
 - Fabricated `input` paths.
 - A `RunException` test cementing a restriction a small code change would remove; fix the code instead of testing the limitation as intended behavior.
+- A restriction copied from a neighboring test, with no failure of its own.
+- An eigenvector compared with a signed diff instead of `-eigen_relative`.
