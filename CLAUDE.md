@@ -41,3 +41,11 @@ Check `hostname` before any env, build, or test command:
 
 - Local machine (conda): [`docs/local.md`](docs/local.md). Run commands through `scripts/conda-run.sh -C <path> -- <command>`.
 - INL HPC (container modules; hostnames `sawtooth*`, `lemhi*`, `bitterroot*`, `hoodoo*`, `teton*`): [`docs/hpc.md`](docs/hpc.md). Run bare commands inside the container.
+
+## PR review comments
+
+End each PR review comment that you post with this line, inline or summary:
+
+```
+<sub>SI-assisted review</sub>
+```
