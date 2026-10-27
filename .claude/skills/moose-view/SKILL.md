@@ -1,14 +1,15 @@
 ---
 name: moose-view
-description: Shows a MOOSE Exodus result in the browser through scripts/exodus-view.py as one embedded figure (mesh, blocks, a field, the deformed shape, a cut, a boundary), a PNG in chat, or an HTML report with prose and figures in specs/gallery/. Use when the user wants to see a mesh, a field, the deformed shape, or the results of an input, wants a picture in chat, or wants the results written up as a report; or /moose-view <file.e|input.i> [look|snap|report] [what to show].
-argument-hint: "<file.e | input.i> [look | snap | report] [what to show]"
+description: Shows a MOOSE Exodus result in the browser through scripts/exodus-view.py as one embedded figure (mesh, blocks, a field, the deformed shape, a cut, a boundary), a PNG in chat, an MP4 video of the time history through scripts/exodus-video.py, or an HTML report with prose and figures in specs/gallery/. Use when the user wants to see a mesh, a field, the deformed shape, or the results of an input, wants a picture in chat, wants a video or an animation of how it evolves, or wants the results written up as a report; or /moose-view <file.e|input.i> [look|snap|report] [what to show].
+argument-hint: "<file.e | input.i> [look | snap | animate | report] [what to show]"
 effort: high
 ---
 
 # moose-view
 
-Three verbs on one machinery. `look` opens one figure in a browser tab and writes nothing.
-`snap` renders one figure to a PNG and shows it in chat. `report` writes
+Four verbs. `look` opens one figure in a browser tab and writes nothing. `snap` renders one
+figure to a PNG and shows it in chat. `animate` renders the time history to an MP4 with
+ParaView. `report` writes
 `specs/gallery/<name>.html` with prose and figures, plus a section per figure in `gallery.md`.
 Default to `look` when the user is at the screen, `snap` in a background session or when they
 ask for a picture, `report` when they ask to write something up. This is a strategic glance, not
@@ -89,6 +90,35 @@ colour range, an all-zero field, a cut that removed everything, or a mesh seen e
 and rendered again first. Scratch snaps go to `$CLAUDE_JOB_DIR/tmp` when set, else
 `/tmp/exodus-view`; report figures go beside the report.
 
+## animate
+
+    python3 scripts/exodus-video.py <file.e> <dir>/<name>.mp4 [--var <name>] [options]
+
+This renders every timestep offscreen through pvpython, then encodes an MP4 with ffmpeg. The MP4
+plays in Safari, Obsidian and a PR comment. The script needs no server and no conda. Use the
+variable names from `/api/meta`, or let the script pick the first nodal variable. Map the request
+to the options:
+
+| The user asks for | Option |
+|---|---|
+| how a field evolves | `--var <name>` and the defaults |
+| the deformed shape over time | `--warp [scale]` |
+| the mesh in the video | `--edges` |
+| a steady result, all round | `--orbit 360` |
+| a view from one side | `--view top|front|right|iso` |
+| a GIF | `--gif` (about nine times the size of the MP4) |
+
+The colour range is fixed over all steps by default. Keep it, because then a colour means one
+value in every frame. The colour bar defaults to Arial Bold: a 28 px title, 20 px labels and a
+36 px wide bar.
+
+A video cannot be Read. Check it through a contact sheet of the first, middle and last frames
+(`ffmpeg -vf "select=...,tile=3x1"`, as the moose-figure agent describes) and Read the sheet.
+Then `open` the MP4. Scratch videos go to `$CLAUDE_JOB_DIR/tmp` when set, else `/tmp/exodus-view`.
+A gallery video goes to `specs/gallery/<name>.mp4` with a `--still` PNG beside it. Its
+`gallery.md` section embeds the PNG and links the MP4, because the board cannot show a video as a
+thumbnail.
+
 ## report
 
 A report is `specs/gallery/<name>.html` in the worktree, `<name>` being the input stem unless
@@ -118,5 +148,5 @@ user.
 
 ## Reply
 
-Say what is shown or written and where: the URL for look, the PNG for snap, the report path and
+Say what is shown or written and where: the URL for look, the PNG for snap, the MP4 and its contact sheet for animate, the report path and
 the gallery sections for report. Numbers only when they change what the user does next.

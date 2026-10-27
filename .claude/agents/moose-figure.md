@@ -231,6 +231,49 @@ Sanity-check every PNG before you report it: Read it and confirm it has real con
 clipped, and every label is legible at thumbnail size. A field whose range is 0 to 0 usually
 means you rendered the initial condition, not the result.
 
+## Rendering exodus to a video
+
+A figure whose file ends in `.mp4` is a video of a transient result, or a turntable of a steady
+one. Render it with `scripts/exodus-video.py`. The script runs under any `python3` outside conda.
+It finds pvpython itself (`$PVPYTHON`, PATH, or `/Applications/ParaView-*.app`), renders every
+timestep offscreen, and encodes an H.264 MP4 with ffmpeg:
+
+```bash
+python3 <worktree-root>/scripts/exodus-video.py <in.e> specs/gallery/<file>.mp4 --var <name>
+```
+
+The defaults keep the figure style. The background is white, there are no axes and no in-image
+title, the colour bar has a horizontal title with the quantity, and a clock shows `t = <time>`.
+The colour range is fixed over all steps, so a colour means one value in every frame. Leave the
+range at that default. `--range step` makes a field that grows look constant.
+
+- `--view top|front|right|iso` picks the camera. The default is `top` for a flat mesh and `iso`
+  for a solid.
+- `--warp [scale]` shows the deformed shape.
+- `--edges` draws the element edges.
+- `--orbit 360` turns a steady result (one timestep) into a 72-frame turntable.
+- `--still` writes one PNG of the last step. Use it for the board thumbnail.
+
+A video cannot be the board thumbnail, so give every `.mp4` a PNG of the same picture. Render it
+with `--still` to `<file>.png`, and embed the PNG in the section. Put the
+`[video](<file>.mp4)` link on the next line.
+
+A video cannot be Read, so check it through its frames. Take three stills (the first frame, the
+middle frame and the last frame) and Read them:
+
+```bash
+ffmpeg -v error -y -i specs/gallery/<file>.mp4 \
+  -vf "select='eq(n\,0)+eq(n\,<mid>)+eq(n\,<last>)',scale=640:-1,tile=3x1" \
+  -frames:v 1 -fps_mode vfr /tmp/<file>-sheet.png
+```
+
+The script prints a JSON line with `frames`, so you know `<mid>` and `<last>`. Confirm that the
+field changes from frame to frame, that nothing is clipped, and that the clock advances. A video
+whose three frames look the same proves nothing: render a different variable, or say so under
+CONCERNS. Keep a video under the size cap. A 1280x720 video of 75 frames is near 100 KB. When a
+video is too big, lower `--max-frames`, `--fps` or `--size`. Do not use `--gif`. A GIF is about
+nine times the size of the MP4.
+
 ## Rendering CSV
 
 Postprocessor and vector-postprocessor CSV goes through matplotlib with the Agg backend
@@ -322,7 +365,7 @@ its output; if a step was skipped, say that.
 ```
 STATUS: FIGURES_DONE | BLOCKED | NEEDS_CONTEXT
 FIGURES: <one line per file: specs/gallery/<name> <bytes> - <its section heading>>
-RENDERER: <chigger | pvpython | scipy+matplotlib | matplotlib (csv)>, one per figure kind
+RENDERER: <chigger | pvpython | scipy+matplotlib | exodus-video | matplotlib (csv)>, one per figure kind
 EXAMPLE_RUN: <the exact command and its result, or "not run: output already present at <path>">
 PAGE: specs/gallery/gallery.md - <one line per section written or rewritten: its heading and its file>
 CONCERNS: <or none; follow-ups prefixed follow-up:>
