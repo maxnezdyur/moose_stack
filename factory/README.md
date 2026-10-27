@@ -704,6 +704,15 @@ through the symlink. Two of the plugin's modes would still refuse the image: Hig
 `img-src 'self' data:` and TextMode sets `img-src 'none'`. Neither is the default, and a `file://`
 `src` would not rescue either one.
 
+The strip opens the gallery page when you click it. The links row of the card adds a `gallery` link
+to the page, and one `▶ video` link per `.mp4` in the gallery, in page order. Each link is an
+`obsidian://` URL, because the board in Obsidian is a sandboxed page that does not follow a relative
+link. Obsidian plays the MP4 in its own viewer. The tooltip of a video link is the heading of the
+section that embeds the video. A section can embed a PNG of the video and link the MP4 below it. A
+video that the page does not embed takes the heading of the image with the same stem. If there is no
+such image, the tooltip is the filename. `scripts/exodus-video.py` writes such a video, and its
+`--still` option writes the PNG.
+
 `factory teardown` makes the one copy that is ever made. Before it removes anything, it copies the
 capped gallery into `Artifacts/<feature>/gallery/` and repoints the symlink at the copy. The copy is
 idempotent: identical bytes report `same`, and a differing figure gets a numbered suffix, so a

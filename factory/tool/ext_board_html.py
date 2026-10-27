@@ -59,6 +59,7 @@ not apply here: a column scrolls, a table does not.
 from __future__ import annotations
 
 import html
+import os
 import re
 import urllib.parse
 from pathlib import Path
@@ -496,8 +497,10 @@ def pr_line(card: Any) -> str:
     return head
 
 
-def links_row(card: Any, cfg: Any) -> str:
-    """workspace, stack, note, PR. Only the ones that exist, in that order."""
+def links_row(card: Any, ctx: Any) -> str:
+    """workspace, stack, note, gallery, one link per video, PR. Only the ones
+    that exist, in that order."""
+    cfg = ctx.config
     out: List[str] = []
     wt = card.worktree
     if wt:
@@ -509,10 +512,57 @@ def links_row(card: Any, cfg: Any) -> str:
             if path.is_file():
                 out.append(link(vscode_uri(path), label))
     out.append(link(obsidian_url(cfg, "Features/" + card.id), "note"))
+    gallery = gallery_url(card, ctx)
+    if gallery:
+        out.append(link(gallery, "gallery"))
+    out.extend(video_links(card, ctx))
     pr = card.primary_pr()
     if pr and safe_href(pr.get("url")):
         out.append(link(pr.get("url"), "PR"))
     return '<p class="links">%s</p>' % (" ".join(out),)
+
+
+def gallery_url(card: Any, ctx: Any) -> str:
+    """The gallery page in Obsidian, or ``""`` when the card has no page."""
+    rec = ext_gallery.record(ctx, card)
+    if not rec.get("page") or not config.is_safe_id(str(card.id)):
+        return ""
+    return obsidian_url(
+        ctx.config, "%s/%s/%s" % (ext_gallery.GALLERY_DIRNAME, card.id, ext_gallery.PAGE_NAME[:-3])
+    )
+
+
+def video_links(card: Any, ctx: Any) -> List[str]:
+    """One link per video in the gallery, in page order.
+
+    The link is an ``obsidian://`` URL to the file in ``Gallery/<feature>/``,
+    like every other link on the card: inside Obsidian the board is a sandboxed
+    page that does not follow a relative link, and Obsidian plays an MP4 in its
+    own viewer. The label is the heading of the section that embeds the video.
+    A section that embeds the ``--still`` PNG of a video and links the MP4 below
+    it names only the PNG, so a video off the page takes the heading of the
+    image with its stem, and then its own filename.
+    """
+    if not config.is_safe_id(str(card.id)):
+        return []
+    rows = ext_gallery.files(ctx, card)
+    titles = {
+        os.path.splitext(str(r.get("name") or ""))[0]: str(r.get("title") or "")
+        for r in rows
+        if r.get("on_page") and r.get("image")
+    }
+    out: List[str] = []
+    for row in rows:
+        name = str(row.get("name") or "")
+        if not ext_gallery.is_video(name) or not ext_gallery.SAFE_NAME.match(name):
+            continue
+        href = safe_href(obsidian_url(ctx.config, "%s/%s/%s" % (ext_gallery.GALLERY_DIRNAME, card.id, name)))
+        if not href:
+            continue
+        label = str(row.get("title") or "") if row.get("on_page") else ""
+        label = label or titles.get(os.path.splitext(name)[0], "")
+        out.append('<a href="%s" title="%s">&#9654; video</a>' % (esc(href), esc(label or name)))
+    return out
 
 
 def thumb_src(feature: Any, name: Any) -> str:
@@ -570,7 +620,11 @@ def gallery_strip(card: Any, ctx: Any) -> str:
         return ""
     more = len(rows) - len(out)
     tail = '<span class="more">+%d</span>' % (more,) if more > 0 else ""
-    return '<p class="shots">%s%s</p>' % ("".join(out), tail)
+    inner = "".join(out) + tail
+    page = safe_href(gallery_url(card, ctx))
+    if page:
+        inner = '<a href="%s" title="Open the gallery">%s</a>' % (esc(page), inner)
+    return '<p class="shots">%s</p>' % (inner,)
 
 
 def feature_card(card: Any, ctx: Any, compact: bool = False) -> str:
@@ -637,7 +691,7 @@ def feature_card(card: Any, ctx: Any, compact: bool = False) -> str:
             '<p class="meta">reclaimable %s, teardown gate pending</p>' % (esc(size),)
         )
 
-    out.append(links_row(card, cfg))
+    out.append(links_row(card, ctx))
     out.append("</article>")
     return "\n".join(out)
 
@@ -1010,9 +1064,10 @@ h1 small code { background: transparent; padding: 0; }
   letter-spacing: .06em; color: var(--ink-3); margin-right: 4px;
 }
 .card .why { margin-top: 5px; font-size: 13px; color: var(--ink-2); }
-.card .shots {
+.card .shots, .card .shots > a {
   display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px;
 }
+.card .shots > a { margin-top: 0; text-decoration: none; }
 .card .shots img {
   width: 74px; height: 52px; object-fit: cover; border-radius: 4px;
   border: 1px solid var(--line); background: var(--surface-2); display: block;

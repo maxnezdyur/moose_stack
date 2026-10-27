@@ -110,6 +110,9 @@ ALLOWED_EXT: Tuple[str, ...] = (
 #: The subset that renders inline, in the note and as a Board.html thumbnail.
 IMAGE_EXT: Tuple[str, ...] = (".png", ".svg", ".gif", ".jpg", ".jpeg", ".webp")
 
+#: The videos. A Board.html card links each one, because a thumbnail cannot play.
+VIDEO_EXT: Tuple[str, ...] = (".mp4",)
+
 #: A filename that may be spelled in a wikilink, an ``img src`` and a path.
 #: No ``[``, ``]``, ``|``, ``#``, ``^``, ``/``, ``\\``, no leading dot, no
 #: control character. Spaces are allowed: Obsidian resolves them in a wikilink
@@ -199,6 +202,10 @@ def _size_str(kb: Any) -> str:
 
 def is_image(name: str) -> bool:
     return os.path.splitext(str(name))[1].lower() in IMAGE_EXT
+
+
+def is_video(name: str) -> bool:
+    return os.path.splitext(str(name))[1].lower() in VIDEO_EXT
 
 
 def _allowed(name: str) -> bool:

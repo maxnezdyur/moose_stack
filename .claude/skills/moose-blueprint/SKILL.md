@@ -115,7 +115,13 @@ The showcase is one decision. Propose two figures: a comparison against the meth
 replaces (iteration counts, wall time, condition number, or error against the analytic solution
 under refinement, old and new side by side) and a second example in a different setting.
 Interactive, ask once, "which example should we build, and which picture proves the claim?";
-unattended, write both in and let the user untick on the page. A feature with nothing to look at
+unattended, write both in and let the user untick on the page. A transient feature (its example
+writes more than one timestep) also gets one video by default, `<name>-history.mp4`, with its
+`--still` PNG `<name>-history.png`. It shows the field that carries the claim over the whole run,
+on one fixed colour range, and with `--warp` when the feature moves the mesh. Write it as a figure
+bullet that names the variable. `moose-figure` renders it with `scripts/exodus-video.py`, and the
+board puts a `▶ video` link on the card. Leave the video out for a steady feature, and say so in
+one line. A feature with nothing to look at
 (an error check, a refactor) gets `No showcase` as the default and the heading is omitted; do not
 invent figures to fill it.
 

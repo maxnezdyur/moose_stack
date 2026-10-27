@@ -91,14 +91,19 @@ if a["warp"] is not None:
 surf = MergeBlocks(Input=src)
 
 # Fixed colour range over every step.
+# One pass over every step: the colour range, and the bounds the camera frames (a warped
+# shape can be larger mid-run than at the end, and must stay in view in every frame).
 lo, hi = float("inf"), float("-inf")
-if a["range"] == "all":
-    for t in times:
-        surf.UpdatePipeline(t)
+b = [float("inf"), float("-inf")] * 3
+for t in times:
+    surf.UpdatePipeline(t)
+    bt = surf.GetDataInformation().GetBounds()
+    b = [min(b[i], bt[i]) if i % 2 == 0 else max(b[i], bt[i]) for i in range(6)]
+    if a["range"] == "all":
         arrs = surf.PointData if assoc == "POINTS" else surf.CellData
         r = arrs[var].GetRange(-1 if arrs[var].GetNumberOfComponents() > 1 else 0)
         lo, hi = min(lo, r[0]), max(hi, r[1])
-elif a["range"] != "step":
+if a["range"] not in ("all", "step"):
     lo, hi = a["range"]
 # Solver round-off (5.6e-13 where the answer is 0) prints as noise on the bar: snap it to 0.
 span = max(abs(lo), abs(hi)) if lo != float("inf") else 0.0
@@ -135,7 +140,7 @@ bar.ComponentTitle = ""
 bar.TitleColor = bar.LabelColor = [0.1, 0.1, 0.1]
 bar.TitleFontSize = 16
 bar.LabelFontSize = 14
-bar.RangeLabelFormat = "%-#.3g"
+bar.RangeLabelFormat = "%-.3g"
 bar.WindowLocation = "Any Location"
 bar.Orientation = "Vertical"
 bar.Position = [0.88, 0.15]
@@ -164,8 +169,6 @@ if a["clock"]:
     cdisp.WindowLocation = "Lower Left Corner"
 
 # Camera: a flat mesh looks from +z, a solid from an isometric corner.
-surf.UpdatePipeline(times[-1])
-b = surf.GetDataInformation().GetBounds()
 ext = [b[1] - b[0], b[3] - b[2], b[5] - b[4]]
 flat = ext[2] <= 1e-9 * max(max(ext), 1e-300)
 mode = a["view"]
