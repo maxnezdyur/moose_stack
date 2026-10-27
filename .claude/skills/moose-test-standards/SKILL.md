@@ -176,3 +176,4 @@ Test-only objects live under `<app>/test/src/` and register to `<App>TestApp`, n
 - A `RunException` test cementing a restriction a small code change would remove; fix the code instead of testing the limitation as intended behavior.
 - A restriction copied from a neighboring test, with no failure of its own.
 - An eigenvector compared with a signed diff instead of `-eigen_relative`.
+- A test, input, or gold named for how it was made (`spike`, `tmp`, `test2`, `new`, `debug`) rather than for what it checks. Rename it before commit.

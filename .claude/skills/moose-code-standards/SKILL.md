@@ -6,7 +6,7 @@ user-invocable: false
 
 # MOOSE code standards
 
-The canonical standard is `moose/framework/doc/content/sqa/framework_scs.md` (relative to the meta-repo root). It is maintained upstream and shared by all three repos. Read it directly instead of working from remembered standards. The rules below are the additions that file does not carry.
+The canonical standard is `moose/framework/doc/content/sqa/framework_scs.md` (relative to the meta-repo root). It is maintained upstream and shared by all three repos. Read it directly instead of working from remembered standards. `moose/AGENTS.md` is a second upstream standard for all three repos; read it as well and apply every code rule in it. The rules below are the additions that file does not carry.
 
 ## New classes
 
