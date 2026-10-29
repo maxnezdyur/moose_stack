@@ -3,6 +3,7 @@
 
 Usage: make_figs.py [out_dir]   (default: ./figs)
 Run in the MOOSE conda env; figkit needs only matplotlib, numpy and scipy.
+The run outputs (two_block_exact.e and .csv) are read from $DEMO_DIR, default: this folder.
 """
 
 import csv
@@ -27,7 +28,8 @@ from figkit.mesh3d import facing
 
 HERE = Path(__file__).resolve().parent
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / "figs"
-EXO = HERE / "two_block_exact.e"
+RUN = Path(os.environ.get("DEMO_DIR", HERE))
+EXO = RUN / "two_block_exact.e"
 DATE = datetime(2026, 10, 29, tzinfo=timezone.utc)
 DPI = 250
 
@@ -124,7 +126,7 @@ def fig_mesh():
 
 
 def fig_history_thermal():
-    d = read_csv(HERE / "two_block_exact.csv")
+    d = read_csv(RUN / "two_block_exact.csv")
     keep = d["time"] > 0
     t = d["time"][keep]
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(150 * MM, 110 * MM), sharex=True)
