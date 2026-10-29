@@ -8,7 +8,7 @@
 ! the stand-in UMAT (umat/two_block_umat.f). The state variable Z is the accumulated
 ! equivalent viscous strain; it hardens the viscosity, eta = eta0 * (1 + cz * Z).
 ! Heat: rho c dT/dt = div(k grad T) + q, with q = phi^2 when PROPS(9) = 1 (block A).
-! phi is PREDEF field 1 (value at the start of the increment, and its increment).
+! phi is PREDEF field 1; PREDEF(1, ...) is its value at the end of the increment.
 !
 ! PROPS(1) E      Young's modulus [Pa]
 ! PROPS(2) NU     Poisson's ratio [-]
@@ -104,7 +104,7 @@ subroutine uel(rhs, amatrx, svars, energy, ndofel, nrhs, nsvars, props, nprops, 
       tgp = tgp + shp(ia) * u(it)
       dtgp = dtgp + shp(ia) * du(it, 1)
       gradt = gradt + dndx(:, ia) * u(it)
-      if (npredf >= 1) phigp = phigp + shp(ia) * (predef(1, 1, ia) + predef(2, 1, ia))
+      if (npredf >= 1) phigp = phigp + shp(ia) * predef(1, 1, ia)
     end do
     toldgp = tgp - dtgp
 

@@ -58,7 +58,7 @@ To use a different UMAT, compile it with `build_umat.sh <file.f>`. Then set `plu
 - The UEL computes the internal force, the heat capacity, the conduction, the heat source and the full 32 x 32 element Jacobian.
 - MOOSE adds the face loads, the symmetry BCs, the exact PRP constraints and the steps, as in `two_block.i`.
 - Compile the UEL with `build_umat.sh uel/two_block_uel.f90`.
-- `AbaqusUserElement` zeroes its external fields before every residual, so `phi` is recomputed on every linear and nonlinear evaluation.
+- The UEL reads phi as `PREDEF(1)`, the value at the end of the increment. This needs the PREDEF fixes from the enhanced-uel branch; without them `AbaqusUserElement` zeroes the field before every residual.
 - The UEL is small strain. `run_uel.sh` therefore runs `two_block.i` with `strain = SMALL` for the comparison.
 
 ## Assumptions to confirm with the group

@@ -124,13 +124,11 @@ cz = 10
 []
 
 [AuxKernels]
-  # AbaqusUserElement zeroes its external fields before every residual, so phi is recomputed on
-  # every linear and nonlinear evaluation
   [phi]
     type = FunctionAux
     variable = phi
     function = phi_fn
-    execute_on = 'initial linear nonlinear timestep_begin'
+    execute_on = 'initial timestep_begin'
   []
   [rf_x]
     type = TagVectorAux
