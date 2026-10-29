@@ -147,6 +147,29 @@ def fig_history_thermal():
     save(fig, OUT / "fig_history_thermal.png", title="Thermal history", date=DATE, dpi=DPI)
 
 
+def fig_uel_vs_umat():
+    """The UEL model against the UMAT model, both small strain."""
+    uel = read_csv(RUN / "two_block_uel.csv")
+    umat = read_csv(RUN / "two_block_umat_small.csv")
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(150 * MM, 110 * MM), sharex=True)
+    for d, style, lab in ((umat, dict(color=MUTED, lw=2.6, alpha=0.55), "UMAT + MOOSE kernels"),
+                          (uel, dict(color=BLUE, lw=1.0), "UEL (coupled u-T HEX8)")):
+        keep = d["time"] > 0
+        t = d["time"][keep]
+        ax1.plot(t, d["T_max_A"][keep], label=lab, **style)
+        ax2.plot(t, d["uz_top"][keep] * 1e6, **style)
+    ax1.set_ylabel("max T, block A [C]")
+    ax1.legend(frameon=False, loc="upper left")
+    ax2.set_ylabel("mean uz, top face [um]")
+    ax2.set_xlabel("time [s]")
+    for ax in (ax1, ax2):
+        ax.set_xscale("log")
+        mark_steps(ax)
+    step_names(ax1)
+    fig.align_ylabels()
+    save(fig, OUT / "fig_uel_vs_umat.png", title="UEL against UMAT", date=DATE, dpi=DPI)
+
+
 def fig_deformed():
     """Deformed shape at the end of Steps 2 and 3, colored by displacement magnitude."""
     scale = 50.0
@@ -181,7 +204,7 @@ def fig_deformed():
     save(fig, OUT / "fig_deformed.png", title="Deformed shape", date=DATE, dpi=DPI)
 
 
-FIGURES = [fig_schematic, fig_mesh, fig_history_thermal, fig_deformed]
+FIGURES = [fig_schematic, fig_mesh, fig_history_thermal, fig_uel_vs_umat, fig_deformed]
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)

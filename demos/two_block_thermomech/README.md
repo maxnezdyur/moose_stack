@@ -8,6 +8,9 @@ This demo is the problem in `main.pdf` ("Thermomechanical analysis of a two-mate
 |---|---|
 | `two_block.i` | The MOOSE input. |
 | `umat/two_block_umat.f` | A stand-in UMAT. Replace it with the group's UMAT. |
+| `two_block_uel.i` | The same problem through a coupled temperature-displacement UEL. |
+| `uel/two_block_uel.f90` | The stand-in UEL: HEX8 with ux, uy, uz and T per node. |
+| `run_uel.sh` | Runs the UEL model and the small-strain UMAT model it is compared with. |
 | `build_umat.sh` | Compiles a UMAT into the plugin that `AbaqusUMATStress` loads. |
 | `run_all.sh` | Runs the demo. |
 | `make_figs.py` | Builds the stills with figkit (inl-deckkit). |
@@ -48,6 +51,15 @@ To use a different UMAT, compile it with `build_umat.sh <file.f>`. Then set `plu
 - The top face has a `Pressure` p(t) and a `ConvectiveFluxFunction` h(t) (T - T_inf(t)). All other faces are adiabatic.
 - An `AnalysisStepUserObject` holds the three steps (0, 500, 1e5 s) and makes the solver land on each step boundary.
 - Each load switches at `t <= t_step`. The solve is implicit, so the last increment of a step must still see the loads of that step.
+
+## UEL model
+
+- `two_block_uel.i` runs the problem through `AbaqusUserElement` (idaholab/moose#29382), one per block with different PROPS.
+- The UEL computes the internal force, the heat capacity, the conduction, the heat source and the full 32 x 32 element Jacobian.
+- MOOSE adds the face loads, the symmetry BCs, the exact PRP constraints and the steps, as in `two_block.i`.
+- Compile the UEL with `build_umat.sh uel/two_block_uel.f90`.
+- `AbaqusUserElement` zeroes its external fields before every residual, so `phi` is recomputed on every linear and nonlinear evaluation.
+- The UEL is small strain. `run_uel.sh` therefore runs `two_block.i` with `strain = SMALL` for the comparison.
 
 ## Assumptions to confirm with the group
 
