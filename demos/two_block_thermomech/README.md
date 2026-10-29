@@ -11,7 +11,6 @@ This demo is the problem in `main.pdf` ("Thermomechanical analysis of a two-mate
 | `build_umat.sh` | Compiles a UMAT into the plugin that `AbaqusUMATStress` loads. |
 | `run_all.sh` | Runs the demo. |
 | `make_figs.py` | Builds the stills with figkit (inl-deckkit). |
-| `render_cut.py` | Renders the stress_xx cut videos with pvpython. |
 | `plot_history.py` | Plots the history of the main results from the CSV files. |
 | `OUTLINE.md` | The presentation outline for the group. |
 

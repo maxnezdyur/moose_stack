@@ -145,97 +145,6 @@ def fig_history_thermal():
     save(fig, OUT / "fig_history_thermal.png", title="Thermal history", date=DATE, dpi=DPI)
 
 
-def fig_history_mechanical():
-    d = read_csv(HERE / "two_block_exact.csv")
-    keep = d["time"] > 0
-    t = d["time"][keep]
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(150 * MM, 140 * MM), sharex=True)
-    ax1.plot(t, d["sxx_interface"][keep] / 1e6, color=BLUE, label="mean stress_xx, interface")
-    ax1.plot(t, d["vonmises_max"][keep] / 1e6, color=VERMILION, label="max von Mises")
-    ax1.axhline(0, color=GRID, lw=0.6, zorder=0)
-    ax1.set_ylabel("stress [MPa]")
-    ax1.legend(frameon=False, loc="lower left")
-    step_names(ax1)
-    ax2.plot(t, d["Z_max"][keep] * 1e3, color=PURPLE)
-    ax2.set_ylabel("max Z [$10^{-3}$]")
-    ax3.plot(t, d["Rz_bottom"][keep], color=GREEN)
-    ax3.axhline(2160, color=MUTED, lw=0.6, ls=":")
-    ax3.set_ylabel("Rz, Bottom [N]")
-    ax3.set_xlabel("time [s]")
-    ax3.set_ylim(-200, 2600)
-    for ax in (ax1, ax2, ax3):
-        ax.set_xscale("log")
-        mark_steps(ax)
-    place_labels(ax3, [3e3], [2160], ["$p A$ = 2160 N"])
-    fig.align_ylabels()
-    save(fig, OUT / "fig_history_mechanical.png", title="Mechanical history", date=DATE, dpi=DPI)
-
-
-def fig_profiles():
-    """T and stress_xx through the thickness at the block center, at each step end."""
-    with ExodusFile(EXO) as exo:
-        xyz = exo.coords * CM
-        times = exo.times
-        corners = np.concatenate([b.corners for b in exo.blocks])
-        cent = xyz[corners].mean(axis=1)
-        # nodes on the center line x = 0, y = 0
-        line = np.where((np.abs(xyz[:, 0]) < 1e-6) & (np.abs(xyz[:, 1]) < 1e-6))[0]
-        line = line[np.argsort(xyz[line, 2])]
-        # elements in the center column (x in [0, 1], y in [-0.5..]: nearest the center)
-        col = np.where((np.abs(cent[:, 0] - 0.5) < 1e-6) & (np.abs(cent[:, 1] - 0.5) < 1e-6))[0]
-        col = col[np.argsort(cent[col, 2])]
-        data = []
-        for (name, t), c in zip(STEP_ENDS, STEP_COLORS):
-            i = step_index(times, t)
-            T = exo.nodal("T", step=i)[line]
-            sxx = np.concatenate([exo.elemental("stress_xx", step=i, block_id=b.id)
-                                  for b in exo.blocks])[col] / 1e6
-            data.append((name, c, T, sxx))
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(160 * MM, 95 * MM), sharey=True)
-    for name, c, T, sxx in data:
-        ax1.plot(T, xyz[line, 2], color=c, label=name)
-        z = cent[col, 2]
-        edges = np.concatenate([[z[0] - 0.25], 0.5 * (z[1:] + z[:-1]), [z[-1] + 0.25]])
-        ax2.stairs(sxx, edges, orientation="horizontal", color=c, baseline=None)
-    for ax in (ax1, ax2):
-        ax.axhspan(-4, 0, color=PALE_ORANGE, zorder=0)
-        ax.axhline(0, color=INK, lw=0.6)
-    ax2.axvline(0, color=GRID, lw=0.6, zorder=0)
-    ax1.set_xlabel("temperature [C]")
-    ax2.set_xlabel("stress_xx [MPa]")
-    ax1.set_ylabel("z [cm]")
-    ax1.set_ylim(-4, 4)
-    handles, labels = ax1.get_legend_handles_labels()
-    fig.legend(handles, labels, frameon=False, loc="lower center", ncol=3,
-               bbox_to_anchor=(0.5, 0.0))
-    fig.text(0.02, 0.02, "shaded: block A", color=MUTED, ha="left")
-    fig.subplots_adjust(bottom=0.24)
-    save(fig, OUT / "fig_profiles.png", title="Through-thickness profiles", date=DATE, dpi=DPI)
-
-
-def fig_step3():
-    """Step 3 on a linear time axis: pressure off, T_inf drops, phi off."""
-    d = read_csv(HERE / "two_block_exact.csv")
-    keep = d["time"] >= 9.9e4
-    t = (d["time"][keep] - 1.0e5) / 1e3
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(150 * MM, 125 * MM), sharex=True)
-    ax1.plot(t, d["T_max_A"][keep], color=BLOCK_A, label="max T, block A")
-    ax1.plot(t, d["T_top"][keep], color=INK, ls="--", label="mean T, top face")
-    ax1.set_ylabel("temperature [C]")
-    ax1.legend(frameon=False, loc="lower left")
-    ax2.plot(t, d["sxx_interface"][keep] / 1e6, color=BLUE, marker="o", ms=2.5)
-    ax2.axhline(0, color=GRID, lw=0.6, zorder=0)
-    ax2.set_ylabel("mean stress_xx,\ninterface [MPa]")
-    ax3.plot(t, d["Rz_bottom"][keep], color=GREEN, marker="o", ms=2.5)
-    ax3.set_ylabel("Rz, Bottom [N]")
-    ax3.set_ylim(-200, 2600)
-    ax3.set_xlabel("time after the start of Step 3 [$10^3$ s]")
-    for ax in (ax1, ax2, ax3):
-        ax.axvline(0, color=MUTED, lw=0.6, ls=(0, (3, 3)), zorder=0)
-    fig.align_ylabels()
-    save(fig, OUT / "fig_step3.png", title="Step 3", date=DATE, dpi=DPI)
-
-
 def fig_deformed():
     """Deformed shape at the end of Steps 2 and 3, colored by displacement magnitude."""
     scale = 50.0
@@ -270,8 +179,7 @@ def fig_deformed():
     save(fig, OUT / "fig_deformed.png", title="Deformed shape", date=DATE, dpi=DPI)
 
 
-FIGURES = [fig_schematic, fig_mesh, fig_history_thermal, fig_history_mechanical,
-           fig_profiles, fig_step3, fig_deformed]
+FIGURES = [fig_schematic, fig_mesh, fig_history_thermal, fig_deformed]
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)

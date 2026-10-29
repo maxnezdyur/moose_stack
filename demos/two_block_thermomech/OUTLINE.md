@@ -50,7 +50,6 @@ Outline for the group that uses the UEL/UMAT work. The demo is `main.pdf` ("Ther
 ## 5. Results from the demo run (exact PRP, stand-in UMAT)
 
 ![Thermal history](figs/fig_history_thermal.png)
-![Mechanical history](figs/fig_history_mechanical.png)
 
 | | End of Step 1 (500 s) | End of Step 2 (100,000 s) | End of Step 3 (105,000 s) |
 |---|---|---|---|
