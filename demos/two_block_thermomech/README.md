@@ -9,7 +9,9 @@ This demo is the problem in `main.pdf` ("Thermomechanical analysis of a two-mate
 | `two_block.i` | The MOOSE input. |
 | `umat/two_block_umat.f` | A stand-in UMAT. Replace it with the group's UMAT. |
 | `build_umat.sh` | Compiles a UMAT into the plugin that `AbaqusUMATStress` loads. |
-| `run_all.sh` | Runs the exact-PRP and the penalty-PRP variants. |
+| `run_all.sh` | Runs the demo. |
+| `make_figs.py` | Builds the stills with figkit (inl-deckkit). |
+| `render_cut.py` | Renders the stress_xx cut videos with pvpython. |
 | `plot_history.py` | Plots the history of the main results from the CSV files. |
 | `OUTLINE.md` | The presentation outline for the group. |
 
@@ -22,7 +24,7 @@ This demo is the problem in `main.pdf` ("Thermomechanical analysis of a two-mate
    scripts/conda-run.sh -C moose -- demos/two_block_thermomech/build_umat.sh
    ```
 
-3. Run both variants on 4 processes:
+3. Run the demo on 4 processes:
 
    ```bash
    scripts/conda-run.sh -C moose -- demos/two_block_thermomech/run_all.sh 4
@@ -43,9 +45,10 @@ To use a different UMAT, compile it with `build_umat.sh <file.f>`. Then set `plu
 - The face names come from Table 1 of the PDF: `Bottom`, `Top`, `Left`, `Right`, `Front`, `Back`. The input also adds an `Interface` side set.
 - The unknowns are `disp_x`, `disp_y`, `disp_z` and `T`. The solver solves them together in one Newton solve. Z is `STATEV(1)` of the UMAT. MOOSE stores Z between time steps.
 - phi is an auxiliary variable. It goes to the UMAT as `PREDEF(1)`. It also drives the heat source phi^2 in block A only.
-- Symmetric faces use `DirichletBC`. PRP on `Right` and `Front` uses `EqualValueBoundaryConstraint`. The default is `formulation = exact`; `prp_formulation=penalty` gives the penalty version.
+- Symmetric faces use `DirichletBC`. PRP on `Right` and `Front` uses `EqualValueBoundaryConstraint`. The constraint uses `formulation = exact` (idaholab/moose#34249).
 - The top face has a `Pressure` p(t) and a `ConvectiveFluxFunction` h(t) (T - T_inf(t)). All other faces are adiabatic.
 - An `AnalysisStepUserObject` holds the three steps (0, 500, 1e5 s) and makes the solver land on each step boundary.
+- Each load switches at `t <= t_step`. The solve is implicit, so the last increment of a step must still see the loads of that step.
 
 ## Assumptions to confirm with the group
 

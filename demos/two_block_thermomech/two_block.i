@@ -4,13 +4,9 @@
 # Units: SI (m, s, Pa, W, K). The PDF gives lengths in cm; phi uses x in cm, so x_cm = 100 x here.
 # Unknowns: disp_x, disp_y, disp_z, T in one Newton solve. Z is STATEV(1) of the UMAT.
 #
-# Variants (command-line overrides, see README.md):
-#   prp_formulation=penalty   PRP by penalty (MOOSE devel today)
-#   prp_formulation=exact     PRP by exact constraint rows (idaholab/moose#34249)
-#   Constraints/active=''     no PRP, Right and Front faces free
-
-prp_formulation = exact
-prp_penalty = 1e12
+# Step boundaries: the solve is implicit, so a load evaluated at the end of an increment must
+# keep its old value at the step time itself. Every switch uses t <= t_step, so the last
+# increment of a step sees that step's loads and the first increment of the next step the new ones.
 
 # Step 3 text: phi goes to zero at t = 1e5 s. The phi formula says 5e6 s (never reached).
 phi_off_time = 1e5
@@ -82,7 +78,7 @@ cz = 10
 [Functions]
   [phi_fn]
     type = ParsedFunction
-    expression = 'if(t <= 1000, 3000 - 2.9 * t, if(t < t_off, 100, 0)) * (1 - (100 * x)^2 / 81)'
+    expression = 'if(t <= 1000, 3000 - 2.9 * t, if(t <= t_off, 100, 0)) * (1 - (100 * x)^2 / 81)'
     symbol_names = 't_off'
     symbol_values = '${phi_off_time}'
   []
@@ -94,7 +90,7 @@ cz = 10
   []
   [p_fn]
     type = ParsedFunction
-    expression = 'if(t < 1e5, 1e5, 0)'
+    expression = 'if(t <= 1e5, 1e5, 0)'
   []
   [h_fn]
     type = ParsedFunction
@@ -102,12 +98,13 @@ cz = 10
   []
   [T_inf_fn]
     type = ParsedFunction
-    expression = 'if(t < 1e5, 500, 20)'
+    expression = 'if(t <= 1e5, 500, 20)'
   []
-  # Time step by phase: fine in Step 1 and at the start of Step 3, coarse in Step 2
+  # Time step by phase: fine in Step 1, coarse in Step 2, fine again from just before Step 3,
+  # so the first Step 3 increment is short (the solver lands on 1e5 s through the step times)
   [dt_fn]
     type = PiecewiseConstant
-    x = '0 500 1000 1e5'
+    x = '0 500 1000 99000'
     y = '10 25 1000 100'
   []
 []
@@ -264,21 +261,20 @@ cz = 10
   # All other faces are adiabatic: natural BC, nothing to add.
 []
 
-# Plane remains plane on Right (x+) and Front (y-). The symmetric faces already stay plane.
+# Plane remains plane on Right (x+) and Front (y-), exact (idaholab/moose#34249). The symmetric
+# faces already stay plane.
 [Constraints]
   [prp_right]
     type = EqualValueBoundaryConstraint
     variable = disp_x
     secondary = Right
-    formulation = ${prp_formulation}
-    penalty = ${prp_penalty}
+    formulation = exact
   []
   [prp_front]
     type = EqualValueBoundaryConstraint
     variable = disp_y
     secondary = Front
-    formulation = ${prp_formulation}
-    penalty = ${prp_penalty}
+    formulation = exact
   []
 []
 

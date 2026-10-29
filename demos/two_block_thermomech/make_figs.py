@@ -35,10 +35,9 @@ configure(base_pt=9)
 
 # semantics, bound once
 BLOCK_A, BLOCK_B = ORANGE, SKYBLUE
-EXACT, PENALTY = GREEN, VERMILION
 STEP_TIMES = (500.0, 1.0e5)
-# Step 2 ends just before 1e5 s: the output at 1e5 s already has the Step 3 loads
-STEP_ENDS = (("end of Step 1", 500.0), ("end of Step 2", 1.0e5 - 1.0), ("end of Step 3", 1.05e5))
+
+STEP_ENDS = (("end of Step 1", 500.0), ("end of Step 2", 1.0e5), ("end of Step 3", 1.05e5))
 STEP_COLORS = (BLUE, VERMILION, GREEN)
 CM = 100.0  # m -> cm
 
@@ -214,27 +213,6 @@ def fig_profiles():
     save(fig, OUT / "fig_profiles.png", title="Through-thickness profiles", date=DATE, dpi=DPI)
 
 
-def fig_prp():
-    """Exact against penalty plane-remains-plane on the Right face."""
-    ex = read_csv(HERE / "two_block_exact.csv")
-    pe = read_csv(HERE / "two_block_penalty.csv")
-    floor = 1e-21
-    fig, ax = plt.subplots(figsize=(150 * MM, 80 * MM))
-    for d, c, lab in ((ex, EXACT, "exact (#34249)"), (pe, PENALTY, "penalty 1e12")):
-        keep = d["time"] > 0
-        spread = np.maximum(np.maximum(d["prp_right_spread"], d["prp_front_spread"]), floor)
-        ax.plot(d["time"][keep], spread[keep], color=c, label=lab)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_ylim(floor / 3, 1e-6)
-    mark_steps(ax)
-    ax.set_xlabel("time [s]")
-    ax.set_ylabel("PRP error: max - min normal\ndisplacement on a PRP face [m]")
-    ax.legend(frameon=False, loc="center right")
-    place_labels(ax, [], [], [], captions=["exact: zero to round-off"])
-    save(fig, OUT / "fig_prp_exact_vs_penalty.png", title="PRP error", date=DATE, dpi=DPI)
-
-
 def fig_step3():
     """Step 3 on a linear time axis: pressure off, T_inf drops, phi off."""
     d = read_csv(HERE / "two_block_exact.csv")
@@ -293,7 +271,7 @@ def fig_deformed():
 
 
 FIGURES = [fig_schematic, fig_mesh, fig_history_thermal, fig_history_mechanical,
-           fig_profiles, fig_prp, fig_step3, fig_deformed]
+           fig_profiles, fig_step3, fig_deformed]
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
