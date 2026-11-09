@@ -1,6 +1,6 @@
 # moose_stack
 
-My MOOSE development stack. Pins my forks of [moose](https://github.com/maxnezdyur/moose), [blackbear](https://github.com/maxnezdyur/blackbear), and [isopod](https://github.com/maxnezdyur/isopod) as submodules so the three repos can be cloned, versioned, and updated together.
+My MOOSE development stack. Pins my forks of [moose](https://github.com/maxnezdyur/moose), [blackbear](https://github.com/maxnezdyur/blackbear), [isopod](https://github.com/maxnezdyur/isopod), and [marlin](https://github.com/maxnezdyur/marlin) as submodules so the repos can be cloned, versioned, and updated together. `marlin` is a review-only checkout: `/moose-pr-review marlin#N` checks a PR out into it. It is never built here, and the feature skills skip it.
 
 Per-host env setup lives in:
 - [`docs/local.md`](docs/local.md) — local machine (conda)
@@ -23,7 +23,8 @@ git -C moose submodule update --init --recursive
 moose_stack/
 ├── moose/       # maxnezdyur/moose (default branch: next)
 ├── blackbear/   # maxnezdyur/blackbear (default branch: devel)
-└── isopod/      # maxnezdyur/isopod  (default branch: devel)
+├── isopod/      # maxnezdyur/isopod  (default branch: devel)
+└── marlin/      # maxnezdyur/marlin  (default branch: devel; review only, PRs target devel)
 ```
 
 Each app's Makefile locates MOOSE via the relative path `../moose`, which resolves to the sibling submodule.

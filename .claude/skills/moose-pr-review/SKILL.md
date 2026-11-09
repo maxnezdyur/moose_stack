@@ -1,55 +1,63 @@
 ---
 name: moose-pr-review
-description: Reviews an idaholab/moose pull request. Refuses blackbear and isopod PRs and the user's own PRs, guards a clean moose/ tree, confirms the PR is open, reads the CIVET status, handles an existing pending review, then spawns the moose-pr-reviewer agent, which pulls the PR with gh pr checkout, reads the existing discussion, runs the MOOSE code, test, doc, and lens reviewers, and posts one PENDING GitHub review that the user submits from the GitHub UI. Use for "/moose-pr-review <N or URL> [--prove]", "review moose PR 12345".
-argument-hint: "<PR number | PR URL> [--prove]"
+description: Reviews an idaholab/moose or idaholab/marlin pull request. Refuses blackbear and isopod PRs and the user's own PRs, guards a clean moose/ or marlin/ tree, confirms the PR is open, reads the CIVET status, handles an existing pending review, then spawns the moose-pr-reviewer agent, which pulls the PR with gh pr checkout, reads the existing discussion, runs the MOOSE code, test, doc, and lens reviewers, and posts one PENDING GitHub review that the user submits from the GitHub UI. Use for "/moose-pr-review <N or URL> [--prove]", "review moose PR 12345", "review marlin PR 190", "/moose-pr-review marlin#190".
+argument-hint: "<PR number | marlin#N | PR URL> [--prove]"
 effort: medium
 ---
 
 # /moose-pr-review
 
-Goal: one PENDING GitHub review on an `idaholab/moose` pull request, every finding a draft
-comment the user reads and submits from the GitHub UI. This skill does the main-thread checks
+Goal: one PENDING GitHub review on an `idaholab/moose` or `idaholab/marlin` pull request, every
+finding a draft comment the user reads and submits from the GitHub UI. This skill does the main-thread checks
 and the hand-off. The `moose-pr-reviewer` agent owns the checkout, the discussion read, the
 bucket routing, the reviewer fan-out, the merge, the optional prove step, and the POST, so the
 diff and the per-reviewer JSON never enter this conversation; only its summary block comes back.
 
-`$ARGUMENTS` is the PR: a bare number, `#N`, `moose#N`, `idaholab/moose#N`, or a PR URL,
-normalized to the number `<N>`. With no argument, ask for it with `AskUserQuestion`. `--prove`
-turns on the prove step (see the hand-off).
+`$ARGUMENTS` is the PR: a bare number, `#N`, `moose#N`, `idaholab/moose#N`, `marlin#N`,
+`idaholab/marlin#N`, or a PR URL, normalized to the number `<N>` and the repository `<repo>`.
+A bare number or `#N` is moose. `<sub>` is the submodule the repository lives in: `moose` for
+`idaholab/moose`, `marlin` for `idaholab/marlin`. `<base>` is the base branch the repository
+uses: `next` for moose, `devel` for marlin. With no argument, ask for it with `AskUserQuestion`.
+`--prove` turns on the prove step (see the hand-off); it is moose only, and on a marlin PR say
+"--prove needs a moose build; reviewing without it" and go on.
+
+The two repositories differ only in these three names and in the repository notes the
+orchestrator hands the reviewers (`moose-review-protocol/references/marlin.md`). Every command
+below takes `<repo>` and `<sub>`.
 
 ## Refusals
 
 - **Another repository.** A URL or `owner/repo#N` that names any repository other than
-  `idaholab/moose` (a `blackbear` or `isopod` PR, or a fork) is refused. A bare number is checked
-  too: run `gh pr view <N> --repo idaholab/moose --json url --jq .url`, and refuse when the call
-  fails or the URL is not under `https://github.com/idaholab/moose/pull/`. Say "This skill only
-  reviews idaholab/moose PRs." and stop. The scripts hard-code `idaholab/moose`, so a review of
-  another repository would post on the wrong PR.
+  `idaholab/moose` or `idaholab/marlin` (a `blackbear` or `isopod` PR, or a fork) is refused.
+  The number is checked too: run `gh pr view <N> --repo <repo> --json url --jq .url`, and refuse
+  when the call fails or the URL is not under `https://github.com/<repo>/pull/`. Say "This skill
+  only reviews idaholab/moose and idaholab/marlin PRs." and stop. The scripts default to
+  `idaholab/moose` and take `--repo`, so a wrong `<repo>` would post on the wrong PR.
 - **Your own PR.** Read the login with `gh api user --jq .login`. When it equals the PR's
   `author.login`, say "This is your PR. Use /moose-build and /moose-ship." and stop. GitHub
   does not allow a review on your own PR, and a self-review is not a review.
 
 ## Checks before the hand-off
 
-- From the meta-repo root, `git -C moose status --porcelain` prints nothing. The orchestrator's
+- From the meta-repo root, `git -C <sub> status --porcelain` prints nothing. The orchestrator's
   snapshot script runs `gh pr checkout --force`, which would clobber local work, so a dirty tree
   stops the run: say which files are dirty and let the user commit or stash them. This skill does
   not stash or force-checkout.
-- `gh pr view <N> --repo idaholab/moose --json state,title,body,author,baseRefName,headRefName,headRefOid
+- `gh pr view <N> --repo <repo> --json state,title,body,author,baseRefName,headRefName,headRefOid
   > /tmp/moose-pr-<N>-meta.json`. `state` is `OPEN`; otherwise ask once whether to review it
-  anyway. `baseRefName` is normally `next`; another base is not an error, but name it in the
+  anyway. `baseRefName` is normally `<base>`; another base is not an error, but name it in the
   report. Pass the file as `meta_path`. The orchestrator replaces it with the snapshot script's
   own `/tmp/moose-review-pr-<N>-meta.json`, which adds `commits` and `head_sha`, and the reviewers
   read that file.
-- **CI.** moose CI is CIVET, not GitHub Actions. Run
-  `<meta-root>/scripts/civet_triage.py --repo idaholab/moose --pr <N>` and record its overall
+- **CI.** moose and marlin CI is CIVET, not GitHub Actions. Run
+  `<meta-root>/scripts/civet_triage.py --repo <repo> --pr <N>` and record its overall
   verdict (`green`, `pending`, `infra`, `yours`, `unclear`) and each failed job for the report. Do
   not use `gh pr checks`. Red CI does not stop the review: a review of a broken change is still
   useful. Do not diagnose the failures here; when the user wants the cause, point to the
   `civet-ci-failures` skill. A triage that cannot read GitHub is a line in the report, not a stop.
 - **Pending review.** GitHub allows one pending review per user on a PR. Look for one of yours:
 
-      gh api --paginate repos/idaholab/moose/pulls/<N>/reviews \
+      gh api --paginate repos/<repo>/pulls/<N>/reviews \
         --jq '.[] | select(.state=="PENDING" and .user.login=="<login>") | {id, html_url}'
 
   When one exists, ask with `AskUserQuestion`: keep it (stop here; nothing is posted), or delete
@@ -61,10 +69,11 @@ turns on the prove step (see the hand-off).
 Spawn exactly one `moose-pr-reviewer` (`subagent_type: "moose-pr-reviewer"`, foreground) with:
 
     pr_number: <N>
-    repo_root: <absolute path to moose/>
+    repo: <repo>
+    repo_root: <absolute path to <sub>/>
     meta_path: /tmp/moose-pr-<N>-meta.json
     replace_pending: <id>          # omit when empty
-    prove: true                    # only with --prove
+    prove: true                    # only with --prove, moose only
     Run PR mode and return your summary block.
 
 Spawning the reviewers directly would pull their routing back into this context; the
@@ -93,7 +102,8 @@ Print the summary block verbatim. Then add:
 - Discussion: each open thread that another reviewer started and the author has not answered
   (the orchestrator's `open and unanswered` list), as `path:line by <author>`, for the user to
   raise at submission. Say so when the discussion could not be read.
-- The base branch, when it is not `next`.
+- The base branch, when it is not `<base>`.
+- The repository, when it is marlin.
 
 End the turn. The pending review is the deliverable: do not submit it, offer to submit it, or run
 `gh pr review` with a submit flag. The user submits from the GitHub UI.

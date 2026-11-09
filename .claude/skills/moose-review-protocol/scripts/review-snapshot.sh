@@ -5,8 +5,14 @@
 # lens regex table; agents call it instead of carrying awk in prose.
 #
 # Usage:
-#   review-snapshot.sh --mode pr --pr <N> [--root <moose repo>]
+#   review-snapshot.sh --mode pr --pr <N> [--repo <owner/name>] [--root <checkout>]
 #   review-snapshot.sh --mode local --root <repo> --base <ref> --label <label>
+#
+# --repo names the GitHub repository the PR lives in (default idaholab/moose).
+# The review skill accepts idaholab/moose and idaholab/marlin. The default
+# --root is <meta-root>/<name>, the submodule checkout of that repository. The
+# repo is written into P-meta.json as `repo`, so review-post.sh and
+# review-discussion.sh read it from there when they get no --repo.
 #
 # Files written (label is pr-<N> in pr mode; P = /tmp/moose-review-<label>):
 #   P.diff              unified diff the reviewers read
@@ -21,10 +27,10 @@
 
 set -u
 
-GH_REPO="idaholab/moose"   # the only repo the review skill accepts
+GH_REPO="idaholab/moose"   # default; --repo overrides (idaholab/marlin)
 
 usage() {
-  echo "usage: review-snapshot.sh --mode pr --pr <N> [--root <moose repo>] | --mode local --root <repo> --base <ref> --label <label>" >&2
+  echo "usage: review-snapshot.sh --mode pr --pr <N> [--repo <owner/name>] [--root <checkout>] | --mode local --root <repo> --base <ref> --label <label>" >&2
   exit 2
 }
 
@@ -32,7 +38,7 @@ die() { echo "review-snapshot: $*" >&2; exit 2; }
 
 # Meta-root: $CLAUDE_PROJECT_DIR, else walk up from $PWD to the first directory
 # that holds .clangd (the rule scripts/moose-env.sh uses). It only supplies the
-# pr-mode default for --root, which is <meta-root>/moose.
+# pr-mode default for --root, which is <meta-root>/<name> (moose, marlin).
 meta_root() {
   if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then printf '%s\n' "$CLAUDE_PROJECT_DIR"; return 0; fi
   local d="$PWD"
@@ -46,6 +52,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --mode)  [ $# -ge 2 ] || usage; mode="$2";  shift 2 ;;
     --pr)    [ $# -ge 2 ] || usage; pr="$2";    shift 2 ;;
+    --repo)  [ $# -ge 2 ] || usage; GH_REPO="$2"; shift 2 ;;
     --root)  [ $# -ge 2 ] || usage; root="$2";  shift 2 ;;
     --base)  [ $# -ge 2 ] || usage; base="$2";  shift 2 ;;
     --label) [ $# -ge 2 ] || usage; label="$2"; shift 2 ;;
@@ -57,9 +64,10 @@ case "$mode" in
   pr)
     printf '%s' "$pr" | grep -Eq '^[0-9]+$' || usage
     [ -z "$base" ] && [ -z "$label" ] || usage
+    printf '%s' "$GH_REPO" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' || die "--repo must be owner/name: $GH_REPO"
     if [ -z "$root" ]; then
       mr="$(meta_root)" || die "no --root and no meta-root (.clangd) above $PWD"
-      root="$mr/moose"
+      root="$mr/${GH_REPO##*/}"
     fi
     label="pr-$pr"
     ;;
@@ -96,8 +104,8 @@ if [ "$mode" = "pr" ]; then
   have="$(git -C "$root" rev-parse HEAD)" || die "cannot read HEAD in $root"
   [ -n "$head_sha" ] && [ "$have" = "$head_sha" ] \
     || die "PR #$pr head is ${head_sha:-unknown}, the checkout is at $have (a push landed during the checkout); run again"
-  jq --arg root "$root" --argjson n "$pr" --arg sha "$head_sha" \
-    '. + {mode: "pr", root: $root, number: $n, head_sha: $sha}' "$P-meta.raw.json" > "$P-meta.json" \
+  jq --arg root "$root" --argjson n "$pr" --arg sha "$head_sha" --arg repo "$GH_REPO" \
+    '. + {mode: "pr", root: $root, number: $n, head_sha: $sha, repo: $repo}' "$P-meta.raw.json" > "$P-meta.json" \
     || die "could not write $P-meta.json"
   rm -f "$P-meta.raw.json"
   ( cd "$root" && gh pr diff "$pr" -R "$GH_REPO" ) > "$P.diff" || die "gh pr diff $pr failed"
@@ -109,7 +117,7 @@ if [ "$mode" = "pr" ]; then
   # Linked-issue digest. The linked issues are the author's spec; the reviewers
   # (the completeness lens especially) judge scope and coverage against them.
   # References come from the title, body, and commit headlines: #N (which also
-  # covers closes/fixes/refs #N) and full idaholab/moose issue URLs. A fetch
+  # covers closes/fixes/refs #N) and full <repo> issue URLs. A fetch
   # failure is recorded in the digest, never fatal: the review does not block
   # on this step.
   issues_path="$P-issues.md"

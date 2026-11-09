@@ -2,7 +2,7 @@
 
 # moose_stack operating guide
 
-Meta-repo that pins three forks as submodules: `moose/`, `blackbear/`, `isopod/`. Each submodule is an independent repo. This stack tracks their tips together. `moose` is the framework and the physics modules. `blackbear` (structural degradation) and `isopod` (multiphysics constrained optimization) are MOOSE-based apps that link against it.
+Meta-repo that pins four forks as submodules: `moose/`, `blackbear/`, `isopod/`, `marlin/`. Each submodule is an independent repo. This stack tracks their tips together. `moose` is the framework and the physics modules. `blackbear` (structural degradation) and `isopod` (multiphysics constrained optimization) are MOOSE-based apps that link against it. `marlin` (Fourier spectral and Lattice Boltzmann solver on libTorch) is here for PR review only: `/moose-pr-review marlin#N`. It is not built, and `/new-feature`, `/moose-build` and `/moose-ship` do not know it. Leave its inner `moose/` submodule uninitialized.
 
 ## Remotes (every submodule)
 
@@ -12,8 +12,8 @@ Meta-repo that pins three forks as submodules: `moose/`, `blackbear/`, `isopod/`
 
 ## Branches and pull requests
 
-- Default branches: `moose`, `blackbear`, and `isopod` use `devel`; this meta-repo uses `main`.
-- Every PR to `idaholab/<app>` sets the base branch to `next`. CIVET's precheck rejects PRs against `devel`. `next` is only the PR target: branch from `devel` and diff against `devel`.
+- Default branches: `moose`, `blackbear`, `isopod`, and `marlin` use `devel`; this meta-repo uses `main`.
+- Every PR to `idaholab/<app>` sets the base branch to `next`, except marlin, which has no `next` and takes PRs on `devel`. CIVET's precheck rejects moose, blackbear and isopod PRs against `devel`. `next` is only the PR target: branch from `devel` and diff against `devel`.
 - Create PRs as drafts (`--draft`). I mark them ready in the GitHub UI. Never mark a PR ready.
 - `gh pr create --repo idaholab/<app> --base next --head maxnezdyur:<feature> --draft`
 - PR bodies and review replies are short and use plain ASCII punctuation, no em dashes. Draft a PR comment for me and post it only when I say so.

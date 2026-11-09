@@ -47,7 +47,8 @@ review-only rules:
   `restep = false`, every added `rel_err` above `5e-5`, and every added `abs_zero` above `1e-8` is
   a `required` finding on its line unless the `meta_path` JSON `body` names the mode, the failure,
   and the cause for it. A restriction copied from a neighboring leaf is not justified by that
-  leaf.
+  leaf. When the prompt names a `repo_notes` file (marlin), its test-bucket section overrides
+  this rule and the SQA-triad severity: read it before the loop.
 - Every added comment line in a `tests` spec or a `.i` input is a `required` finding. Roll up per
   file as the protocol says.
 

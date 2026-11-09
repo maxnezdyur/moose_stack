@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# review-post.sh -- POST one PENDING GitHub review for an idaholab/moose PR from
+# review-post.sh -- POST one PENDING GitHub review for a moose or marlin PR from
 # the merged payload review-merge.sh wrote, and print one JSON result line.
 #
 # Usage:
-#   review-post.sh --pr <N> --payload <payload.json> [--replace-pending <review id>]
+#   review-post.sh --pr <N> --payload <payload.json> [--repo <owner/name>] [--replace-pending <review id>]
+#
+# --repo names the GitHub repository (idaholab/moose or idaholab/marlin). Without
+# it the script takes `repo` from the snapshot meta, then falls back to
+# idaholab/moose. A --repo that disagrees with the snapshot meta is an error:
+# the payload anchors on that snapshot's diff.
 #
 # payload.json is {"body": "<markdown>", "comments": [<inline comment>, ...]}.
 # The request never carries an `event` field: omitting it leaves the review
@@ -55,7 +60,7 @@
 
 set -u
 
-GH_REPO="idaholab/moose"   # the only repo the review skill accepts
+GH_REPO=""                 # from --repo, else the snapshot meta, else idaholab/moose
 # Test seam: point at a fake gh to exercise the 422 path without the network.
 GH="${REVIEW_POST_GH:-gh}"
 
@@ -94,6 +99,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --pr)      [ $# -ge 2 ] || usage; pr="$2";      shift 2 ;;
     --payload) [ $# -ge 2 ] || usage; payload="$2"; shift 2 ;;
+    --repo)    [ $# -ge 2 ] || usage; GH_REPO="$2"; shift 2 ;;
     --replace-pending) [ $# -ge 2 ] || usage; replace="$2"; shift 2 ;;
     *) usage ;;
   esac
@@ -109,6 +115,13 @@ META="/tmp/moose-review-pr-$pr-meta.json"
 [ -f "$META" ] || die "no snapshot meta at $META; run review-snapshot.sh --mode pr --pr $pr first"
 want="$(jq -r '.head_sha // ""' "$META")"
 [ -n "$want" ] || die "$META has no head_sha; run review-snapshot.sh --mode pr --pr $pr again"
+meta_repo="$(jq -r '.repo // ""' "$META")"
+if [ -z "$GH_REPO" ]; then
+  GH_REPO="${meta_repo:-idaholab/moose}"
+elif [ -n "$meta_repo" ] && [ "$meta_repo" != "$GH_REPO" ]; then
+  die "--repo $GH_REPO disagrees with the snapshot meta ($meta_repo); run review-snapshot.sh for that repo first"
+fi
+printf '%s' "$GH_REPO" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' || die "repo must be owner/name: $GH_REPO"
 checkout="$(jq -r '.root // ""' "$META")"
 [ -d "$checkout" ] || die "$META names no checkout (root): ${checkout:-none}"
 jq -e 'type == "object" and ((.comments // []) | type == "array") and ((.body // "") | type == "string")' \
