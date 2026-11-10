@@ -567,6 +567,7 @@ def run_doctor(args: Any, cfg: config.Config) -> int:
         )
 
     wts, ok = probe.all_worktrees(cfg)
+    _analysis, wts = probe.split_analysis(wts)
     foreign = [p for p in wts if cfg.is_foreign(Path(p))]
     check(
         "every worktree is under %s" % (config.worktree_root(),),

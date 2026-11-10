@@ -221,7 +221,7 @@ class Store:
         wts, ok = probe.all_worktrees(cfg)
         m["worktrees"] = digest(sorted(wts)) if ok else "unknown"
         for path in sorted(wts):
-            for rel in ("specs/blueprint.md", "specs/handoff.md"):
+            for rel in ("specs/blueprint.md", "specs/handoff.md", config.ANALYSIS_MARKER):
                 p = Path(path) / rel
                 mt, mok = probe._mtime(p)
                 key = "%s:%s" % (os.path.basename(path), rel)

@@ -1,7 +1,7 @@
 ---
 name: new-feature
 description: Scaffolds a moose_stack feature workspace under ~/projects/moose-worktrees/<feature> with matching branches on the meta-repo and all three submodules, the shared pinned conda env, remapped clangd DBs, and a combined-opt hydrated from the canonical MOOSE seed. Use for "/new-feature <name>", "new feature worktree", "start a feature". Manual invoke only.
-argument-hint: "<feature-name>"
+argument-hint: "<feature-name> [--analysis \"<purpose>\"]"
 effort: medium
 allowed-tools:
   - Bash(git worktree *)
@@ -22,6 +22,8 @@ allowed-tools:
 # /new-feature
 
 Creates `~/projects/moose-worktrees/<feature>/` with branch `<feature>` on the meta-repo and on `moose`, `blackbear`, `isopod`, so the meta-repo can bump submodule pointers cleanly later. Local conda host only. The name is kebab-case; without one, ask. Any failed step stops the run with a report and leaves the workspace as it is.
+
+`--analysis "<purpose>"` makes an analysis worktree. It gets the same full scaffold, plus a marker that keeps it off the card lanes. The board lists it under **Analysis worktrees**, at the side of `Board.html` and in `Home.md`, with its path and its purpose. Read step 2b.
 
 Three facts:
 - This skill does not run `git submodule update --init` in the worktree; the submodule worktrees are the source of truth.
@@ -98,6 +100,14 @@ hydration: pending
 EOF
    ```
 
+2b. Analysis marker, only with `--analysis`. Write the purpose on the first line. Keep the marker out of `git status`:
+   ```bash
+printf '%s\n' "<purpose>" > ~/projects/moose-worktrees/<feature>/specs/.factory-analysis
+EXCLUDE=$(git -C ~/projects/moose-worktrees/<feature> rev-parse --git-path info/exclude)
+grep -qxF 'specs/.factory-analysis' "$EXCLUDE" || echo 'specs/.factory-analysis' >> "$EXCLUDE"
+   ```
+   The projector makes no card for a worktree that has this file. Delete the file to make the worktree a feature card. Add the file to an existing worktree to make it an analysis worktree.
+
 3. Submodule worktrees, for each of `moose`, `blackbear`, `isopod`. Apps find MOOSE through `../moose`.
    ```bash
    rmdir ~/projects/moose-worktrees/<feature>/<sub>   # empty dir left by step 2, if present
@@ -136,6 +146,6 @@ EOF
 
 ## Report
 
-Workspace path; the `specs/gallery/` folder and its `gallery.md`, where figures for a human go; the `<feature>.code-workspace` file to open in VS Code; env name and whether it was reused or created; the four branches created; clangd DB/index status (seeded or skipped); donor SHA/lease; objects reused versus rebuilt locally; hydration timing/validation; a reminder to `conda activate <env-name>`. State that BlackBear and Isopod were worktreed but not hydrated or built. Point to `docs/local.md` if the branch later bumps `moose`. Then run `~/projects/moose_stack/factory/factory board` (absolute path; the new worktree has no `factory/`) so the board adopts the workspace, and say that the card is now on `~/projects/moose-factory/Home.md`. Next steps: `/moose-blueprint` in the worktree, then `/moose-build`, then `/moose-ship`. `/feature-sync` reports drift from `devel` later; `/feature-remove` checks for unsaved work before teardown.
+Workspace path; the `specs/gallery/` folder and its `gallery.md`, where figures for a human go; the `<feature>.code-workspace` file to open in VS Code; env name and whether it was reused or created; the four branches created; clangd DB/index status (seeded or skipped); donor SHA/lease; objects reused versus rebuilt locally; hydration timing/validation; a reminder to `conda activate <env-name>`. State that BlackBear and Isopod were worktreed but not hydrated or built. Point to `docs/local.md` if the branch later bumps `moose`. Then run `~/projects/moose_stack/factory/factory board` (absolute path; the new worktree has no `factory/`) so the board adopts the workspace, and say that the card is now on `~/projects/moose-factory/Home.md`. With `--analysis`, say that the worktree is listed under **Analysis worktrees** instead. Skip the blueprint, build and ship next steps. Next steps: `/moose-blueprint` in the worktree, then `/moose-build`, then `/moose-ship`. `/feature-sync` reports drift from `devel` later; `/feature-remove` checks for unsaved work before teardown.
 
 Host: !`hostname`

@@ -506,6 +506,11 @@ GH_PARALLEL = 10                 # xargs -P for pass B
 SUBPROCESS_TIMEOUT = 25          # seconds, per git or gh call
 STALE_REF_DAYS = 14              # a FETCH_HEAD older than this is worth saying
 
+# A worktree that carries this file is analysis work, not a feature: the probe
+# lists it on the side of the board and never makes it a card. The first
+# non-empty line, when there is one, is the purpose shown beside its name.
+ANALYSIS_MARKER = "specs/.factory-analysis"
+
 GALLERY_MAX_MB = 5               # per file, in specs/gallery/; bigger is listed, never linked
 GALLERY_THUMBS = 3               # thumbnails one Board.html card shows
 

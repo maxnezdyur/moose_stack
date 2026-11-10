@@ -179,6 +179,54 @@ def all_worktrees(cfg: config.Config) -> Tuple[Dict[str, Dict[str, Dict[str, Any
     return (out, ok_all)
 
 
+def analysis_purpose(worktree: Path) -> Tuple[Optional[str], bool]:
+    """``(purpose, ok)`` for the analysis marker of one worktree.
+
+    ``purpose`` is ``None`` when the marker is absent, ``""`` when it is empty,
+    and its first non-empty line otherwise. ``ok`` is false only when the stat
+    or the read failed, which callers treat as "not analysis" so a flaky disk
+    never hides a feature card.
+    """
+    marker = Path(worktree) / config.ANALYSIS_MARKER
+    mt, ok = _mtime(marker)
+    if not ok:
+        return (None, False)
+    if mt is None:
+        return (None, True)
+    text, ok = _read_text(marker, limit=4096)
+    if not ok:
+        return (None, False)
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if line:
+            return (line[:120], True)
+    return ("", True)
+
+
+def split_analysis(
+    wts: Dict[str, Dict[str, Dict[str, Any]]],
+) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Dict[str, Any]]]]:
+    """Split ``all_worktrees`` into analysis rows and the feature worktrees.
+
+    A row is ``{id, path, purpose}``, sorted by id then path, so the board stays
+    a pure function of the disk.
+    """
+    rows: List[Dict[str, Any]] = []
+    rest: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    for path, repos in sorted(wts.items()):
+        purpose, _ok = analysis_purpose(Path(path))
+        if purpose is None:
+            rest[path] = repos
+            continue
+        rows.append({
+            "id": os.path.basename(path.rstrip("/")),
+            "path": path,
+            "purpose": purpose,
+        })
+    rows.sort(key=lambda r: (r["id"], r["path"]))
+    return (rows, rest)
+
+
 def local_branches(cfg: config.Config) -> Probe:
     """Every local branch in all four repos, for the Ideas match."""
     names: set = set()
@@ -1109,6 +1157,10 @@ def round_all(cfg: config.Config, want_du: bool = False) -> Tuple[Dict[str, Dict
     meta["worktree_count"] = len(wts)
     meta["branches"] = branches
 
+    # --- analysis worktrees: listed on the side, never a card -------------
+    analysis, wts = split_analysis(wts)
+    meta["analysis"] = analysis
+
     # --- per-worktree git, in parallel: 4 repos x 9 worktrees of MOOSE ----
     jobs: List[Tuple[str, str, Path, Optional[str]]] = []
     for path, repos in sorted(wts.items()):
@@ -1233,6 +1285,8 @@ def round_all(cfg: config.Config, want_du: bool = False) -> Tuple[Dict[str, Dict
         for prs in ((gh or {}).get("repos") or {}).values()
         for pr in prs
     }
+    # An Ideas line named after an analysis worktree is matched, not a card.
+    known |= {row["id"] for row in analysis}
     all_keys = known | set(branches or []) | {h for h in pr_heads if h}
     m_rows, u_rows = [], []
     for row in idea_rows:

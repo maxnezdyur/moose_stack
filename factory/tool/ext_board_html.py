@@ -1089,11 +1089,57 @@ h1 small code { background: transparent; padding: 0; }
 .how p { margin: 0; }
 .how p + p { margin-top: 5px; }
 .how code { background: transparent; padding: 0; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 14px; align-items: start; }
+.side {
+  margin-top: 22px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 12px; font-size: 13px;
+}
+.side h2 { font-family: var(--display); font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+.side h2 span { color: var(--ink-2); font-weight: 400; }
+.side ul { list-style: none; margin: 0; padding: 0; }
+.side li + li { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.side li a { color: var(--ink); text-decoration: none; font-weight: 600; }
+.side li a:hover { color: var(--accent-ink); }
+.side li code { display: block; font-size: 11px; color: var(--ink-2); word-break: break-all; }
+.side li p, .side .empty { margin: 3px 0 0; color: var(--ink-2); }
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 700px) {
   .cols { grid-auto-flow: row; grid-auto-columns: auto; }
   .col { min-width: 0; }
 }
 """
+
+
+def analysis_list(ctx: Any) -> str:
+    """The side list of analysis worktrees: name, path, purpose. Never a card."""
+    rows = (ctx.meta or {}).get("analysis") or []
+    out: List[str] = [
+        '<aside class="side">',
+        "<h2>Analysis worktrees <span>%d</span></h2>" % (len(rows),),
+    ]
+    if not rows:
+        out.append(
+            '<p class="empty">None. Put <code>%s</code> in a worktree to list it here.</p>'
+            % (esc(config.ANALYSIS_MARKER),)
+        )
+    else:
+        out.append("<ul>")
+        for row in rows:
+            path = Path(row["path"])
+            ws = path / (row["id"] + ".code-workspace")
+            target = ws if ws.is_file() else path
+            item = (
+                '<li><a href="%s">%s</a><code>%s</code>'
+                % (esc(vscode_uri(target)), esc(row["id"]), esc(render.tilde(path)))
+            )
+            if row.get("purpose"):
+                item += "<p>%s</p>" % (esc(row["purpose"]),)
+            out.append(item + "</li>")
+        out.append("</ul>")
+    out.append("</aside>")
+    return "\n".join(out)
 
 
 def compose_board(ctx: Any) -> str:
@@ -1119,12 +1165,15 @@ def compose_board(ctx: Any) -> str:
     ]
     out += [
         masthead(ctx),
+        '<div class="layout">',
         '<div class="rail">',
         '<div class="cols">',
     ]
     for posture in COLUMNS:
         out.append(column(posture, ctx))
     out.append("</div>")
+    out.append("</div>")
+    out.append(analysis_list(ctx))
     out.append("</div>")
     out.append(
         '<div class="how"><p><strong>How to act on this page.</strong> A card name opens its '

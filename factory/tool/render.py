@@ -922,6 +922,23 @@ def compose_home(ctx: Any) -> str:
         )
         out.append("")
 
+    analysis = meta.get("analysis") or []
+    out.append("## Analysis worktrees (%d)" % (len(analysis),))
+    out.append("")
+    if analysis:
+        for row in analysis:
+            purpose = row.get("purpose") or ""
+            out.append(
+                "- `%s` - `%s`%s"
+                % (row["id"], tilde(row["path"]), (" - " + cell(purpose)) if purpose else "")
+            )
+    else:
+        out.append(
+            "_None. A worktree with `%s` is listed here, not as a card._"
+            % (config.ANALYSIS_MARKER,)
+        )
+    out.append("")
+
     for title, text, _order in ext_sections(ctx, "home_sections", ctx):
         out.append("## %s" % (title,))
         out.append("")

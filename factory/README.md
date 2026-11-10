@@ -367,6 +367,16 @@ A repository whose HEAD is not `<feature>` raises `branch-mismatch`. A worktree 
 the configured worktree root raises `foreign-worktree`. Such a checkout is torn down by hand.
 No script removes a worktree.
 
+## Analysis worktrees
+
+An analysis worktree is a worktree for analysis work, not for a feature. It carries the file
+`specs/.factory-analysis`. The probe makes no card for it. `Home.md` and the side of `Board.html`
+list it under **Analysis worktrees**, with its name, its path and the first line of the marker.
+
+Make one with `/new-feature <name> --analysis "<purpose>"`. To change an existing worktree, add or
+delete the marker. The next tick sees the change. `foreign-worktree` and `branch-mismatch` do not
+apply to an analysis worktree.
+
 ## Determinism
 
 Delete `Home.md`, `Board.html`, `Features/*.md` and `Campaigns/*.md`, run `factory board`, and the
