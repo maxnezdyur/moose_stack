@@ -30,11 +30,19 @@ Conventional subject under 72 characters (`feat(<area>): ...`, `fix(<area>): ...
 ```bash
 git -C <worktree>/<sub> push -u origin <branch>
 cd <worktree>/specs/gallery && gh pr create --repo idaholab/<app> --base next --head maxnezdyur:<branch> --draft \
-  --title "<subject>" --body-file /tmp/moose-ship-<branch>-pr.md \
+  --title "<PR title>" --body-file /tmp/moose-ship-<branch>-pr.md \
   [--attach './<file>#<heading>' ...]
 git -C <worktree> add <sub>
 git -C <worktree> commit -m "Bump <sub> to <short sha>"
 ```
+
+## PR title
+
+The PR title is never the commit message. Write it as its own text, after the commit and before `gh pr create`. It is one plain sentence fragment that tells a reviewer what the change does, for example "Add arc-length continuation for tracing equilibrium paths past limit points". It starts with a capital letter. It has no conventional prefix (`feat(<area>):`, `fix:`), no issue number and no period at the end. It is 80 characters or fewer. Take the words from the blueprint title and the Reason of the PR body, not from the commit subject.
+
+The title must always be better than the commit subject: a reviewer who reads only the title knows what changed and where. Name the object, system or module that changes, and say what it can do now or what was wrong before. A title such as "Fix bug", "Update kernel" or "Shell changes" is refused. When the first draft is the commit subject with other words, write it again from the user-visible effect of the change.
+
+Check the title before `gh pr create` runs. Stop and rewrite it when it equals the commit subject, when it equals the commit subject without its prefix, or when it matches `^[a-z]+(\([^)]*\))?!?: `. Never pass `--fill`, `--fill-first` or `--fill-verbose` to `gh pr create`, and never omit `--title`: each of those makes `gh` take the title from the commit. These rules apply to `gh pr edit --title` too.
 
 `<branch>` is the submodule's current branch (the feature name); `<app>` is the submodule name. The PR body follows the app's `.github/PULL_REQUEST_TEMPLATE.md` when it has one (moose: Reason, Design, Impact); isopod has none, so use those three headings. The body carries the summary, the `refs #<issue>` line, the test counts, and the review counts (`required` and `suggested`, from the `/moose-build` report or `<worktree>/specs/review-<label>.md`, the copy that survives a reboot); it ends with the Claude Code attribution line. It is short, in plain ASCII punctuation with no em dashes. After the template's headings it carries `## Proof` (below). Any further comment on the PR (more figures, tables, replies to reviewers) is drafted for the user and posted only when they say so. The meta-repo commit stages only the gitlink; `specs/` and any other meta-repo change stay out. A rerun after a failure skips the steps that already happened: a clean tree with the branch ahead of `devel` means the commit exists; `git status -sb` up to date with `origin/<branch>` means the push happened; a hit from `gh pr list --repo idaholab/<app> --head <branch> --author @me` means the PR exists.
 
@@ -105,7 +113,7 @@ message and stop.
    ```bash
    "$STACK" -C <moose> push <pub>
    cd <gallery of <pub>> && gh pr create --repo idaholab/moose --base next --head maxnezdyur:epic/<epic>/<pub> --draft \
-     --title "<subject of the commit at epic/<epic>/<pub>>" --body-file /tmp/moose-ship-<epic>-<pub>-pr.md \
+     --title "<PR title of <pub>>" --body-file /tmp/moose-ship-<epic>-<pub>-pr.md \
      [--attach './<file>#<heading>' ...]
    ```
 
@@ -115,8 +123,10 @@ message and stop.
    `/moose-epic`. If `push` refuses for that reason, print the message and stop. The records of
    `<pub>` (the review counts, `proof/`, the
    gallery) are in `<worktree>/specs/slices/<pub>/` when `/moose-epic next` archived them, and in
-   `<worktree>/specs/` otherwise. The title is
-   `git -C <moose> log -1 --format=%s epic/<epic>/<pub>`.
+   `<worktree>/specs/` otherwise. Write the title by the rules of "PR title" above, from the
+   title of the `<pub>` row of `## Slices`. It is never the subject of the commit at
+   `epic/<epic>/<pub>`; read that subject with
+   `git -C <moose> log -1 --format=%s epic/<epic>/<pub>` only to check that the title differs.
 7. **PR body of `<pub>`.** Add two things after the summary. First, when the slice below `<pub>`
    is not merged, the line `Depends on #<P>. Review the commits after it.` `<P>` is the pull
    request of the slice below, from the `pr` column of the status table. Omit the line for the
