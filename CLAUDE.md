@@ -19,6 +19,8 @@ Meta-repo that pins four forks as submodules: `moose/`, `blackbear/`, `isopod/`,
 - PR bodies and review replies are short and use plain ASCII punctuation, no em dashes. Draft a PR comment for me and post it only when I say so.
 - An issue number is confirmed with `gh issue view <N> --repo idaholab/<app> --json title,state` before it goes into a spec, a commit, or a PR; a remembered number is often wrong. A new issue is short, follows the repo template, and does not describe the solution or the tests.
 - A fix to a PR that is still open (a CIVET failure, a review comment, a loosened tolerance) is amended into its commit and pushed with `--force-with-lease`; no fix-up commits, and no code comment explaining the fix.
+- In an epic worktree (`specs/epic.md` exists; a chain of dependent PRs, see `/moose-epic`), a PR fix goes through `scripts/stack fix`, which `/moose-epic fix <id>` runs, never through an amend. There, never run `git rebase`, `git commit --amend`, `git stash`, a forced `git push`, or `gh pr ready` by hand. A slice in review takes the fix as a new commit.
+- `/moose-auto` does not run an epic.
 
 ## CIVET precheck facts
 

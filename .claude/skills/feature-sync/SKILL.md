@@ -1,6 +1,6 @@
 ---
 name: feature-sync
-description: Refreshes a moose_stack feature workspace. Fetches every remote of the meta-repo and the moose, blackbear, isopod worktrees, reports ahead/behind per repo against upstream/devel (submodules) and origin/main (meta-repo), and offers a rebase only on a clean tree. Use for "/feature-sync [<feature>]", "sync the worktree", "how far behind devel am I", "rebase onto devel".
+description: Refreshes a moose_stack feature workspace. Fetches every remote of the meta-repo and the moose, blackbear, isopod worktrees, reports ahead/behind per repo against upstream/devel (submodules) and origin/main (meta-repo), and offers a rebase only on a clean tree. In an epic worktree it offers no rebase of moose and names the stack script. Use for "/feature-sync [<feature>]", "sync the worktree", "how far behind devel am I", "rebase onto devel".
 argument-hint: "[<feature>]"
 effort: low
 allowed-tools:
@@ -46,7 +46,7 @@ For the meta-repo, also print the gitlinks: `git -C $W ls-tree HEAD moose blackb
 
 ## Step 3: offer a rebase
 
-Offer it only for a checkout that is behind its base. Before the offer, check that checkout's tree. **A dirty tree refuses.** List its dirty files, tell the user to commit or stash them, and skip that checkout.
+Offer it only for a checkout that is behind its base, and never for `$W/moose` in an epic worktree (see "In an epic worktree"). Before the offer, check that checkout's tree. **A dirty tree refuses.** List its dirty files, tell the user to commit or stash them, and skip that checkout.
 
 Ask with AskUserQuestion, one option per behind-and-clean checkout plus "none". On a confirmed checkout:
 
@@ -55,6 +55,35 @@ git -C <c> rebase <base>
 ```
 
 On a conflict, stop at once. Report the conflicted files and the two commands: `git -C <c> rebase --continue` and `git -C <c> rebase --abort`.
+
+## In an epic worktree
+
+When `$W/specs/epic.md` exists, `$W/moose` holds a chain of slices (`/moose-epic`). Its branch
+`<feature>` has one local ref `epic/<feature>/s<n>` per slice. A plain rebase moves the branch and
+leaves each slice ref behind; the next review fix then reports success and reaches no pull
+request. These rules replace the steps above for `$W/moose`:
+
+- Step 2 stays: report the drift. `pushed` is not a finding there: the branch `<feature>` is never
+  pushed, and the fork holds the slice branches. List them with
+  `git -C $W/moose for-each-ref --format='%(refname:short) %(objectname:short)' 'refs/heads/epic/<feature>/s*'`.
+- Step 3: offer no rebase of `$W/moose`, also when it is behind. Print this command in its place.
+  It is the only way to move the chain:
+
+  ```bash
+  cfg="${MOOSE_FACTORY_CONFIG:-$HOME/.config/moose-factory/config.toml}"
+  meta_repo="$(sed -n -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*meta_repo[[:space:]]*=[[:space:]]*//p' "$cfg" 2>/dev/null | head -n 1 | tr -d '"')"
+  meta_repo="${meta_repo:-$HOME/projects/moose_stack}"; meta_repo="${meta_repo/#\~/$HOME}"
+  STACK="$meta_repo/scripts/stack"
+  "$STACK" -C $W/moose sync
+  ```
+
+  Shell variables do not persist between Bash calls, so the resolver lines and the call go in
+  one Bash call. This skill prints the command and does not run it. Say that `sync` records merged slices, and that
+  `sync --rebase` rebases the chain onto `upstream/next` and starts a CIVET run on each open
+  pull request that it pushes.
+- The pointer notes below do not apply to `moose`: an epic keeps no `Bump moose` commit.
+
+The meta-repo, `blackbear` and `isopod` checkouts follow the steps above without change.
 
 ## Submodule pointers
 

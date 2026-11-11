@@ -247,6 +247,43 @@ SESSION_PROOF = "a live session has its cwd in the worktree"
 NON_DURABLE_PROOFS = frozenset({SESSION_PROOF})
 
 
+def worktree_epic(obs: Dict[str, Any]) -> bool:
+    """A worktree card that is an epic. ``epic`` in ``stale`` counts: the plan
+    could not be read this run, and an unreadable plan never proves a merge."""
+    if not obs.get("worktree"):
+        return False
+    return bool(obs.get("epic")) or "epic" in (obs.get("stale") or [])
+
+
+def merged_slices(obs: Dict[str, Any]) -> List[int]:
+    """The slice numbers with a MERGED pull request on this card, now."""
+    return sorted(
+        {
+            p["slice"]
+            for p in (obs.get("prs") or [])
+            if (p.get("state") or "").upper() == "MERGED"
+            and isinstance(p.get("slice"), int)
+            and not isinstance(p.get("slice"), bool)
+        }
+    )
+
+
+def epic_finished(obs: Dict[str, Any]) -> bool:
+    """Has every slice in the ``## Slices`` order merged?
+
+    False when the order is empty: a plan with no readable table lists no
+    slice, and "none are missing" is not "all are merged". ``epic_merged`` is
+    the memory of slices seen merged on earlier runs (``derive_card``), because
+    `gh pr list` returns a window and an early slice leaves it before a long
+    chain ends.
+    """
+    order = [n for n in ((obs.get("epic") or {}).get("order") or []) if isinstance(n, int)]
+    if not order:
+        return False
+    done = set(merged_slices(obs)) | set(obs.get("epic_merged") or [])
+    return all(n in done for n in order)
+
+
 def derived_lane(obs: Dict[str, Any], now_ts: float) -> Tuple[str, str]:
     """The highest lane the probes prove, with the signal that proved it."""
     lane, proof = IDEA, "an Ideas.md line that matches nothing"
@@ -293,7 +330,13 @@ def derived_lane(obs: Dict[str, Any], now_ts: float) -> Tuple[str, str]:
             lane, proof = PR_READY, "PR #%s is open and not a draft" % (pr.get("number"),)
             break
 
-    if merged and not openp:
+    if worktree_epic(obs):
+        # One merged slice says nothing about the slices that are sealed with
+        # no pull request yet, or not built at all. The chain is finished when
+        # every slice the plan lists has merged, and only the plan can say so.
+        if not openp and epic_finished(obs):
+            lane, proof = MERGED, "every slice in specs/epic.md has a merged PR"
+    elif merged and not openp:
         lane, proof = MERGED, "PR #%s merged" % (merged[0].get("number"),)
     if not obs.get("worktree") and not openp and merged:
         lane, proof = MERGED, "PR #%s merged, no worktree" % (merged[0].get("number"),)
@@ -351,6 +394,15 @@ def clamp(
 
     # --- a demotion needs a named cause -----------------------------------
     cause = demotion_cause(obs)
+    if not cause and worktree_epic(obs) and stored in (SHIPPED, PR_READY, MERGED):
+        # An epic goes round the pipeline once per slice. A lane that a slice's
+        # pull request proved stops being true when that slice merges and the
+        # next one is still being built, and holding it prints "the reviewers
+        # have it" about a merged pull request, or a teardown for a chain that
+        # is not finished. `merged` is derived for an epic only when every
+        # slice has merged, so this is also what keeps the clamp from holding
+        # a `merged` that rule no longer derives.
+        cause = "epic-next-slice"
     if cause:
         events.append(
             {
@@ -642,6 +694,7 @@ def next_action(card: FeatureCard, cfg: config.Config) -> NextAction:
             % (label,),
         )
     if card.has("conflicting") and pr:
+        pr = _slice_subject(openp, pr, lambda p: p.get("mergeable") == "CONFLICTING")
         return NextAction(
             "rebase",
             _rebase_cmd(card, cfg, repo_dir, pr, slug),
@@ -649,6 +702,7 @@ def next_action(card: FeatureCard, cfg: config.Config) -> NextAction:
             % (_pr_label(pr), "" if wt else ". There is no checkout to rebase in."),
         )
     if card.has("ci-red") and pr:
+        pr = _slice_subject(openp, pr, lambda p: p.get("ci") == "red")
         failing = [f.get("name", "?") for f in (pr.get("failing") or [])]
         shown = ", ".join(failing[:4]) + (
             ", and %d more" % (len(failing) - 4,) if len(failing) > 4 else ""
@@ -706,6 +760,7 @@ def next_action(card: FeatureCard, cfg: config.Config) -> NextAction:
             "%s is red%s%s%s" % (_pr_label(pr), (" (%s)" % shown) if shown else "", verdict, also),
         )
     if card.has("changes-requested") and pr:
+        pr = _slice_subject(openp, pr, lambda p: p.get("reviewDecision") == "CHANGES_REQUESTED")
         return NextAction(
             "read-review",
             "gh pr view %s --repo %s --comments" % (pr.get("number"), slug),
@@ -761,11 +816,25 @@ def next_action(card: FeatureCard, cfg: config.Config) -> NextAction:
 
     due = card.gates.get("_due")
     if due == "pr_ready" and pr:
-        return NextAction(
-            "mark-ready",
-            "open %s" % (pr.get("url") or ""),
-            "%s is a green draft. Only you can mark it ready." % (_pr_label(pr),),
-        )
+        slices = slice_prs(openp)
+        if not slices:
+            return NextAction(
+                "mark-ready",
+                "open %s" % (pr.get("url") or ""),
+                "%s is a green draft. Only you can mark it ready." % (_pr_label(pr),),
+            )
+        # A chain merges from the bottom. Pull request k holds slices 1 to k, so
+        # marking an upper one ready invites a merge of work nobody reviewed.
+        # Offer the lowest open slice, and only while it is still a draft; with
+        # that one already in review there is nothing here to mark.
+        lowest = slices[0]
+        if lowest.get("isDraft"):
+            return NextAction(
+                "mark-ready",
+                "open %s" % (lowest.get("url") or ""),
+                "%s is a green draft and the lowest open slice (s%s). Only you can mark it ready."
+                % (_pr_label(lowest), lowest.get("slice")),
+            )
     if due == "teardown":
         return NextAction(
             "teardown",
@@ -877,6 +946,42 @@ def next_action(card: FeatureCard, cfg: config.Config) -> NextAction:
     return NextAction("none", "", "archived. Nothing to do.")
 
 
+def slice_prs(prs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The pull requests that are slices of an epic, lowest slice first.
+
+    The probe sets ``slice`` on a row whose head is ``epic/<epic>/s<n>``. A row
+    without it is an ordinary pull request and is never in this list.
+    """
+    rows = [p for p in prs if isinstance(p.get("slice"), int) and not isinstance(p.get("slice"), bool)]
+    return sorted(rows, key=lambda p: (p["slice"], int(p.get("number") or 0)))
+
+
+def _slice_subject(
+    openp: List[Dict[str, Any]], pr: Dict[str, Any], test: Any
+) -> Dict[str, Any]:
+    """The pull request a flag is about, on a card that holds several slices.
+
+    A card had one open pull request per repository until an epic put a chain of
+    them on it. The flags are per card, and ``primary_pr`` is the newest one,
+    so "is CONFLICTING" or "is red" named the newest slice whichever slice had
+    the problem, and the command carried that wrong number. With slices on the
+    card, name the lowest open slice the test is true of: a chain is repaired
+    from the bottom. A card with no slice row gets ``pr`` back unchanged.
+    """
+    for row in slice_prs(openp):
+        try:
+            if test(row):
+                return row
+        except Exception:
+            continue
+    return pr
+
+
+def _stack(cfg: config.Config) -> str:
+    """The stack script, as a command to paste. Tilde-collapsed, like `_factory`."""
+    return config.display_path(cfg.repo_root / "scripts" / "stack")
+
+
 def _rebase_cmd(
     card: FeatureCard, cfg: config.Config, repo_dir: str, pr: Dict[str, Any], slug: str
 ) -> str:
@@ -884,7 +989,14 @@ def _rebase_cmd(
 
     A PR-only card has no worktree, and `cd` with an empty path is worse than
     no command at all.
+
+    An epic never gets the plain rebase. Its branch carries one local ref per
+    slice, and `git rebase` moves the branch and leaves every one of them
+    behind: the next fix then lands in no pull request and still exits 0.
+    `scripts/stack sync` moves the refs with the branch, and picks the base.
     """
+    if card.worktree and card.epic:
+        return "cd %s && %s sync" % (card.worktree, _stack(cfg))
     if card.worktree and repo_dir:
         return "cd %s && git fetch upstream && git rebase %s" % (repo_dir, cfg.upstream_ref)
     return "gh pr checks %s --repo %s" % (pr.get("number"), slug)
@@ -930,8 +1042,17 @@ def derive_card(
         card.blueprint = obs.get("blueprint")
         card.build = obs.get("build")
         card.session = obs.get("session")
+        card.epic = obs.get("epic") or None
         card.gates = dict(gate_records)
 
+        if worktree_epic(obs):
+            # A merged pull request never unmerges, so the set only grows. It is
+            # kept in the state file of this card and of no other.
+            seen = sorted(set(prev.get("epic_merged") or []) | set(merged_slices(obs)))
+            if seen:
+                prev["epic_merged"] = seen
+            obs = dict(obs)
+            obs["epic_merged"] = seen
         lane, proof, extra, lane_events = clamp(obs, prev, now)
         card.lane = lane
         card.lane_rank = rank(lane)

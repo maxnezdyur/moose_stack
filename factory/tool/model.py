@@ -83,6 +83,7 @@ DEMOTION_CAUSES = frozenset(
         "invalid-blueprint",   # rank 2 again until the blueprint parses
         "abandoned",           # Max said so
         "reset",               # `factory reset`
+        "epic-next-slice",     # an epic's lane was proven by a slice that has moved on
     }
 )
 
@@ -249,6 +250,10 @@ class FeatureCard:
     provenance: str = "discovered-worktree"
     repos: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
+    #: ``{"path", "order"}`` when the worktree has ``specs/epic.md``, else None.
+    #: An epic is a chain of slices on one branch, and ``scripts/stack`` owns
+    #: every rebase of it, so ``derive`` reads this to print the right command.
+    epic: Optional[Dict[str, Any]] = None
     #: Per-card scratch space for the extensions. Core reads nothing from it.
     #: ``tool/ext_handoff.py`` publishes ``handoff_next`` and its four siblings here.
     extra: Dict[str, Any] = field(default_factory=dict)

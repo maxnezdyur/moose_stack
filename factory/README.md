@@ -34,12 +34,14 @@ factory/
   tool/ext_campaigns.py  read-only adapter over <root>/campaigns/*/; campaign cards; Campaigns/<id>.md
   tool/ext_handoff.py    rescue specs/handoff.md into Artifacts/; the ## Handoff card section; handoff-stale
   tool/ext_gallery.py    the specs/gallery/ listing, the Gallery/<feature> symlink, the ## Gallery card section
+  tool/ext_epic.py       an epic: rescue specs/epic.md and specs/slices/ into Artifacts/; the ## Epic card section
   tool/ext_teardown.py   teardown and archive, plus the reclaimable-bytes number
   tool/ext_civet.py      CIVET triage: `ci-infra`, the `ci` verb, the note's CIVET triage section
   tool/ext_tick.py       the loop's policy: change gate, notifier, tick-status, doctor checks
   install.sh             install or remove the launchd agent; --status, --uninstall
   moose-factory-tick.sh  the 120 s tick, installed to ~/.local/bin/
   com.moose-factory.plist.in   the agent template; install.sh renders it into ~/Library/LaunchAgents/
+  tests/test_epic.py     the epic tests: `python3 factory/tests/test_epic.py`, standard library only
   state/             GITIGNORED cache. `rm -rf state && factory board` repairs everything.
 ```
 
@@ -139,6 +141,7 @@ factory doctor              # the same block, above the checks
 | `path_extra` | `""` | extra PATH prefixes the launchd tick prepends, colon separated |
 | `gallery_max_mb` | `5` | the per-file cap in `specs/gallery/`; a bigger file is named on the note and never linked |
 | `gallery_thumbs` | `3` | how many thumbnails one `Board.html` card shows |
+| `epic_rescue_max_mb` | `20` | the most megabytes of `specs/epic.md` and `specs/slices/` that one epic keeps under `Artifacts/`; a file that does not fit is named on the note |
 | the caps and thresholds | the values in `tool/config.py` | `max_concurrent_sessions`, `max_builds_per_day`, `min_free_gb`, `stall_seconds`, `nag_days`, `park_idle_days`, `triage_dirty`, `gh_cache_ttl`, `gh_limit`, `gh_parallel`, `subprocess_timeout`, `stale_ref_days`, `needs_you_cap`, `head_churn_budget`, `timeline_on_home` |
 
 Every key has an environment variable: `MOOSE_FACTORY_VAULT`, `FACTORY_WORKTREE_ROOT`,
@@ -199,6 +202,7 @@ The code is shared and the state is not. Follow these steps on the second Mac.
    timeline_on_home = 5
    gallery_max_mb = 5
    gallery_thumbs = 3
+   epic_rescue_max_mb = 20
    ```
 
 4. Install the tick:
@@ -259,7 +263,7 @@ The model never conflates these four.
 | 5 | built | a `moose-build-*.json` with `status: GOAL_MET`, no older than `blueprint.md` | agent |
 | 6 | shipped | an open PR with `isDraft: true` | max (gate) |
 | 7 | pr-ready | an open PR with `isDraft: false` | reviewers |
-| 8 | merged | a merged PR and no open PR | max (gate) |
+| 8 | merged | a merged PR and no open PR. For an epic worktree: no open PR, and each slice in the `## Slices` table of `specs/epic.md` has a merged PR | max (gate) |
 | 9 | archived | no worktree and no PR | none |
 
 `abandoned` and `closed-unmerged` are off-pipeline terminals. Max sets them with a reason.
@@ -270,8 +274,12 @@ artifact plus a count, and `required > 0` raises `review-findings`.
 
 **The clamp.** `lane = max(rank(derived), rank(last_seen))`. A lane moves backwards only for a
 named cause: `NEEDS_DESIGN` in the build record, a PR closed unmerged, `invalid-blueprint` at
-rank 2, `abandoned`, or `factory reset`. Every demotion appends a timeline line that names the
-probe. Otherwise the stored lane holds and the card gets `signal-regression`.
+rank 2, `abandoned`, `factory reset`, or `epic-next-slice`. Every demotion appends a timeline line
+that names the probe. Otherwise the stored lane holds and the card gets `signal-regression`.
+
+`epic-next-slice` applies to an epic worktree only. An epic goes through the lanes one time for
+each slice. When the pull request that proved `shipped`, `pr-ready` or `merged` no longer proves
+it, the lane moves back to what the probes prove for the next slice.
 
 **The debounce.** A lane move driven by a non-durable signal (a session row, a CI rollup) must
 hold across two consecutive runs. A move driven by a durable artifact (a file, a PR number, a
@@ -362,6 +370,9 @@ The worst case is a grant that is one tick late. It is never wrong.
 `~/projects/moose-worktrees/`, the branch on the meta-repo and all three submodules, the PR head
 branch, and the note basename. Pull requests join on the feature name and on every repository's
 actual HEAD branch, so a legacy checkout still finds its PR.
+
+An epic adds one more name. A pull request whose head is `epic/<feature>/s<n>` is slice `n` of the
+epic `<feature>`, and it goes on the card `<feature>`. The section "Epics" gives the rules.
 
 A repository whose HEAD is not `<feature>` raises `branch-mismatch`. A worktree outside
 the configured worktree root raises `foreign-worktree`. Such a checkout is torn down by hand.
@@ -514,8 +525,10 @@ for every card id), `cards` (list of `FeatureCard` after derive), `state_dir`, `
 `flags`, `posture`, `next_action` (verb, command, why), `prs` (list of `{repo, number, state,
 isDraft, url, ci, mergeable, reviewDecision, updatedAt}`), `blueprint` (dict or None), `build`
 (newest record dict or None), `session` (dict or None), `gates` (dict), `provenance`, `repos`
-(dict repo -> `{branch, pushed, ahead, dirty, fetched}`), `errors` (list), and `extra` (a dict the
-extensions publish per-card values into; core reads nothing from it).
+(dict repo -> `{branch, pushed, ahead, dirty, fetched}`), `errors` (list), `epic` (`{path, order}`
+when the worktree has `specs/epic.md`, else None), and `extra` (a dict the extensions publish
+per-card values into; core reads nothing from it). A row of `prs` that is a slice of an epic also
+carries `slice`, the slice number.
 
 Core verbs: `board`, `status [<feature>]`, `next <feature>`, `set <feature> key=value`,
 `abandon <feature> "<reason>"`, `grant <feature> <gate>`, `doctor`, `commit`,
@@ -579,6 +592,9 @@ exactly `/tmp/moose-review-<feature>.md`, and only with a `/tmp/moose-review-<fe
 whose `.root` resolves under that feature's worktree. Never glob `/tmp/moose-review-*`: that
 namespace is shared, `/moose-pr-review` writes `fc-syn`, `fc-test` and `pr-5` families there today,
 and `*-issues.md` is a linked-issue digest, not a review.
+
+Two more extensions write there, each for its own files and with its own guard:
+`tool/ext_handoff.py` keeps `handoff.md`, and `tool/ext_epic.py` keeps `epic.md` and `slices/`.
 
 The rescue is idempotent and never overwrites a differing copy: that one gets a numbered suffix. The
 probe reads the rescued copy once the original is gone, which is the whole point, because
@@ -806,6 +822,117 @@ installed through Obsidian's own community-plugin browser: a vendored, minified 
 Obsidian with full filesystem access, and a copy with no recorded upstream release or checksum cannot
 be told from a tampered one. Obsidian keeps the Restricted-mode switch in its own local storage, so
 the hint says to turn it off by hand once.
+
+## Epics
+
+An epic is a chain of dependent pull requests that one worktree builds. The design is
+`specs/epic-stack-plan.md`. The branch `<epic>` is never pushed. Each shipped slice has a local ref
+and a fork branch `epic/<epic>/s<n>`, and the fork branch is the pull-request head. `scripts/stack`
+owns every rebase of an epic branch.
+
+A feature name cannot contain a slash. A head `epic/<epic>/s<n>` is thus a slice on every machine,
+and no other head is a slice. `<n>` is a number from 1 with no leading zero, and `<epic>` is a safe
+feature name. A head such as `plain-s3` or `epic/x/s0` is an ordinary head. The head of a slice
+never becomes a card id or a file name: the card id is `<epic>`.
+
+An epic worktree is a worktree that has `specs/epic.md`. The probe reads that one file. It runs no
+git command to find an epic.
+
+What the board does for an epic in this version:
+
+- **One card, on every machine.** Each slice pull request goes on the card `<epic>`. The pull
+  request can be in any of the repositories and in any state. No card, gate file, state file or
+  timeline file is made for a slice.
+- **With the worktree,** the card is the worktree card, and the worktree must have `specs/epic.md`.
+- **Without the worktree** (the other machine, or this machine after a teardown), the slices make
+  one PR-only card named `<epic>`. The card exists while one slice or more is open, which is the
+  rule for every PR-only card. Merged and closed slices are on that card too. When no slice is
+  open, the card is gone and the note has no card: run `factory archive <epic>`.
+- **The slice list.** The note has a `## Epic` section. It links `specs/epic.md` and lists each
+  slice that has a pull request, with `draft`, `ready`, `merged` or `closed`. With the worktree,
+  the order is the order of the `## Slices` table in `specs/epic.md`, and a slice that the table
+  does not list comes last. Without the worktree, the order is numeric.
+- **Mark ready.** The board offers "mark ready" only for the lowest open slice, and only while that
+  slice is a draft. Only you mark a pull request ready.
+- **Sync, not rebase.** For a conflicting epic the next move is `scripts/stack sync`, run in the
+  worktree. A plain `git rebase` moves the branch and leaves every slice ref behind.
+- **The right slice.** When a card holds slices, "is CONFLICTING", "is red" and "has
+  CHANGES_REQUESTED" name the lowest open slice that has the problem.
+- **The rescue.** Each board run copies `specs/epic.md` and the files under `specs/slices/` into
+  `Artifacts/<epic>/`. Nothing under `specs/` is tracked, so this copy is the only record after a
+  teardown.
+- **The blueprint.** `specs/epic.md` and `specs/handoff.md` are never read as the slice blueprint.
+- **Merged means the chain is finished.** An epic worktree has the lane `merged` only when no pull
+  request is open and each slice in the `## Slices` table has a merged pull request. One merged
+  slice does not make the card `merged`, and the card does not offer teardown while a slice is
+  sealed or not built. When the table is absent or cannot be read, the pull requests alone never
+  make the lane `merged`. The state file remembers each slice that was seen merged, because
+  `gh pr list` returns the newest pull requests only.
+- **The lane follows the current slice.** When a slice merges and the next one is not shipped,
+  the lane moves back to what the probes prove for the next slice. The timeline records the move
+  with the cause `epic-next-slice`.
+
+A collision is a slice whose card `<epic>` exists and is not an epic. That card is an ordinary
+worktree with no `specs/epic.md`, or the PR-only card of a head that is literally `<epic>`. The
+slice goes on no card. It grants no gate and makes no file. The board log has one line for the
+collisions of a run, and `factory doctor` has a failed row until the collision is gone. To repair
+it, add `specs/epic.md` if the worktree is the epic, or rename one of the two.
+
+A probe that fails changes nothing. When `specs/epic.md` cannot be read in one run, the card keeps
+its slices for that run. When `git worktree list` fails in one run, the slices wait for the
+recovered card, and a worktree card never becomes a PR-only card.
+
+The rules of the rescue:
+
+- A file in the worktree that has content always replaces its copy. The worktree file is correct
+  while the worktree exists. The history of the vault keeps the older copy.
+- An empty file never replaces a copy that has content.
+- A symlink is never followed and never copied.
+- One file can be 4 MB at most.
+- One epic can keep `epic_rescue_max_mb` megabytes at most. The default is 20. It is a setting in
+  `config.toml`.
+- The copy order is fixed: `epic.md`, then `blueprint.md` and each `review-*.md` of each slice in
+  slice order, then all other files in path order. A file that does not fit is left out, and the
+  next smaller file can still fit.
+- The note names each file that has no copy, with the reason.
+- `factory teardown` refuses while such a file exists. It also refuses when the check itself
+  fails. `--force` overrides the refusal.
+
+Teardown of an epic:
+
+- The branch `<epic>` is never pushed, so the "never pushed" test does not apply to a submodule of
+  an epic card. Teardown judges the chain. It uses local refs only and fetches nothing.
+- This applies to a checkout that is on the branch `<epic>`. A checkout that is detached or on
+  another branch gets the ordinary "never pushed" test, and the branch `<epic>` is judged too.
+- A commit on `<epic>` is safe when `upstream/next` or `upstream/devel` contains it, or when a
+  local ref `epic/<epic>/s<n>` contains it and that ref is equal to `origin/epic/<epic>/s<n>`.
+  That remote ref is the fork as of the last fetch. It is not proof of what the fork holds now,
+  and the plan says so. Fetch first when you are not sure.
+- Teardown refuses for each other commit, and names the cause: a slice that was sealed and never
+  published, a slice that differs from the fork, or commits that are in no slice. It also refuses
+  when it cannot read the refs, and when a checkout is on `<epic>` and that branch does not
+  exist. `--force` overrides the refusal.
+- Teardown deletes the branch `<epic>`. It does not delete the local branches `epic/<epic>/*` or
+  the refs `refs/stack/<epic>/*`. The plan lists them. `/feature-remove` deletes them after you
+  confirm.
+
+What the board does not do yet:
+
+- **The gates are per card.** A `ship` or `pr_ready` grant from the first slice covers every later
+  slice. The board does not ask you to grant `ship` for slice 2, and it does not offer "mark ready"
+  again after the first slice was marked ready. The `teardown` gate has no such problem: the board
+  asks for it only when the chain is finished.
+- **No stack flags.** `needs-restack`, `stack-drift` and `fixup-pending` do not exist. `scripts/stack
+  status` is the source for the state of the chain.
+- **The ahead count** is still measured against `upstream/devel`.
+- **A stale rollup is not discarded for a slice.** The head of a slice pull request is not the
+  checked-out branch, so the board cannot compare the sha. A red or conflicting verdict can be
+  from the head before the last push.
+
+`factory doctor` has two rows for this. `scripts/stack` is present and executable when an epic
+worktree exists. Each slice pull request is on the card of its epic. `python3
+factory/tests/test_epic.py` runs the tests. Each test builds a scratch vault, a scratch meta-repo
+and real worktrees in a temporary directory, and reads nothing of yours.
 
 ## Campaigns
 

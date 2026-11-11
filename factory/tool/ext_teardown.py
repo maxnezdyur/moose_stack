@@ -293,18 +293,55 @@ def plan(card: Any, ctx: Any, force: bool = False, measure: bool = True) -> Dict
         )
 
     soft: List[str] = []
+    # An epic's branch `<epic>` is never pushed, by design: the fork holds one
+    # branch per slice, `epic/<epic>/s<n>`. "Never pushed" is true of it for
+    # ever and says nothing, so a submodule checkout of an epic is judged by
+    # its chain below. The meta-repo branch keeps the ordinary test.
+    epic_card = bool(getattr(card, "epic", None))
     for repo, st in sorted((card.repos or {}).items()):
         if st.get("dirty"):
             soft.append("%s has %s dirty files" % (repo, st["dirty"]))
+        if epic_card and repo != config.META and st.get("branch") == feature:
+            # On the epic branch: the chain decides, below. A checkout that is
+            # detached or on any other branch gets the ordinary test, because
+            # its commits are on no chain.
+            continue
         if st.get("pushed") is False and (st.get("ahead") or 0) > 0:
             soft.append("%s is %s commits ahead and was never pushed" % (repo, st["ahead"]))
         elif (st.get("ahead") or 0) > 0 and st.get("pushed") is None:
             soft.append("%s is %s commits ahead of %s" % (repo, st["ahead"], st.get("base")))
+    epic_left: Dict[str, List[str]] = {}
+    epic_notes: List[str] = []
+    if epic_card:
+        for repo in config.SUBMODULES:
+            repo_dir = cfg.repo_root / repo
+            if not repo_dir.is_dir():
+                continue
+            report = _epic_chain(str(repo_dir), feature, ctx)
+            on_branch = bool(card.worktree) and ((card.repos or {}).get(repo) or {}).get("branch") == feature
+            # The problems count when the checkout is on the branch, or when the
+            # branch exists at all (teardown deletes it either way). With no
+            # such branch and no checkout on it, this repository has no chain,
+            # and the ordinary test above judged whatever is checked out.
+            if on_branch or report.get("branch") is not False:
+                for line in report["problems"]:
+                    soft.append("%s: %s" % (repo, line))
+                if report.get("note") and not report["problems"]:
+                    epic_notes.append("%s: %s" % (repo, report["note"]))
+            if report["left"]:
+                epic_left[repo] = list(report["left"])
     if soft and not force:
         for line in soft:
             blockers.append("%s (--force overrides)" % (line,))
     else:
         warnings.extend(soft)
+    warnings.extend(epic_notes)
+    for repo, names in sorted(epic_left.items()):
+        warnings.append(
+            "%s keeps %d local ref(s) of this epic: %s. Teardown does not delete them; "
+            "`/feature-remove` does, after you confirm."
+            % (repo, len(names), ", ".join(names))
+        )
 
     if not card.worktree:
         warnings.append("no worktree on disk: only the branches and the note remain")
@@ -374,10 +411,34 @@ def plan(card: Any, ctx: Any, force: bool = False, measure: bool = True) -> Dict
     # ---- the gallery, measured now and copied before the first command ---
     gallery = _gallery_plan(card, ctx)
 
+    # ---- the epic plan and its archived slices ----------------------------
+    # Nothing under specs/ is tracked, so Artifacts/ holds the only other copy
+    # of specs/epic.md and specs/slices/. The probe round that built this
+    # context has just rescued them; whatever still has no identical copy there
+    # (over the size cap, a symlink, a failed copy) is lost with the worktree.
+    epic_lost = _epic_unrescued(card, ctx)
+    if epic_lost:
+        line = (
+            "%d file(s) under specs/epic.md or specs/slices/ have no copy in Artifacts/%s/ "
+            "(%s%s): the worktree holds the only one"
+            % (
+                len(epic_lost),
+                feature,
+                ", ".join(epic_lost[:4]),
+                ", and %d more" % (len(epic_lost) - 4,) if len(epic_lost) > 4 else "",
+            )
+        )
+        if force:
+            warnings.append(line)
+        else:
+            blockers.append("%s (--force overrides)" % (line,))
+
     return {
         "feature": feature,
         "worktree": card.worktree,
         "gallery": gallery,
+        "epic_lost": epic_lost,
+        "epic_left": epic_left,
         "commands": commands,
         "blockers": blockers,
         "warnings": warnings,
@@ -386,6 +447,46 @@ def plan(card: Any, ctx: Any, force: bool = False, measure: bool = True) -> Dict
         "sizes": sizes,
         "merged": merged,
     }
+
+
+def _epic_chain(repo_dir: str, epic: str, ctx: Any) -> Dict[str, Any]:
+    """`ext_epic.chain` for one repository, through `_run` so a test can record it.
+
+    A check that raises is a problem, never a pass: the branch is about to be
+    deleted, and "could not look" is not "nothing there".
+    """
+    try:
+        from . import ext_epic
+
+        return ext_epic.chain(repo_dir, epic, lambda argv: _run(argv))
+    except Exception as exc:
+        ctx.log("teardown: cannot judge the chain of %s in %s: %s" % (epic, repo_dir, exc))
+        return {
+            "problems": ["the chain check itself failed (%s: %s)" % (type(exc).__name__, exc)],
+            "left": [],
+            "branch": None,
+        }
+
+
+def _epic_unrescued(card: Any, ctx: Any) -> List[str]:
+    """The epic files in the worktree that Artifacts/ does not hold, or none.
+
+    Imported inside the function for the reason `_gallery` gives. A card that is
+    not an epic has no such file, so this is an empty list for every card that
+    existed before epics did. A check that raises is one entry, never none.
+    """
+    if not card.worktree:
+        return []
+    try:
+        from . import ext_epic
+
+        return list(ext_epic.unrescued(ctx, card.id, card.worktree))
+    except Exception as exc:
+        # Not an empty list. "Could not check" must never read as "nothing to
+        # lose": the one entry below becomes the blocker, and --force is the
+        # human saying he looked.
+        ctx.log("teardown: cannot check the epic rescue for %s: %s" % (card.id, exc))
+        return ["the check itself failed (%s: %s)" % (type(exc).__name__, exc)]
 
 
 def _gallery(card: Any, ctx: Any) -> Dict[str, Any]:

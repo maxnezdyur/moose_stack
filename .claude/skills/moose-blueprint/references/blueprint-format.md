@@ -27,6 +27,11 @@ created: YYYY-MM-DD
 ---
 ```
 
+In an epic worktree (`specs/epic.md` exists) the blueprint is for one slice, and the frontmatter
+carries two more keys: `epic: <epic name>` and `slice: s<n>`, the id of its row in the `## Slices`
+table of `specs/epic.md`. `feature` is still the worktree name. `/moose-build`, `/moose-ship` and
+`/moose-epic next` read `slice`. The board ignores both keys.
+
 `status: approved` is legal only when every box under `## Needs clarification` is checked. The
 user's answers from the page, applied by `/moose-blueprint` in Respond mode, are what ticks them.
 Under `--auto` the skill ticks them itself, as `- [x] Qn · <question> — auto: **<answer>**
@@ -179,6 +184,9 @@ no cycle; edge-free units list disjoint files; each `test` unit names a `###` te
 each `implement` unit a `###` physics subsection; each `showcase` unit's `files` match the
 `## Showcase` bullets one for one; every `Requirement:` line is one sentence; and
 `status: approved` only with every clarification box ticked; and every `Qn` here has a `doc-ask`
-with the same id on the page and the same proposed answer `checked`. The hook has packed
+with the same id on the page and the same proposed answer `checked`. In an epic worktree, also
+confirm: the `epic` and `slice` keys are present and `slice` is a row of `## Slices`; each test
+that the row names is a `###` test heading; each seam that the slice owns in `## Seams` has a
+test of this slice that exercises it; and `## Out of scope` names each later row. The hook has packed
 `specs/blueprint.html` from the page (node is required; pandoc only for `doc-math`); when it has
 not, run `pack-blueprint.py` by hand and fix what it reports.

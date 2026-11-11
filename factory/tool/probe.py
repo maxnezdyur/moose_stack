@@ -370,6 +370,16 @@ def _unticked(text: str) -> int:
     return len(re.findall(r"^\s*- \[ \]", section, re.M))
 
 
+#: ``specs/*.md`` files that are never the blueprint, whatever keys they carry.
+#: ``epic.md`` is the plan of a chain of slices and ``handoff.md`` is the
+#: session-to-session note. Both exist in a worktree at moments when
+#: ``blueprint.md`` does not: before the first slice is planned, and between
+#: the archive of one slice and the draft of the next. Adopting either one put
+#: ``invalid-blueprint`` on the card, or a ``blueprint_approved`` box under a
+#: document that is not a slice plan.
+NOT_A_BLUEPRINT = frozenset({"epic.md", "handoff.md"})
+
+
 def blueprint(worktree: Path) -> Probe:
     """``specs/blueprint.md``, any ``specs/*.md`` with a ``feature:`` key, or the
     generated view's title when the markdown is gone."""
@@ -382,7 +392,9 @@ def blueprint(worktree: Path) -> Probe:
     if primary.is_file():
         candidates.append(primary)
     else:
-        others = sorted(p for p in specs.glob("*.md") if p.is_file())
+        others = sorted(
+            p for p in specs.glob("*.md") if p.is_file() and p.name not in NOT_A_BLUEPRINT
+        )
         for p in others:
             text, ok = _read_text(p)
             if ok and text and re.search(r"^feature:", text, re.M):
@@ -443,6 +455,227 @@ def blueprint(worktree: Path) -> Probe:
             True,
         )
     return (None, True)
+
+
+# --------------------------------------------------------------------------
+# 3b. Epic: a chain of slices in one worktree
+# --------------------------------------------------------------------------
+
+EPIC_REL = "specs/epic.md"
+
+#: A pull-request head ``epic/<epic>/s<n>`` is slice ``n`` of the epic ``<epic>``.
+#: Nothing else is a slice. A feature name cannot hold a slash (``SAFE_ID``), so
+#: no feature, worktree or ordinary head is ever in the ``epic/`` namespace, and
+#: a head that is in it is a slice on every machine, with or without the
+#: worktree. `scripts/stack` numbers slices from 1 and never pads, so ``s0`` and
+#: ``s01`` are not slices. The epic branch ``<epic>`` itself is never pushed.
+SLICE_HEAD = re.compile(r"^epic/(?P<epic>[^/]+)/s(?P<n>[1-9]\d*)$")
+
+_SLICE_ROW = re.compile(r"^\|\s*`?s(\d+)`?\s*\|")
+
+
+def epic(worktree: Path) -> Probe:
+    """``specs/epic.md``: the marker of an epic worktree, and the slice order.
+
+    One ``stat`` and one small read, no subprocess. The file is the cheapest
+    reliable marker: `/moose-epic new` writes it before any slice exists, and a
+    local ref ``epic/<epic>/s<n>`` would cost one ``git for-each-ref`` per worktree
+    on every run to learn the same thing later.
+
+    ``order`` is the slice numbers in the order the ``## Slices`` table lists
+    them, because `specs/epic.md` holds the order and the ids only name. A table
+    this cannot read gives an empty list, and the readers fall back to numeric
+    order.
+    """
+    path = worktree / "specs" / "epic.md"
+    if not path.is_file():
+        return (None, True)
+    text, ok = _read_text(path, limit=400_000)
+    if not ok:
+        return (None, False)
+    order: List[int] = []
+    idx = (text or "").find("\n## Slices")
+    if idx >= 0:
+        rest = (text or "")[idx + 1:]
+        nxt = re.search(r"\n## ", rest)
+        for line in (rest[: nxt.start()] if nxt else rest).splitlines():
+            m = _SLICE_ROW.match(line.strip())
+            if m and int(m.group(1)) not in order:
+                order.append(int(m.group(1)))
+    return ({"path": str(path), "order": order}, True)
+
+
+def slice_of(head: str) -> Optional[Tuple[str, int]]:
+    """``(epic, n)`` when ``head`` is ``epic/<epic>/s<n>``, else ``None``.
+
+    ``<epic>`` must be a safe id, because it becomes the card id and so the name
+    of a note, a gate file, a state file and a timeline file. The head itself
+    holds two slashes and never becomes any of those.
+    """
+    m = SLICE_HEAD.match(head or "")
+    if not m:
+        return None
+    name = m.group("epic")
+    if not config.is_safe_id(name):
+        return None
+    return (name, int(m.group("n")))
+
+
+def is_epic(card: Dict[str, Any]) -> bool:
+    """True for a card that is an epic: it carries the ``epic`` key.
+
+    Two kinds of card carry it. A worktree card whose worktree has
+    ``specs/epic.md`` (``_fill_card``), and the PR-only card that
+    ``_place_slices`` makes for an epic with no worktree on this machine. No
+    ordinary card ever does.
+
+    For a worktree card, ``epic`` in ``stale`` counts too: the file could not be
+    read this run, and ``carry_forward`` restores the key right after the
+    round. Without that, one failed read would take every slice off the card.
+    """
+    if card.get("epic"):
+        return True
+    return bool(card.get("worktree")) and "epic" in (card.get("stale") or [])
+
+
+def _slice_rows(gh: Any) -> List[Tuple[Tuple[str, int], Dict[str, Any], str]]:
+    """``[((repo, number), row, epic)]`` for every slice pull request, any state."""
+    out: List[Tuple[Tuple[str, int], Dict[str, Any], str]] = []
+    for repo, prs in ((gh or {}).get("repos") or {}).items():
+        for pr in prs:
+            found = slice_of(pr.get("headRefName") or "")
+            if not found:
+                continue
+            row = dict(pr)
+            row["repo"] = repo
+            row["slice"] = found[1]
+            out.append(((repo, int(pr["number"])), row, found[0]))
+    return out
+
+
+def _collision(meta: Dict[str, Any], row: Dict[str, Any], name: str, why: str) -> None:
+    """A slice that goes on no card, said once. Never a gate, never a file."""
+    meta.setdefault("epic_collisions", []).append(
+        {
+            "repo": row.get("repo"),
+            "number": int(row.get("number") or 0),
+            "head": row.get("headRefName") or "",
+            "epic": name,
+            "why": why,
+        }
+    )
+
+
+def _sort_prs(card: Dict[str, Any]) -> None:
+    card["prs"].sort(key=lambda p: (p.get("repo") or "", -int(p.get("number") or 0)))
+
+
+def _place_slices(
+    cfg: config.Config,
+    obs: Dict[str, Dict[str, Any]],
+    gh: Any,
+    matched: Dict[Tuple[str, int], str],
+    meta: Dict[str, Any],
+    ghosts: Dict[str, Dict[str, Any]],
+) -> set:
+    """Put every slice pull request on the card of its epic. Returns the held keys.
+
+    Runs after the exact join and after the ordinary PR-only adoption, so every
+    ordinary card that will exist this run already does. One slice, one outcome:
+
+    * the card ``<epic>`` exists and is an epic: the slice joins it;
+    * the card ``<epic>`` exists and is not an epic (an ordinary worktree with
+      no ``specs/epic.md``, or a PR-only card for a head that is literally
+      ``<epic>``): a collision. The slice goes on no card and grants nothing.
+      An observed pull request grants ``ship`` for good, and that card is
+      somebody else's feature;
+    * no card, but the state remembers a worktree card ``<epic>`` and `git
+      worktree list` failed this run (``ghosts``): held for ``_recover`` when
+      that card was an epic, a collision when it was not;
+    * no card at all: the epic has no worktree on this machine. Its slices make
+      one PR-only card named ``<epic>``, while at least one of them is OPEN,
+      which is the rule for every PR-only card. Merged and closed slices join
+      that card too. With none open there is no card, as for any merged work
+      that has no worktree.
+    """
+    held: set = set()
+    touched: set = set()
+    groups: Dict[str, List[Tuple[Tuple[str, int], Dict[str, Any]]]] = {}
+    for key, row, name in _slice_rows(gh):
+        if key in matched:
+            continue
+        card = obs.get(name)
+        if card is not None:
+            if is_epic(card):
+                card.setdefault("prs", []).append(row)
+                matched[key] = name
+                touched.add(name)
+            else:
+                _collision(
+                    meta, row, name,
+                    "the card %s is not an epic: %s" % (
+                        name,
+                        "its worktree has no specs/epic.md" if card.get("worktree")
+                        else "it is the card of an ordinary pull request",
+                    ),
+                )
+        elif name in ghosts:
+            if ghosts[name].get("epic"):
+                held.add(key)
+            else:
+                _collision(meta, row, name, "the card %s is not an epic: its worktree "
+                           "had no specs/epic.md when it was last probed" % (name,))
+        else:
+            groups.setdefault(name, []).append((key, row))
+
+    for name in sorted(groups):
+        rows = groups[name]
+        if not any((row.get("state") or "").upper() == "OPEN" for _key, row in rows):
+            continue
+        card = {
+            "id": name,
+            "worktree": None,
+            "foreign": False,
+            "provenance": "discovered-pr",
+            "stale": [],
+            "repos": {},
+            "prs": [],
+            # The marker of an epic with no worktree here. No plan and no
+            # order: `specs/epic.md` is on the machine that has the worktree.
+            "epic": {"path": None, "order": []},
+        }
+        _fill_card(cfg, card, None, False)
+        obs[name] = card
+        for key, row in rows:
+            card["prs"].append(row)
+            matched[key] = name
+        touched.add(name)
+    for name in touched:
+        _sort_prs(obs[name])
+    return held
+
+
+def _place_held(
+    obs: Dict[str, Dict[str, Any]],
+    gh: Any,
+    matched: Dict[Tuple[str, int], str],
+    meta: Dict[str, Any],
+    held: set,
+) -> None:
+    """After ``_recover``: the held slices join the epic card that came back."""
+    touched: set = set()
+    for key, row, name in _slice_rows(gh):
+        if key not in held or key in matched:
+            continue
+        card = obs.get(name)
+        if card is not None and is_epic(card):
+            card.setdefault("prs", []).append(row)
+            matched[key] = name
+            touched.add(name)
+        else:
+            _collision(meta, row, name, "the card %s did not come back this run" % (name,))
+    for name in touched:
+        _sort_prs(obs[name])
 
 
 # --------------------------------------------------------------------------
@@ -1111,6 +1344,10 @@ def _recover(
         }
         if prev.get("idea"):
             card["idea"] = prev["idea"]
+        if prev.get("epic") and not prev.get("worktree"):
+            # The PR-only card of an epic. Its marker comes from the pull
+            # requests, and the probe that lists them is the one that failed.
+            card["epic"] = dict(prev["epic"])
         for repo in cfg.repos:
             card["stale"].append("repo:" + repo)
         if "github" in stale:
@@ -1119,6 +1356,10 @@ def _recover(
         _fill_card(cfg, card, path if (path and path.is_dir()) else None, want_du)
         if card["worktree"] and not (path and path.is_dir()):
             card["stale"].extend(["blueprint", "build", "skills", "workspaces", "lease"])
+            if prev.get("epic"):
+                # Only an epic card carries the key, so only an epic card gets
+                # the label: every other recovered card reads as it did before.
+                card["stale"].append("epic")
         obs[feature] = card
         meta.setdefault("recovered", []).append(feature)
 
@@ -1214,7 +1455,7 @@ def round_all(cfg: config.Config, want_du: bool = False) -> Tuple[Dict[str, Dict
         card["prs"] = []
         for repo, prs in ((gh or {}).get("repos") or {}).items():
             for pr in prs:
-                if pr.get("headRefName") in keys:
+                if pr.get("headRefName") in keys and not slice_of(pr.get("headRefName") or ""):
                     row = dict(pr)
                     row["repo"] = repo
                     card["prs"].append(row)
@@ -1229,6 +1470,10 @@ def round_all(cfg: config.Config, want_du: bool = False) -> Tuple[Dict[str, Dict
             if (repo, int(pr["number"])) in matched:
                 continue
             feature = pr.get("headRefName") or ""
+            if slice_of(feature):
+                # A slice of an epic. `_place_slices` puts it on the card of
+                # its epic; the head itself is never a card or a file name.
+                continue
             if not config.is_safe_id(feature):
                 # Dropping work is acceptable; dropping it silently is not.
                 meta.setdefault("skipped_prs", []).append(
@@ -1252,9 +1497,25 @@ def round_all(cfg: config.Config, want_du: bool = False) -> Tuple[Dict[str, Dict
             row["repo"] = repo
             card["prs"].append(row)
 
+    # --- an epic's slices: head `epic/<epic>/s<n>` goes on the card `<epic>` ---
+    # When `git worktree list` failed, the worktree cards are not in `obs` yet:
+    # `_recover` brings them back below. A slice whose epic is one of them is
+    # held until then, so a failed probe never turns a worktree card into a
+    # PR-only one, and never puts a slice on an ordinary feature.
+    ghosts: Dict[str, Dict[str, Any]] = {}
+    if "worktrees" in meta["stale"]:
+        ghosts = {
+            feature: prev
+            for feature, prev in remembered(cfg).items()
+            if feature not in obs and prev.get("worktree")
+        }
+    held = _place_slices(cfg, obs, gh, matched, meta, ghosts)
+
     # A card whose enumerating probe failed comes back before anything joins
     # sessions or ideas to it, so a recovered card is a whole card.
     _recover(cfg, obs, meta, want_du)
+    if held:
+        _place_held(obs, gh, matched, meta, held)
 
     # --- live sessions, mapped to the deepest worktree that contains them -
     for row in sess:
@@ -1368,6 +1629,14 @@ def _fill_card(
         card["lease"] = lz
         if not ok:
             card["stale"].append("lease")
+
+        # Set only when the file is there. A key on every card would rewrite
+        # every state file for a fact that is true of none of them.
+        ep, ok = epic(worktree)
+        if not ok:
+            card["stale"].append("epic")
+        elif ep:
+            card["epic"] = ep
 
         if want_du:
             kb, ok = reclaimable_kb(worktree)

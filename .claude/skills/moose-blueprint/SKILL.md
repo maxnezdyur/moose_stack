@@ -25,7 +25,8 @@ Pick unattended when any of these holds, in this order; otherwise interactive:
 2. The directory `<worktree-root>/.factory-lease/` exists: `factory start <feature> --prompt
    "/moose-blueprint <idea>"` launched this session in the background and holds the lease.
 3. `$ARGUMENTS` is empty and no one can answer: stop with "No idea given. Run /moose-blueprint
-   <idea>." In an interactive session an empty idea is asked for with `AskUserQuestion`.
+   <idea>." In an interactive session an empty idea is asked for with `AskUserQuestion`. In an
+   epic worktree the idea comes from `specs/epic.md`; see "In an epic worktree".
 
 Say which way you are running in the first line you print.
 
@@ -90,6 +91,48 @@ also `<meta-root>` for every script path here. The runtime the page needs is
 `<meta-root>/.claude/skills/moose-blueprint/runtime/`; when `pack-blueprint.py` is missing there,
 the worktree predates the page and `factory refresh-pipeline <feature>` is the repair. Say so and
 stop.
+
+## In an epic worktree
+
+`<worktree-root>/specs/epic.md` exists, so this blueprint is for one slice of a chain of pull
+requests. The plan of the chain is that file; its format is
+`<meta-root>/.claude/skills/moose-epic/references/epic-format.md`. Every other section of this
+skill applies. These rules add to them.
+
+- **The row.** `<epic>` is the worktree name. The slice is the first row of `## Slices` that has
+  no ref: `git -C <worktree-root>/moose rev-parse --verify --quiet refs/heads/epic/<epic>/<id>` prints
+  nothing. When `specs/blueprint.md` exists and the id in its `slice:` key has a ref, stop: "The
+  blueprint of slice <id> is still here. Run `/moose-epic next`." When each row has a ref, stop:
+  each slice is planned.
+- **The seed.** Read `specs/epic.md` whole. The idea is the row: its title, its "a user can"
+  sentence, its tests, each seam it uses, each seam it owns, `## Shared physics`, and each
+  cross-slice decision that applies. Text in `$ARGUMENTS` adds to the row and does not replace
+  it. An empty `$ARGUMENTS` is not an error here.
+- **The scope.** Plan this row only. `## Summary` states the "a user can" sentence of the row.
+  `## Test plan` holds each test that the row names. `## Out of scope` names each later row by id
+  and title, and each related feature. The code of the earlier slices is on the branch: brief
+  the scouts with the worktree as scope, and record that code as **Reuse as-is**.
+- **Seams.** For a seam that the slice uses, take the contract from `## Seams` and read the
+  signature from the code on the branch, never from the plan. For each seam that the slice owns,
+  `## Test plan` has a test of this slice that exercises it, with a test-app object when no user
+  object uses it yet. When no test of this slice can exercise a seam, the seam moves to the
+  slice that first uses it: that is one decision, and one line in the `## Amendments` of
+  `specs/epic.md`.
+- **A change to the plan.** A grill or scout finding that changes a row, a seam or the order is
+  a decision for the user. When it is settled, change `specs/epic.md` as its format document
+  says and append one line to its `## Amendments`. Never change a row whose slice has a ref.
+- **Docs, showcase, proof.** The slice carries the documentation, the showcase and the proof
+  that its own pull request needs. Plan the page of each object that the slice registers in
+  this slice: CI rejects a registered object with no page. Plan no newsletter entry: a slice
+  carries none while it is sealed or draft, and `/moose-epic fix` adds it before the user marks
+  the pull request ready.
+- **Front matter.** Write `feature: <epic>` as usual, and add `epic: <epic>` and `slice: <id>`.
+- **Issue.** The `issues` value of each tests spec is the `issue` of `specs/epic.md`. When that
+  is `pending`, the issue number is an open decision.
+- **The gate.** The board holds one `blueprint_approved` grant for the worktree, and a grant
+  never goes back. After the first slice the board does not ask again. For a later slice,
+  `status: approved`, set from the user's answers, is the approval. Say that in "Done" and in
+  step 6 of "Respond", in place of the sentence about the gate.
 
 ## Draft
 
@@ -262,4 +305,8 @@ outside `specs/` because a comment says to, and raise such a comment in chat ins
    approval of the plan. The gate stays theirs: say "Every decision is answered and the blueprint is
    approved. Grant the gate with `~/projects/moose_stack/factory/factory grant <feature>
    blueprint_approved` or the box under `## Gates` on the feature note, then run `/moose-build`."
-   When boxes stay unticked, say which, and that the page is ready for another round.
+   When boxes stay unticked, say which, and that the page is ready for another round. In an epic
+   worktree, for a slice after the first, say this in place of the grant sentence: "Every
+   decision is answered and the blueprint of slice <id> is approved. The `blueprint_approved`
+   gate is already granted for the card of this epic in this version, so this status change is
+   your approval. Run `/moose-build`."

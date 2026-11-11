@@ -1,0 +1,1805 @@
+#!/usr/bin/env python3
+"""stack: every git write on an epic branch.
+
+An epic is one linear branch <epic> in a moose checkout. Each sealed slice n
+has a local branch epic/<epic>/s<n> that no worktree ever checks out; the fork
+branch of the same name is the PR head. `slice_branch` below is the one place
+that names it. A slice id is s<n> wherever a person types or reads one. The
+contract is
+~/projects/moose_stack/specs/epic-stack-plan.md, section "The stack script".
+
+    stack [-C <moose checkout>] <verb>
+      status [--json] [--no-gh]
+      base [<id>] [--sha]
+      seal [--expect <id>]
+      slots
+      park | unpark
+      fix <id> [--squash | --append (-m <message> | -F <file>)] [--yes]
+      fix --continue | fix --abort
+      push [<id>...] [--all] [--yes] [--dry-run]
+      sync [--rebase [--yes]] [--no-fetch]
+      adopt <id> [--ours]
+
+Exit codes: 0 ok. 1 refusal: stderr starts "stack: refused:" and names the
+recovery command. 2 usage. 3 a restack stopped: resolve, `git add`, then
+`stack fix --continue`, or `stack fix --abort`.
+
+Rules this file keeps, by number in the spec:
+  1  check the chain before fix, push, sync
+  2  check the fork before fix, push, sync
+  3  move the slice refs with explicit todo lines, never with --update-refs
+  4  the base is the parent of the lowest unmerged slice; no merge in the range
+  5  a fixup is named by SHA
+  6  squash a sealed or draft slice, append to a slice in review, refuse a merged one
+  7  prove what changed, with a content id that sees whitespace, modes and binaries
+  8  push --atomic with an explicit lease and an explicit SHA per ref
+  9  push only the slices whose own content changed
+  10 refuse an unsafe push
+  11 park as two commits
+  12 sync onto upstream/next only
+  13 stop on the merge race
+
+A rewrite of a slice whose PR is in review, or whose PR state is not known,
+needs --yes. A fast-forward never does.
+
+This file never runs `git stash`, a hard reset, or a bare force push.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+FORK = os.environ.get("STACK_FORK_REMOTE", "origin")
+UPSTREAM = os.environ.get("STACK_UPSTREAM_REMOTE", "upstream")
+BASE_BRANCH = os.environ.get("STACK_BASE_BRANCH", "next")
+GH = shlex.split(os.environ.get("STACK_GH", "gh"))
+GH_REPO = os.environ.get("STACK_GH_REPO", "idaholab/moose")
+REPO_DIR = os.environ.get("STACK_REPO_DIR", "moose")
+MAX_OPEN_PRS = 2
+
+WIP_INDEX = "WIP index"
+WIP_TREE = "WIP tree"
+UNFINISHED = re.compile(r"^(WIP|fixup!|squash!|amend!)")
+OP_FILE = "stack-op.json"
+LAST_FILE = "stack-last.json"
+TODO_FILE = "stack-todo"
+CXX = (".C", ".h", ".c", ".cc", ".cpp", ".cxx", ".hh", ".hpp")
+SAFE_STATES = ("sealed", "draft")          # a rewrite of these hurts nobody
+GONE_STATES = ("merged", "merge-race")     # the PR is merged: its head is never pushed again
+# The text after "problem: " in `stack status`. Skills key on the word before the colon.
+PUSH_PENDING = ("push-pending: %s is the lowest open slice and the fork holds an older copy; "
+                "run stack push before the PR is marked ready")
+MERGED_NOT_FETCHED = "merged on GitHub; run stack sync to fetch"
+CONTINUE_OR_ABORT = ["stack fix --continue", "stack fix --abort"]
+
+
+# --------------------------------------------------------------------------- slice names
+#
+# The one place that names a slice branch: epic/<epic>/s<n>, locally and on the
+# fork, where it is the PR head. To rename every slice branch, change
+# SLICE_BRANCH. Nothing else in this file, and nothing in scripts/tests, spells
+# the name: the status table, the push refspecs and the fork queries call these
+# functions. The epic branch itself is <epic>. The stack records
+# (refs/stack/<epic>/... and the config keys stack.<epic>.*) use the slice id
+# s<n> and do not change with the name.
+
+SLICE_BRANCH = "epic/{epic}/s{n}"
+
+
+def slice_branch(epic, n):
+    """The branch name of slice n of an epic. n="*" gives the glob for all of them."""
+    return SLICE_BRANCH.format(epic=epic, n=n)
+
+
+def parse_slice_branch(name, epic=None):
+    """(epic, n) when `name` is a slice branch, else None. With `epic` given, the
+    epic name is matched literally: `foo` never sees a slice of `foo-bar`. The
+    number has no leading zero and is never 0."""
+    who = re.escape(epic) if epic is not None else "(?P<epic>.+)"
+    pattern = re.escape(SLICE_BRANCH).replace(re.escape("{epic}"), who) \
+                                     .replace(re.escape("{n}"), "(?P<n>[1-9][0-9]*)")
+    m = re.fullmatch(pattern, name or "")
+    if not m:
+        return None
+    return (epic if epic is not None else m.group("epic")), int(m.group("n"))
+
+
+def slice_namespace(epic):
+    """The branch names that git cannot hold next to a slice branch: every
+    directory on its path. For epic/<epic>/s<n>: `epic` and `epic/<epic>`."""
+    parts = slice_branch(epic, 1).split("/")[:-1]
+    return ["/".join(parts[:k]) for k in range(1, len(parts) + 1)]
+
+
+# --------------------------------------------------------------------------- plumbing
+
+
+class Refuse(Exception):
+    """A verb will not run. `recovery` is the command that clears the cause."""
+
+    def __init__(self, message, recovery=None):
+        Exception.__init__(self, message)
+        self.recovery = [recovery] if isinstance(recovery, str) else list(recovery or [])
+
+
+class Conflict(Exception):
+    """A rebase stopped. The refs have not moved."""
+
+
+def say(text=""):
+    print(text)
+    sys.stdout.flush()
+
+
+def warn(text):
+    print("stack: " + text, file=sys.stderr)
+    sys.stderr.flush()
+
+
+def short(sha):
+    return sha[:9] if sha else "-"
+
+
+class Git:
+    """One git checkout. Every call is hardened against the user's configuration:
+    no colour, no pager, no quoted paths; diff reads add --no-ext-diff and
+    --no-textconv themselves (DIFF below)."""
+
+    HARD = ["-c", "color.ui=never", "-c", "core.pager=cat", "-c", "core.quotepath=off"]
+    DIFF = ["--no-color", "--no-ext-diff", "--no-textconv", "--ignore-submodules=dirty"]
+
+    def __init__(self, cwd):
+        self.cwd = str(cwd)
+
+    def run(self, *args, check=False, input=None, env=None):
+        full = dict(os.environ)
+        full["GIT_PAGER"] = "cat"
+        if env:
+            full.update(env)
+        proc = subprocess.run(["git", "-C", self.cwd] + self.HARD + [str(a) for a in args],
+                              input=input, capture_output=True, env=full,
+                              encoding="utf-8", errors="surrogateescape")
+        if check and proc.returncode != 0:
+            raise RuntimeError("git %s failed (%d):\n%s%s" % (
+                " ".join(str(a) for a in args), proc.returncode, proc.stdout, proc.stderr))
+        return proc
+
+    def out(self, *args, **kw):
+        return self.run(*args, check=True, **kw).stdout.strip()
+
+    def raw(self, *args):
+        """The exact bytes git wrote: no decoding, no newline translation, no strip."""
+        proc = subprocess.run(["git", "-C", self.cwd] + self.HARD + [str(a) for a in args],
+                              capture_output=True, env=dict(os.environ, GIT_PAGER="cat"))
+        if proc.returncode != 0:
+            raise RuntimeError("git %s failed (%d):\n%s" % (
+                " ".join(str(a) for a in args), proc.returncode,
+                proc.stderr.decode("utf-8", "replace")))
+        return proc.stdout
+
+    def ok(self, *args):
+        return self.run(*args).returncode == 0
+
+    def lines(self, *args):
+        text = self.out(*args)
+        return text.splitlines() if text else []
+
+    def zlist(self, *args):
+        """A NUL-separated list of paths: safe for any file name."""
+        return [p for p in self.run(*args, check=True).stdout.split("\0") if p]
+
+    def sha(self, rev):
+        proc = self.run("rev-parse", "--verify", "--quiet", rev + "^{commit}")
+        return proc.stdout.strip() if proc.returncode == 0 and proc.stdout.strip() else None
+
+
+class Slice:
+    def __init__(self, epic, n, sha):
+        self.n = n
+        self.id = "s%d" % n
+        self.short = slice_branch(epic, n)
+        self.ref = "refs/heads/" + self.short
+        self.sha = sha
+
+
+# --------------------------------------------------------------------------- context
+
+
+def _toplevel(path):
+    proc = subprocess.run(["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+                          capture_output=True, text=True)
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    return Path(os.path.realpath(proc.stdout.strip()))
+
+
+def _is_meta(top):
+    """True for a meta worktree: the repository that holds moose/ as a submodule."""
+    if (top / REPO_DIR).is_dir():
+        return True
+    try:
+        text = (top / ".gitmodules").read_text()
+    except OSError:
+        return False
+    return bool(re.search(r"^\s*path\s*=\s*%s\s*$" % re.escape(REPO_DIR), text, re.M))
+
+
+def discover(explicit):
+    """The moose checkout this call acts on. Never the meta repository."""
+    top = _toplevel(explicit or os.getcwd())
+    if top is None:
+        raise Refuse("%s is not inside a git checkout" % (explicit or "the current directory"),
+                     "stack -C <moose checkout> <verb>")
+    if _is_meta(top):
+        inner = top / REPO_DIR
+        if not inner.is_dir() or _toplevel(inner) != Path(os.path.realpath(inner)):
+            raise Refuse("%s is the meta worktree, and %s is not a git checkout yet. stack never "
+                         "acts on the meta repository." % (top, inner),
+                         "make the %s checkout first (/new-feature), or: stack -C <%s checkout> "
+                         "<verb>" % (REPO_DIR, REPO_DIR))
+        return Path(os.path.realpath(inner))
+    if not explicit and top.name != REPO_DIR and (top.parent / "specs" / "epic.md").is_file():
+        raise Refuse("this version handles the %s checkout of an epic only, and this is %s"
+                     % (REPO_DIR, top.name), "stack -C <checkout> <verb>")
+    return top
+
+
+class Ctx:
+    def __init__(self, top):
+        self.top = Path(top)
+        self.root = self.top.parent
+        self.git = Git(self.top)
+        self.gitdir = Path(self.git.out("rev-parse", "--absolute-git-dir"))
+        self.fork = FORK
+        self.upstream = UPSTREAM
+        self.next_name = "%s/%s" % (UPSTREAM, BASE_BRANCH)
+        self.next_ref = "refs/remotes/" + self.next_name
+        self.epic = self._epic()
+        self._gh_cache = {}
+        self._merged_cache = {}
+        self._id_cache = {}
+
+    # ---- identity
+
+    def rebasing(self):
+        return (self.gitdir / "rebase-merge").exists() or (self.gitdir / "rebase-apply").exists()
+
+    def _epic(self):
+        name = self.git.run("symbolic-ref", "--quiet", "--short", "HEAD").stdout.strip()
+        if name:
+            return name
+        for sub in ("rebase-merge", "rebase-apply"):
+            f = self.gitdir / sub / "head-name"
+            if f.is_file():
+                return f.read_text().strip().replace("refs/heads/", "", 1)
+        raise Refuse("HEAD is detached and no rebase is in progress", "git switch <epic>")
+
+    def tip(self):
+        """The epic tip. During a rebase the branch still names the old tip."""
+        sha = self.git.sha("refs/heads/" + self.epic) if self.rebasing() else self.git.sha("HEAD")
+        if not sha:
+            raise Refuse("the branch %s has no commit" % self.epic)
+        return sha
+
+    def next_sha(self):
+        return self.git.sha(self.next_ref)
+
+    def slice_named(self, n):
+        return Slice(self.epic, n, None)
+
+    # ---- slices
+
+    def slices(self):
+        found = []
+        for line in self.git.lines("for-each-ref", "--format=%(objectname) %(refname)",
+                                   "refs/heads/" + slice_branch(self.epic, "*")):
+            sha, ref = line.split(" ", 1)
+            parsed = parse_slice_branch(ref[len("refs/heads/"):], self.epic)
+            if parsed:
+                found.append(Slice(self.epic, parsed[1], sha))
+        found.sort(key=lambda s: s.n)
+        return found
+
+    def find(self, slices, text):
+        parsed = parse_slice_branch(text or "", self.epic)
+        m = re.fullmatch(r"s?([1-9][0-9]*)", text or "")
+        if not parsed and not m:
+            raise Refuse("'%s' is not a slice id; write s<n>" % text, "stack status")
+        n = parsed[1] if parsed else int(m.group(1))
+        for i, s in enumerate(slices):
+            if s.n == n:
+                return i
+        raise Refuse("slice s%d has no ref" % n, "stack status")
+
+    def is_epic(self):
+        return (self.root / "specs" / "epic.md").is_file() or bool(self.slices())
+
+    def is_ancestor(self, a, b):
+        return self.git.ok("merge-base", "--is-ancestor", a, b)
+
+    def merged(self, s):
+        """Merged means: the slice commit is in upstream/next. Never PR state."""
+        key = (s.sha, self.next_sha())
+        if key not in self._merged_cache:
+            self._merged_cache[key] = bool(key[1]) and self.is_ancestor(s.sha, key[1])
+        return self._merged_cache[key]
+
+    def base_ref(self):
+        return "refs/stack/%s/base" % self.epic
+
+    def base_sha(self):
+        return self.git.sha(self.base_ref())
+
+    def pushed_ref(self, s):
+        return "refs/stack/%s/pushed/%s" % (self.epic, s.id)
+
+    def pushed_sha(self, s):
+        return self.git.sha(self.pushed_ref(s))
+
+    def slice_commits(self, slices, i):
+        """The commits of slice i, oldest first: above the slice below it, and
+        not yet in upstream/next. A merged slice reports the commits it had."""
+        s = slices[i]
+        args = ["rev-list", "--reverse", s.sha]
+        nxt = self.next_sha()
+        if nxt and not self.merged(s):
+            args.append("^" + nxt)
+        if i > 0:
+            args.append("^" + slices[i - 1].sha)
+        else:
+            base = self.base_sha()
+            if base and self.is_ancestor(base, s.sha):
+                args.append("^" + base)
+            else:
+                args += ["--not", "--remotes=" + self.upstream]
+        return self.git.lines(*args)
+
+    def above_top(self, slices, tip):
+        """Commits on the branch above the top slice ref, oldest first. Upstream
+        commits are never counted: they are not the epic's work."""
+        args = ["rev-list", "--reverse", tip]
+        nxt = self.next_sha()
+        if nxt:
+            args.append("^" + nxt)
+        if slices:
+            args.append("^" + slices[-1].sha)
+        else:
+            base = self.base_sha()
+            if base and self.is_ancestor(base, tip):
+                args.append("^" + base)
+            else:
+                args += ["--not", "--remotes=" + self.upstream]
+        return self.git.lines(*args)
+
+    def subject(self, sha):
+        return self.git.out("log", "-1", "--format=%s", sha)
+
+    def tree(self, sha):
+        return self.git.out("rev-parse", sha + "^{tree}")
+
+    def lowest_unmerged(self, slices):
+        for i, s in enumerate(slices):
+            if not self.merged(s):
+                return i
+        return None
+
+    def restack_base(self, slices, tip):
+        """Rule 4: the parent of the first commit of the lowest unmerged slice."""
+        i = self.lowest_unmerged(slices)
+        if i is not None:
+            commits = self.slice_commits(slices, i)
+            if commits:
+                return self.git.sha(commits[0] + "^")
+        above = self.above_top(slices, tip)
+        if above:
+            return self.git.sha(above[0] + "^")
+        return tip
+
+    def chain_problems(self, slices, tip):
+        """Rule 1. Empty means: every slice ref is an ancestor of the next and of the tip.
+        Each line names the ref at fault."""
+        bad = []
+        for i, s in enumerate(slices):
+            if i > 0 and not self.is_ancestor(slices[i - 1].sha, s.sha):
+                bad.append("%s (%s) is not built on %s (%s)"
+                           % (s.short, short(s.sha), slices[i - 1].short, short(slices[i - 1].sha)))
+            if i > 0 and slices[i - 1].sha == s.sha:
+                bad.append("%s holds no commit of its own" % s.short)
+        if slices and not self.is_ancestor(slices[-1].sha, tip):
+            bad.append("%s (%s) is not an ancestor of %s (needs-restack)"
+                       % (slices[-1].short, short(slices[-1].sha), self.epic))
+        return bad
+
+    # ---- the world outside
+
+    def checked_out_slices(self, slices):
+        refs = {s.ref: s for s in slices}
+        hit = []
+        for line in self.git.lines("worktree", "list", "--porcelain"):
+            if line.startswith("branch ") and line[7:] in refs:
+                hit.append(refs[line[7:]].short)
+        return hit
+
+    def fork_refs(self):
+        """What the fork holds now, from `git ls-remote`. None when the fork is unreachable."""
+        proc = self.git.run("ls-remote", self.fork, "refs/heads/" + slice_branch(self.epic, "*"))
+        if proc.returncode != 0:
+            return None
+        found = {}
+        for line in proc.stdout.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[1].startswith("refs/heads/"):
+                name = parts[1][len("refs/heads/"):]
+                if parse_slice_branch(name, self.epic):
+                    found[name] = parts[0]
+        return found
+
+    def tracking_refs(self):
+        found = {}
+        prefix = "refs/remotes/%s/" % self.fork
+        for line in self.git.lines("for-each-ref", "--format=%(objectname) %(refname)",
+                                   prefix + slice_branch(self.epic, "*")):
+            sha, ref = line.split(" ", 1)
+            if parse_slice_branch(ref[len(prefix):], self.epic):
+                found[ref[len(prefix):]] = sha
+        return found
+
+    def gh_pr(self, s):
+        """The PR for a slice head: a dict, {} for none, None when gh did not answer."""
+        if s.short in self._gh_cache:
+            return self._gh_cache[s.short]
+        try:
+            proc = subprocess.run(
+                GH + ["pr", "list", "--repo", GH_REPO, "--author", "@me", "--head", s.short,
+                      "--state", "all", "--json", "number,isDraft,state,headRefOid"],
+                capture_output=True, text=True, timeout=60)
+            rows = json.loads(proc.stdout) if proc.returncode == 0 else None
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            rows = None
+        pr = None
+        if isinstance(rows, list):
+            pr = {}
+            for want in ("OPEN", "MERGED", None):
+                pick = [r for r in rows if isinstance(r, dict)
+                        and (want is None or r.get("state") == want)]
+                if pick:
+                    pr = pick[0]
+                    break
+        self._gh_cache[s.short] = pr
+        return pr
+
+    def state(self, s, use_gh=True):
+        """merged, merge-race, in-review, draft, sealed, closed or unknown.
+
+        merged: the slice commit is in upstream/next, or GitHub says the PR is
+        merged at this very commit and upstream/next is not fetched yet.
+        merge-race: the PR is merged at another commit than the local slice."""
+        if self.merged(s):
+            return "merged"
+        rec, nxt = self.pushed_sha(s), self.next_sha()
+        if rec and nxt and rec != s.sha and self.is_ancestor(rec, nxt):
+            return "merge-race"     # what was pushed is in next; the local slice is not. No gh.
+        pr = self.gh_pr(s) if use_gh else None
+        if pr is None:
+            return "sealed" if not rec else "unknown"
+        if not pr:
+            return "sealed"
+        if pr.get("state") == "MERGED":
+            same = rec == s.sha or pr.get("headRefOid") == s.sha
+            return "merged" if same else "merge-race"
+        if pr.get("state") == "OPEN":
+            return "draft" if pr.get("isDraft") else "in-review"
+        return "closed"
+
+    def push_pending(self, slices):
+        """The lowest open slice, when it is published and the fork holds an older
+        copy of it. That slice is the next PR to merge: it is never deferred."""
+        i = self.lowest_unmerged(slices)
+        if i is None:
+            return None
+        s, rec = slices[i], self.pushed_sha(slices[i])
+        return s if rec and rec != s.sha else None
+
+    def old_style_branches(self):
+        """Branches <epic>-s<n>: the slice name of an earlier version. Not slices now."""
+        pat = re.compile(re.escape(self.epic) + r"-s\d+")
+        return [n for n in self.git.lines("for-each-ref", "--format=%(refname:short)",
+                                          "refs/heads/%s-s*" % self.epic) if pat.fullmatch(n)]
+
+    # ---- content identity
+
+    def content_id(self, commit):
+        """The own content of one commit, from the exact bytes of its diff: per
+        file, the header lines (modes, names), then every removed line, then
+        every added line. Whitespace, line endings and binary blobs count. Line
+        numbers, context and the way lines group into hunks do not, so a change
+        below the commit does not change its id."""
+        if commit in self._id_cache:
+            return self._id_cache[commit]
+        common = ["diff-tree", "--no-commit-id", "--root", "-r", "--no-renames", "--no-color",
+                  "--no-ext-diff", "--no-textconv"]
+        patch = self.git.raw(*(common + ["-p", "-U0", "--src-prefix=a/", "--dst-prefix=b/",
+                                         commit]))
+        if not patch:
+            self._id_cache[commit] = "empty"
+            return "empty"
+        h = hashlib.sha1()
+        removed, added, in_hunk, last, binary = [], [], False, None, False
+
+        def flush():
+            for tag, lines in ((b"R", removed), (b"A", added)):
+                h.update(tag + b"%d\n" % len(lines))
+                for line in lines:
+                    h.update(line + b"\n")
+            del removed[:], added[:]
+
+        for line in patch.split(b"\n"):
+            if line.startswith(b"diff --git "):
+                flush()
+                in_hunk, last = False, None
+                h.update(line + b"\n")
+            elif not in_hunk:
+                if line.startswith(b"@@"):
+                    in_hunk = True
+                elif not line.startswith(b"index "):
+                    binary = binary or line.startswith(b"Binary files ")
+                    h.update(line + b"\n")
+            elif line.startswith(b"@@"):
+                last = None
+            elif line.startswith(b"-"):
+                removed.append(line)
+                last = removed
+            elif line.startswith(b"+"):
+                added.append(line)
+                last = added
+            elif line.startswith(b"\\") and last is not None:
+                last.append(line)                   # "\ No newline at end of file"
+        flush()
+        if binary:
+            raw = self.git.raw(*(common + ["--raw", "--no-abbrev", "--numstat", "-z", commit]))
+            h.update(b"BINARY\n" + raw)
+        self._id_cache[commit] = h.hexdigest()
+        return self._id_cache[commit]
+
+    def signature(self, slices, i):
+        """The own content of a slice: one content id per commit, in order."""
+        return [self.content_id(c) for c in self.slice_commits(slices, i)]
+
+    def sig_key(self, s):
+        return "stack.%s.sig-%s" % (self.epic, s.id)
+
+    def stored_sig(self, s):
+        return self.git.run("config", "--get", self.sig_key(s)).stdout.strip() or None
+
+    @staticmethod
+    def sig_digest(sig):
+        return hashlib.sha1("\n".join(sig).encode()).hexdigest()
+
+    # ---- guards
+
+    def require_epic(self, first_seal=False):
+        """A writing verb acts on an epic only: specs/epic.md, or a slice ref."""
+        has_file = (self.root / "specs" / "epic.md").is_file()
+        if has_file or (not first_seal and self.slices()):
+            return
+        raise Refuse("%s is not an epic: %s has no specs/epic.md%s"
+                     % (self.epic, self.root, "" if first_seal else " and the branch has no "
+                        "slice ref"), "/moose-epic new   (it writes specs/epic.md)")
+
+    def op_state(self):
+        """(op, problem). op is None when no restack is open or its record is unreadable."""
+        path = self.gitdir / OP_FILE
+        if not path.exists():
+            return None, None
+        op = _load(path)
+        if not isinstance(op, dict) or "before" not in op:
+            return None, "the record of an open restack (%s) is unreadable" % path
+        return op, None
+
+    def require_no_rebase(self):
+        op, corrupt = self.op_state()
+        if corrupt:
+            raise Refuse(corrupt, "stack fix --abort")
+        if self.rebasing():
+            if op:
+                raise Refuse("a restack is stopped", CONTINUE_OR_ABORT)
+            raise Refuse("a rebase that stack did not start is in progress",
+                         "git rebase --abort   (then run the verb again)")
+        if op:
+            raise Refuse("a restack was interrupted and is not closed", CONTINUE_OR_ABORT)
+
+    def require_chain(self, slices, tip):
+        bad = self.chain_problems(slices, tip)
+        if not bad:
+            return
+        recovery = []
+        if slices and self.is_ancestor(slices[-1].sha, tip) is False \
+                and not any("not built on" in b for b in bad):
+            top = slices[-1].sha
+            for sha in self.git.lines("reflog", "show", "--format=%H", "refs/heads/" + self.epic):
+                if self.is_ancestor(top, sha):
+                    recovery.append(
+                        "git reset --keep %s   (the last tip of %s that held the chain; commits "
+                        "made after it stay in `git reflog %s`), then: stack sync"
+                        % (short(sha), self.epic, self.epic))
+                    break
+        for i, s in enumerate(slices):
+            if i > 0 and not self.is_ancestor(slices[i - 1].sha, s.sha):
+                recovery.append("when the branch %s is not a slice of epic %s, rename it: "
+                                "git branch -m %s <other name>" % (s.short, self.epic, s.short))
+        recovery.append("or re-seat one ref by hand: git update-ref refs/heads/%s <commit>"
+                        % slice_branch(self.epic, "<n>"))
+        raise Refuse("the chain is broken: " + "; ".join(bad), recovery)
+
+    def require_not_checked_out(self, slices):
+        hit = self.checked_out_slices(slices)
+        if hit:
+            raise Refuse("a slice ref is checked out in a worktree: %s. A rebase cannot move it."
+                         % ", ".join(hit), "git -C <that worktree> switch --detach")
+
+    def require_no_merges(self, base, tip):
+        merges = self.git.lines("rev-list", "--merges", "%s..%s" % (base, tip))
+        if merges:
+            raise Refuse("the range %s..%s holds a merge commit (%s). The stack is linear."
+                         % (short(base), self.epic, short(merges[0])),
+                         "remove the merge by hand, or `stack adopt <id> --ours` when it came "
+                         "from the fork")
+
+    def drift(self, slices, fork):
+        """Rule 2: {slice: (recorded, fork)} where the fork is not what was pushed."""
+        out = {}
+        for s in slices:
+            if self.merged(s):
+                continue
+            rec, now = self.pushed_sha(s), fork.get(s.short)
+            if rec != now:
+                out[s.id] = (s, rec, now)
+        return out
+
+    def require_no_drift(self, slices):
+        fork = self.fork_refs()
+        if fork is None:
+            raise Refuse("cannot read the fork (`git ls-remote %s` failed), so the fork check "
+                         "cannot run" % self.fork, "check the network, then run the verb again")
+        bad = self.drift(slices, fork)
+        if not bad:
+            return fork
+        parts, recovery = [], []
+        for sid in sorted(bad):
+            s, rec, now = bad[sid]
+            if now is None:
+                parts.append("%s was pushed at %s and is gone from the fork" % (s.short, short(rec)))
+                recovery.append("git update-ref -d %s   (when the branch was deleted on purpose)"
+                                % self.pushed_ref(s))
+            else:
+                parts.append("%s: fork %s, last pushed %s" % (s.short, short(now), short(rec)))
+                recovery.append("stack adopt %s" % sid)
+        raise Refuse("the fork is not what this machine pushed (stack-drift): " + "; ".join(parts),
+                     recovery)
+
+    def require_lease_free(self):
+        """Refuse while another live session holds <worktree>/.factory-lease."""
+        d = self.root / ".factory-lease"
+        if not d.exists():
+            return
+        f = d / "lease.json" if d.is_dir() else d
+        try:
+            rec = json.loads(f.read_text())
+            if not isinstance(rec, dict):
+                rec = {}
+        except (OSError, ValueError):
+            rec = {}
+        owners = set()
+        if isinstance(rec.get("pid"), int):
+            owners.add(rec["pid"])
+        home = Path(os.environ.get("STACK_CLAUDE_HOME", str(Path.home() / ".claude")))
+        sid, bg = str(rec.get("session_id") or ""), str(rec.get("bg_id") or "")
+        try:
+            for path in (home / "sessions").glob("*.json"):
+                try:
+                    data = json.loads(path.read_text())
+                except (OSError, ValueError):
+                    continue
+                if not isinstance(data, dict) or not isinstance(data.get("pid"), int):
+                    continue
+                if (sid and str(data.get("sessionId") or "") == sid) or \
+                        (bg and str(data.get("jobId") or "") == bg):
+                    owners.add(data["pid"])
+        except OSError:
+            pass
+        release = "~/projects/moose_stack/factory/factory release %s" % self.epic
+        if not owners:
+            raise Refuse("%s exists and names no owner process. Unknown is not gone." % d, release)
+        if owners & _ancestors():
+            return
+        alive = sorted(p for p in owners if _alive(p))
+        if alive:
+            raise Refuse("another session holds the lease on this worktree (pid %s)"
+                         % ", ".join(str(p) for p in alive),
+                         "wait for that session, or stop it: ~/projects/moose_stack/factory/"
+                         "factory stop %s" % self.epic)
+        warn("warning: %s is stale (owner gone); clear it with `%s`" % (d, release))
+
+    def require_writable(self, first_seal=False):
+        """What every writing verb checks first: an epic, and no foreign lease."""
+        self.require_epic(first_seal=first_seal)
+        self.require_lease_free()
+
+    # ---- working tree
+
+    def staged(self, existing_only=False):
+        args = ["diff", "--cached", "--name-only", "-z"] + Git.DIFF
+        if existing_only:
+            args.append("--diff-filter=d")
+        return self.git.zlist(*args)
+
+    def unstaged(self):
+        return self.git.zlist(*(["diff", "--name-only", "-z"] + Git.DIFF))
+
+    def untracked(self):
+        return self.git.zlist("ls-files", "--others", "--exclude-standard", "-z")
+
+    def unmerged(self):
+        return self.git.zlist("diff", "--name-only", "-z", "--diff-filter=U", "--no-color",
+                              "--no-ext-diff", "--no-textconv")
+
+    def dirty(self):
+        return bool(self.staged() or self.unstaged() or self.untracked())
+
+    def dirty_count(self):
+        return len(self.git.lines("status", "--porcelain", "--ignore-submodules=dirty"))
+
+    def parked(self, slices, tip):
+        """True when the top two commits are exactly the park pair above the top slice."""
+        if self.subject(tip) != WIP_TREE:
+            return False
+        below = self.git.sha(tip + "^")
+        if not below or self.subject(below) != WIP_INDEX:
+            return False
+        floor = self.git.sha(below + "^")
+        if not floor:
+            return False
+        return not slices or self.is_ancestor(slices[-1].sha, floor)
+
+
+def _ancestors():
+    seen, pid = set(), os.getpid()
+    while pid and pid > 1 and pid not in seen:
+        seen.add(pid)
+        proc = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)], capture_output=True, text=True)
+        try:
+            pid = int(proc.stdout.strip())
+        except ValueError:
+            break
+    return seen
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
+# --------------------------------------------------------------------------- the restack engine
+
+
+def _save(path, data):
+    tmp = Path(str(path) + ".tmp")
+    tmp.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n")
+    os.replace(tmp, path)
+
+
+def _load(path):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _stamp():
+    return time.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def snapshot_refs(ctx, slices, tip):
+    return {
+        "epic": ctx.epic,
+        "tip": tip,
+        "refs": {s.id: s.sha for s in slices},
+        "pushed": {s.id: ctx.pushed_sha(s) for s in slices},
+        "base": ctx.base_sha(),
+        "sigs": {s.id: ctx.signature(slices, i) for i, s in enumerate(slices)
+                 if not ctx.merged(s)},
+    }
+
+
+def open_op(ctx, op):
+    """Record a restack BEFORE its first write, so `stack fix --abort` can always undo it."""
+    _save(ctx.gitdir / OP_FILE, op)
+
+
+def close_op(ctx, op=None):
+    (ctx.gitdir / OP_FILE).unlink(missing_ok=True)
+    (ctx.gitdir / TODO_FILE).unlink(missing_ok=True)
+    if op is not None:
+        _save(ctx.gitdir / LAST_FILE, op)
+
+
+def run_rebase(ctx, op, onto, upstream, todo):
+    """Run one rebase from a todo this script wrote. Refs move only when it finishes."""
+    in_range = int(ctx.git.out("rev-list", "--count", "%s..HEAD" % upstream))
+    in_todo = sum(1 for line in todo if line.split(" ", 1)[0] in ("pick", "fixup"))
+    if in_range != in_todo:
+        restore(ctx, op)
+        close_op(ctx)
+        raise Refuse("internal check: the plan holds %d commit(s) and the range %s..%s holds %d. "
+                     "Nothing was changed." % (in_todo, short(upstream), ctx.epic, in_range),
+                     "stack status")
+    op["start_tip"] = ctx.git.sha("HEAD")
+    todo_path = ctx.gitdir / TODO_FILE
+    todo_path.write_text("\n".join(todo) + "\n")
+    open_op(ctx, op)
+    env = {"GIT_SEQUENCE_EDITOR": "cp " + shlex.quote(str(todo_path)), "GIT_EDITOR": "true"}
+    proc = ctx.git.run(
+        "-c", "rebase.updateRefs=false", "-c", "rebase.autoSquash=false",
+        "-c", "rebase.autoStash=false", "-c", "rebase.rebaseMerges=false",
+        "-c", "rebase.missingCommitsCheck=ignore", "-c", "advice.mergeConflict=false",
+        "rebase", "--interactive", "--no-update-refs", "--no-autosquash", "--no-autostash",
+        "--no-rebase-merges", "--empty=keep", "--onto", onto, upstream, env=env)
+    if proc.returncode == 0:
+        return
+    if ctx.rebasing():
+        raise Conflict(proc.stdout + proc.stderr)
+    restore(ctx, op)
+    close_op(ctx)
+    raise Refuse("git rebase did not start: %s" % (proc.stderr.strip() or proc.stdout.strip()),
+                 "stack status")
+
+
+def restore(ctx, op):
+    """Put the branch, the index and every ref back where `op` found them.
+    Returns the list of things that could not be restored."""
+    before = op["before"]
+    failed = []
+    if ctx.rebasing():
+        ctx.git.run("rebase", "--abort", check=True)
+    head, old_tip, fix = ctx.git.sha("HEAD"), before["tip"], op.get("fix_commit")
+    is_fix = op.get("op") == "fix"
+
+    def unstage_commit():
+        ctx.git.run("reset", "-q", "--soft", "HEAD^", check=True)
+        say("the fix is staged again")
+
+    if head != old_tip:
+        parent = ctx.git.sha(head + "^")
+        # The fix commit is known by its SHA. With no SHA on record (a kill between the
+        # commit and the record), the one commit above the old tip is the fix: nothing
+        # else commits between the open of the record and the rebase.
+        mine = fix == head or fix is None
+        if is_fix and parent == old_tip and mine:
+            unstage_commit()                     # only the fix commit was made
+        else:                                    # the rebase ran: move the branch back
+            target = fix if (is_fix and fix) else old_tip
+            proc = ctx.git.run("reset", "-q", "--keep", target)
+            if proc.returncode != 0:
+                failed.append("the branch %s (wanted %s): %s"
+                              % (ctx.epic, short(target), proc.stderr.strip()))
+            elif is_fix and fix:
+                unstage_commit()
+    for sid, sha in sorted(before["refs"].items()):
+        s = ctx.slice_named(int(sid[1:]))
+        if ctx.git.sha(s.ref) != sha:
+            if ctx.git.run("update-ref", s.ref, sha).returncode != 0:
+                failed.append("%s (wanted %s)" % (s.short, short(sha)))
+        rec = before.get("pushed", {}).get(sid)
+        if ctx.git.sha(ctx.pushed_ref(s)) != rec:
+            if rec:
+                ctx.git.run("update-ref", ctx.pushed_ref(s), rec)
+            else:
+                ctx.git.run("update-ref", "-d", ctx.pushed_ref(s))
+    if before.get("base") and ctx.base_sha() != before["base"]:
+        ctx.git.run("update-ref", ctx.base_ref(), before["base"])
+    return failed
+
+
+def stop_exit(ctx, text):
+    """A rebase stopped. Say why, and how to go on."""
+    files = ctx.unmerged()
+    warn("the restack stopped. No slice ref has moved.")
+    if files:
+        for f in files:
+            warn("  conflict: " + f)
+        warn("resolve, `git add` the files, then: stack fix --continue")
+    else:
+        for line in [l for l in text.strip().splitlines() if l.strip()][-6:]:
+            warn("  git: " + line.strip())
+        warn("no file is in conflict. To keep the commit as it now is: stack fix --continue")
+    warn("or give up and restore everything:  stack fix --abort")
+    return 3
+
+
+def finish(ctx, op):
+    """After a rebase that ran to its end: verify, prove, record, clean."""
+    slices = ctx.slices()
+    tip = ctx.tip()
+    before = op["before"]
+    bad = ctx.chain_problems(slices, tip)
+    kind = op["op"]
+    target = op.get("target")
+    if kind == "sync" and op.get("new_base"):
+        ctx.git.run("update-ref", ctx.base_ref(), op["new_base"], check=True)
+    if kind == "adopt" and not bad:
+        i = ctx.find(slices, target)
+        if slices[i].sha == op["fork_sha"]:
+            ctx.git.run("update-ref", ctx.pushed_ref(slices[i]), slices[i].sha, check=True)
+            ctx.git.run("config", ctx.sig_key(slices[i]),
+                        ctx.sig_digest(ctx.signature(slices, i)), check=True)
+    close_op(ctx, op)
+    last = ctx.gitdir / LAST_FILE
+    if bad:
+        raise Refuse("the restack finished and the chain is broken: %s. The positions before it "
+                     "are in %s" % ("; ".join(bad), last),
+                     "git update-ref refs/heads/%s <old sha from that file>"
+                     % slice_branch(ctx.epic, "<n>"))
+
+    fix_missing = False
+    say("%s: done. %s is now %s (was %s)." % (" ".join(x for x in (kind, target) if x),
+                                             ctx.epic, short(tip), short(before["tip"])))
+    for i, s in enumerate(slices):
+        old = before["refs"].get(s.id)
+        if old is None or ctx.merged(s):
+            continue
+        new_sig = ctx.signature(slices, i)
+        old_sig = before["sigs"].get(s.id)
+        moved = "moved %s -> %s" % (short(old), short(s.sha)) if old != s.sha else "not moved"
+        if s.id == target and kind == "fix":
+            # The fix is in the slice only when the slice content is not what it was.
+            if ctx.tree(old) == ctx.tree(s.sha):
+                fix_missing = True
+                verdict = "NOT CHANGED: the fix is not in this slice"
+            else:
+                verdict = "CHANGED: this is the fix"
+                # The target of a fix is never deferred, whatever the content id says.
+                ctx.git.run("config", "--unset", ctx.sig_key(s))
+        elif s.id == target and kind == "adopt":
+            verdict = "CHANGED: this is the adopted slice"
+        elif old_sig == new_sig:
+            verdict = "content unchanged (id %s)" % ctx.sig_digest(new_sig)[:12]
+        else:
+            verdict = "CONTENT CHANGED: %d -> %d commits, id %s -> %s" % (
+                len(old_sig or []), len(new_sig), ctx.sig_digest(old_sig or [])[:12],
+                ctx.sig_digest(new_sig)[:12])
+        if "empty" in new_sig:
+            verdict += "; HOLDS AN EMPTY COMMIT"
+        say("  %-4s %s; %s" % (s.id, moved, verdict))
+    if kind == "fix" and op.get("start_tip"):
+        if ctx.tree(op["start_tip"]) == ctx.tree(tip):
+            say("the tree at the tip is the same as before the restack: nothing was lost or added")
+        else:
+            say("THE TREE AT THE TIP DIFFERS from before the restack. See: git diff %s %s"
+                % (short(op["start_tip"]), short(tip)))
+    differ = [s.id for s in slices if ctx.pushed_sha(s) and ctx.pushed_sha(s) != s.sha
+              and not ctx.merged(s)]
+    if differ:
+        say("differs from the fork: %s. Publish with: stack push" % ", ".join(differ))
+    say("positions before this restack: %s" % last)
+    if fix_missing:
+        raise Refuse("the restack finished, but the fix is NOT in %s: the content of that slice "
+                     "did not change (was the fixup skipped?). The fix is the commit %s."
+                     % (target, short(op.get("fix_commit"))),
+                     "git cherry-pick -n %s   (this stages the fix again), then: stack fix %s"
+                     % (short(op.get("fix_commit")), target))
+    if ctx.parked(slices, tip):
+        say("next: stack unpark")
+    return 0
+
+
+def todo_for(ctx, slices, start, head_lines, skip=()):
+    """Todo lines for every slice from index `start` up, then the commits above the top ref."""
+    lines = list(head_lines)
+    for j in range(start, len(slices)):
+        for c in ctx.slice_commits(slices, j):
+            lines.append("pick " + c)
+        lines.append("update-ref " + slices[j].ref)
+    for c in ctx.above_top(slices, ctx.tip()):
+        if c not in skip:
+            lines.append("pick " + c)
+    return lines
+
+
+def at_risk(ctx, candidates):
+    """The slices whose rewrite is a force push to a PR that somebody may be reading."""
+    out = []
+    for s in candidates:
+        if not ctx.pushed_sha(s) or ctx.merged(s):
+            continue
+        state = ctx.state(s)
+        if state not in SAFE_STATES:
+            pr = ctx.gh_pr(s) or {}
+            out.append("%s (%s%s)" % (s.id, state.replace("in-review", "in review"),
+                                      ", PR #%s" % pr["number"] if pr.get("number") else ""))
+    return out
+
+
+# --------------------------------------------------------------------------- verbs
+
+
+def cmd_status(ctx, a):
+    tip = ctx.tip()
+    slices = ctx.slices()
+    online = not a.no_gh
+    problems = []
+    if not ctx.is_epic():
+        problems.append("not an epic: no specs/epic.md in %s and no slice ref" % ctx.root)
+    fork = ctx.fork_refs() if online else None
+    if online and fork is None:
+        problems.append("fork unreachable: the fork column comes from the last push")
+    fork_map = fork if fork is not None else ctx.tracking_refs()
+    if not ctx.next_sha():
+        problems.append("%s is missing: run `git fetch %s`" % (ctx.next_name, ctx.upstream))
+    chain = ctx.chain_problems(slices, tip)
+    notes = ["the branch %s has the slice name of an earlier version; it is not a slice now "
+             "(slices are %s)" % (old, slice_branch(ctx.epic, "<n>"))
+             for old in ctx.old_style_branches()]
+    rows = []
+    for i, s in enumerate(slices):
+        state = ctx.state(s, use_gh=online)
+        pr = ctx.gh_pr(s) if online else None
+        rec, now = ctx.pushed_sha(s), fork_map.get(s.short)
+        drift = None if (fork is None or state == "merged") else (rec != now)
+        if state == "merged" and not ctx.merged(s):
+            notes.append("%s: %s" % (s.id, MERGED_NOT_FETCHED))
+        if state == "merge-race":
+            problems.append("%s: merge race: what was pushed is merged, and the local slice is "
+                            "not in %s. Run `stack sync`." % (s.short, ctx.next_name))
+        if drift:
+            problems.append("%s: stack-drift, fork %s, last pushed %s. Run `stack adopt %s`."
+                            % (s.short, short(now), short(rec), s.id))
+        commits = [] if chain else ctx.slice_commits(slices, i)
+        if state != "merged":
+            for c in commits:
+                if UNFINISHED.match(ctx.subject(c)):
+                    problems.append("%s holds an unfinished commit: %s" % (s.short, ctx.subject(c)))
+        rows.append({"id": s.id, "ref": s.short, "sha": s.sha, "commits": len(commits),
+                     "state": state, "pr": (pr or {}).get("number"), "pushed_sha": rec,
+                     "fork_sha": now, "drift": drift,
+                     # behind: this machine deferred a push. drift: the fork holds something else.
+                     "behind": bool(rec) and rec != s.sha and state not in GONE_STATES})
+    pending = None if chain else ctx.push_pending(slices)
+    if pending is not None and ctx.state(pending, use_gh=online) not in GONE_STATES:
+        problems.append(PUSH_PENDING % pending.id)
+    problems += chain
+    hit = ctx.checked_out_slices(slices)
+    if hit:
+        problems.append("checked out in a worktree: " + ", ".join(hit))
+    op, corrupt = ctx.op_state()
+    if corrupt:
+        problems.append("restack-in-progress: %s. Run `stack fix --abort`." % corrupt)
+    elif ctx.rebasing() or op:
+        problems.append("restack-in-progress: run `stack fix --continue` or `stack fix --abort`")
+    above = [] if chain else ctx.above_top(slices, tip)
+    subjects = [ctx.subject(c) for c in above]
+    wip = {"parked": sum(1 for t in subjects if t.startswith("WIP")),
+           "unsealed": sum(1 for t in subjects if not UNFINISHED.match(t)),
+           "fixups": sum(1 for t in subjects if UNFINISHED.match(t) and not t.startswith("WIP")),
+           "dirty": ctx.dirty_count()}
+    if wip["fixups"] and not (op or corrupt or ctx.rebasing()):
+        problems.append("fixup-pending: %d fixup commit(s) above the top slice" % wip["fixups"])
+    base = None if chain else ctx.restack_base(slices, tip)
+    data = {"epic": ctx.epic, "checkout": str(ctx.top), "tip": tip, "base": base,
+            "next": ctx.next_sha(), "slices": rows, "wip": wip, "chain_ok": not chain,
+            "rebase_in_progress": ctx.rebasing(), "problems": problems, "notes": notes}
+    if a.json:
+        say(json.dumps(data, indent=1))
+        return 0
+    say("epic %s   tip %s   base %s   %s %s" % (ctx.epic, short(tip), short(base), ctx.next_name,
+                                                 short(ctx.next_sha())))
+    if not rows:
+        say("no sealed slice")
+    else:
+        say("  %-5s %-10s %-3s %-10s %-7s %s" % ("id", "commit", "n", "state", "pr", "fork"))
+    for r in rows:
+        if r["state"] == "merged":
+            where = "-"
+        elif r["drift"]:
+            where = "DRIFT"
+        elif not r["pushed_sha"]:
+            where = "not pushed"
+        elif r["pushed_sha"] == r["sha"]:
+            where = "current"
+        else:
+            where = "behind (push deferred)"
+        say("  %-5s %-10s %-3d %-10s %-7s %s" % (r["id"], short(r["sha"]), r["commits"],
+                                                  r["state"].replace("in-review", "in review"),
+                                                  "#%s" % r["pr"] if r["pr"] else "-", where))
+    say("work above the top slice: %d parked commit(s), %d unsealed commit(s), %d dirty path(s)"
+        % (wip["parked"], wip["unsealed"], wip["dirty"]))
+    say("chain: ok" if not chain else "chain: BROKEN " + "; ".join(chain))
+    for p in problems:
+        say("problem: " + p)
+    for n in notes:
+        say("note: " + n)
+    return 0
+
+
+def cmd_base(ctx, a):
+    """The diff base of a slice. What it prints is always an ancestor of HEAD.
+
+    Slice k: the ref of slice k-1. When slice k-1 is merged and the branch was
+    rebased onto upstream/next since, the fork point from upstream/next, because
+    a diff from the old ref would hold upstream commits. The lowest slice: the
+    fork point of the epic."""
+    slices = ctx.slices()
+    head = ctx.git.sha("HEAD")
+    nxt = ctx.next_sha()
+    if a.id:
+        i = ctx.find(slices, a.id)
+        prev = slices[i - 1] if i > 0 else None
+    else:
+        prev = slices[-1] if slices else None
+    fork_point = ctx.git.run("merge-base", nxt, head).stdout.strip() if nxt else ""
+    if prev is None:
+        name = base = ctx.base_sha()
+        if not (base and ctx.is_ancestor(base, head)):
+            if not fork_point:
+                raise Refuse("%s is missing or shares no history with HEAD" % ctx.next_name,
+                             "git fetch %s" % ctx.upstream)
+            name = base = fork_point
+    else:
+        name, base = prev.short, prev.sha
+        if ctx.merged(prev) and fork_point and fork_point != base \
+                and ctx.is_ancestor(base, fork_point):
+            name = base = fork_point
+    if not ctx.is_ancestor(base, head):
+        raise Refuse("%s is not an ancestor of HEAD, so a diff against it is wrong (needs-restack "
+                     "or merge race)" % name, "stack status")
+    say(base if a.sha else name)
+    return 0
+
+
+def cmd_seal(ctx, a):
+    expect = None
+    if a.expect is not None:
+        parsed = parse_slice_branch(a.expect, ctx.epic)
+        m = re.fullmatch(r"s?([1-9][0-9]*)", a.expect)
+        if not parsed and not m:
+            raise SystemExit(usage_error("--expect needs a slice id such as s2, not %r"
+                                         % a.expect))
+        expect = parsed[1] if parsed else int(m.group(1))
+    slices = ctx.slices()
+    ctx.require_writable(first_seal=not slices)
+    ctx.require_no_rebase()
+    tip = ctx.tip()
+    ctx.require_chain(slices, tip)
+    above = ctx.above_top(slices, tip)
+    if not slices:
+        parent = ctx.git.sha(tip + "^")
+        in_upstream = lambda c: bool(ctx.git.run(
+            "for-each-ref", "--count=1", "--contains", c, "refs/remotes/" + ctx.upstream
+        ).stdout.strip())
+        if not parent or in_upstream(tip) or not in_upstream(parent):
+            raise Refuse("the first slice must be exactly one commit above %s history; HEAD is not"
+                         % ctx.upstream, "squash the slice into one commit, or `git fetch %s`"
+                         % ctx.upstream)
+        above = [tip]
+    if len(above) != 1:
+        raise Refuse("a slice is sealed from exactly one commit above %s; there are %d"
+                     % (slices[-1].short if slices else "the base", len(above)),
+                     "make one commit from the slice work (stack unpark first when it is parked)")
+    subject = ctx.subject(tip)
+    if UNFINISHED.match(subject):
+        raise Refuse("the top commit is unfinished work: '%s'" % subject,
+                     "stack unpark, then make the slice commit")
+    ids = [s.n for s in slices]
+    for line in ctx.git.lines("for-each-ref", "--format=%(refname)",
+                              "refs/stack/%s/pushed/" % ctx.epic):
+        m = re.search(r"/s(\d+)$", line)
+        if m:
+            ids.append(int(m.group(1)))
+    counter = ctx.git.run("config", "--get", "stack.%s.lastid" % ctx.epic).stdout.strip()
+    if counter.isdigit():
+        ids.append(int(counter))
+    new = Slice(ctx.epic, max(ids or [0]) + 1, tip)
+    for name in slice_namespace(ctx.epic):
+        if ctx.git.ok("show-ref", "--verify", "--quiet", "refs/heads/" + name):
+            raise Refuse("the branch %s exists, and git cannot hold both it and %s; no ref was "
+                         "made" % (name, new.short), "git branch -m %s <other name>" % name)
+    if expect is not None and expect != new.n:
+        raise Refuse("the next slice id is %s, not s%d; no ref was made" % (new.id, expect),
+                     "stack status")
+    for old in ctx.old_style_branches():
+        warn("hint: the branch %s has the slice name of an earlier version. It is not a slice "
+             "now: slices are %s." % (old, slice_branch(ctx.epic, "<n>")))
+    if ctx.git.run("update-ref", new.ref, tip, "").returncode != 0:
+        raise Refuse("the branch %s exists already; no ref was made" % new.short, "stack status")
+    ctx.git.run("config", "stack.%s.lastid" % ctx.epic, str(new.n), check=True)
+    if not slices:
+        ctx.git.run("update-ref", ctx.base_ref(), ctx.git.sha(tip + "^"), check=True)
+    warn("sealed %s at %s" % (new.short, short(tip)))
+    say(new.id)
+    return 0
+
+
+def cmd_slots(ctx, a):
+    slices = ctx.slices()
+    open_prs = 0
+    for s in slices:
+        if ctx.merged(s):
+            continue
+        pr = ctx.gh_pr(s)
+        if pr is None:
+            raise Refuse("gh did not answer, so the open PR count is unknown", "gh auth status")
+        if pr.get("state") == "OPEN":
+            open_prs += 1
+    say(str(max(0, MAX_OPEN_PRS - open_prs)))
+    return 0
+
+
+def cmd_park(ctx, a):
+    ctx.require_writable()
+    ctx.require_no_rebase()
+    tip = ctx.tip()
+    if not ctx.dirty():
+        say("nothing to park")
+        return 0
+    if ctx.subject(tip) in (WIP_TREE, WIP_INDEX):
+        raise Refuse("work is already parked, and the tree is dirty again", "stack unpark")
+    first = ctx.git.run("commit", "--no-verify", "--allow-empty", "-q", "-m", WIP_INDEX)
+    if first.returncode != 0:
+        raise Refuse("park could not commit, and nothing changed: %s" % first.stderr.strip(),
+                     "git status")
+    cause = None
+    add = ctx.git.run("add", "-A")
+    if add.returncode != 0:
+        cause = add.stderr.strip()
+    else:
+        second = ctx.git.run("commit", "--no-verify", "--allow-empty", "-q", "-m", WIP_TREE)
+        if second.returncode != 0:
+            cause = second.stderr.strip()
+    if cause is not None:
+        # Undo the first commit: the index back to the staged set, the branch back to the tip.
+        ctx.git.run("reset", "-q", "--mixed", "HEAD", check=True)
+        ctx.git.run("reset", "-q", "--soft", tip, check=True)
+        raise Refuse("park failed, and the tree and the staged set are as they were: %s" % cause,
+                     "clear the cause, then: stack park")
+    say("parked as two commits: '%s' (what was staged) and '%s' (everything else)"
+        % (WIP_INDEX, WIP_TREE))
+    return 0
+
+
+def cmd_unpark(ctx, a):
+    ctx.require_writable()
+    ctx.require_no_rebase()
+    slices, tip = ctx.slices(), ctx.tip()
+    if not ctx.parked(slices, tip):
+        say("nothing parked")
+        return 0
+    if ctx.staged():
+        raise Refuse("the index holds staged changes; unpark would mix them with the parked set",
+                     "commit them or `git restore --staged .` first")
+    ctx.git.run("reset", "-q", "--mixed", "HEAD^", check=True)
+    ctx.git.run("reset", "-q", "--soft", "HEAD^", check=True)
+    say("unparked: the staged set, the unstaged edits and the untracked files are back")
+    return 0
+
+
+def cmd_fix(ctx, a):
+    if a.cont:
+        return op_continue(ctx)
+    if a.abort:
+        return op_abort(ctx)
+    if not a.id:
+        raise SystemExit(usage_error("fix needs a slice id, --continue or --abort"))
+    ctx.require_writable()
+    ctx.require_no_rebase()
+    slices, tip = ctx.slices(), ctx.tip()
+    i = ctx.find(slices, a.id)
+    target = slices[i]
+    ctx.require_chain(slices, tip)
+    ctx.require_not_checked_out(slices)
+    if ctx.merged(target):
+        raise Refuse("slice %s is merged; it cannot be fixed" % target.id,
+                     "put the change in the slice being built")
+    ctx.require_no_drift(slices)
+    if not ctx.staged():
+        raise Refuse("nothing is staged. The fix is the staged index.", "git add <paths>")
+    loose = ctx.unstaged() + ctx.untracked()
+    if loose:
+        raise Refuse("%d path(s) are neither staged nor parked (%s ...). The fix is the staged "
+                     "index only." % (len(loose), loose[0]),
+                     "git add them into the fix; or `git restore --staged .`, `stack park`, and "
+                     "make the fix again")
+    ctx.require_no_merges(ctx.restack_base(slices, tip), tip)
+
+    message = a.message
+    if a.file:
+        try:
+            message = Path(a.file).read_text()
+        except OSError as exc:
+            raise Refuse("cannot read the message file: %s" % exc)
+    mode = "squash" if a.squash else ("append" if a.append else None)
+    state = ctx.state(target)
+    if state == "merge-race":
+        raise Refuse("merge race on %s: what was pushed is merged, and the local slice is not in "
+                     "%s" % (target.id, ctx.next_name), "stack sync")
+    if state == "merged":
+        raise Refuse("slice %s is %s; it cannot be fixed" % (target.id, MERGED_NOT_FETCHED),
+                     "stack sync, then put the change in the slice being built")
+    if mode is None:
+        if state in SAFE_STATES:
+            mode = "squash"
+        elif state == "in-review":
+            mode = "append"
+        else:
+            raise Refuse("the PR state of %s is %s. A wrong squash force-pushes a PR in review, "
+                         "so stack does not guess." % (target.id, state),
+                         "stack fix %s --append -m '<message>'   or   stack fix %s --squash --yes"
+                         % (target.id, target.id))
+    if mode == "append" and not (message or "").strip():
+        raise Refuse("slice %s is in review: the fix is a new commit and needs a message"
+                     % target.id, "stack fix %s --append -m '<message>'" % target.id)
+    # Everything above the target gets a new SHA. So does the target, in a squash.
+    risk = at_risk(ctx, ([target] if mode == "squash" else []) + slices[i + 1:])
+    if risk and not a.yes:
+        raise Refuse("this fix rewrites slices whose PR is in review or not known, and each then "
+                     "needs a force push: %s" % ", ".join(risk),
+                     "stack fix %s %s--yes" % (target.id, "--squash " if mode == "squash" else
+                                               "--append -m '<message>' "))
+
+    if mode == "squash":
+        message = "fixup! stack fix %s %s" % (target.id, target.sha)
+    op = {"op": "fix", "mode": mode, "target": target.id, "message": message,
+          "before": snapshot_refs(ctx, slices, tip), "started": _stamp()}
+    open_op(ctx, op)                    # before the first write: --abort can always undo
+    proc = ctx.git.run("commit", "-q", "-F", "-", input=message)
+    if proc.returncode != 0:
+        close_op(ctx)
+        raise Refuse("the fix commit failed, and nothing changed: %s"
+                     % (proc.stderr.strip() or proc.stdout.strip()), "git status")
+    fix = op["fix_commit"] = ctx.git.sha("HEAD")
+    open_op(ctx, op)                    # the SHA of the fix commit, on record at once
+    try:
+        if mode == "squash":
+            base = ctx.git.sha(target.sha + "^")
+            head = ["pick " + target.sha, "fixup " + fix, "update-ref " + target.ref]
+        else:
+            base = target.sha
+            head = ["pick " + fix, "update-ref " + target.ref]
+        todo = todo_for(ctx, slices, i + 1, head, skip=(fix,))
+    except Exception:
+        restore(ctx, op)                # never leave the fix as a loose commit on the tip
+        close_op(ctx)
+        raise
+    try:
+        run_rebase(ctx, op, base, base, todo)
+    except Conflict as stop:
+        return stop_exit(ctx, str(stop))
+    return finish(ctx, op)
+
+
+def op_continue(ctx):
+    ctx.require_lease_free()
+    op, corrupt = ctx.op_state()
+    if corrupt:
+        raise Refuse(corrupt + ", so the restack cannot continue", "stack fix --abort")
+    if not op:
+        raise Refuse("no stack restack is in progress", "stack status")
+    if ctx.rebasing():
+        left = ctx.unmerged()
+        if left:
+            raise Refuse("unresolved conflict in: %s" % ", ".join(left),
+                         "resolve, then `git add` the files")
+        format_resolved(ctx)
+        proc = ctx.git.run("-c", "rebase.updateRefs=false", "rebase", "--continue",
+                           env={"GIT_EDITOR": "true"})
+        if proc.returncode != 0:
+            if ctx.rebasing():
+                return stop_exit(ctx, proc.stdout + proc.stderr)
+            raise Refuse("git rebase --continue failed: %s" % proc.stderr.strip(), "stack status")
+    elif not op.get("start_tip") or ctx.git.sha("HEAD") == op["start_tip"]:
+        say("the restack did not run (it was interrupted, or the rebase was aborted by hand); "
+            "closing it")
+        return op_abort(ctx)
+    return finish(ctx, op)
+
+
+def format_resolved(ctx):
+    """Format the resolved C++ files that still exist. A formatter failure never
+    blocks the restack: the file is named and the restack goes on."""
+    if not shutil.which("git-clang-format") or ctx.unstaged():
+        return
+    cxx = [f for f in ctx.staged(existing_only=True) if f.endswith(CXX)]
+    if not cxx:
+        return
+    proc = ctx.git.run("clang-format", "--", *cxx)
+    if proc.returncode not in (0, 1):
+        warn("warning: git clang-format failed on %s; these files are not formatted: %s"
+             % (", ".join(cxx), (proc.stderr.strip() or proc.stdout.strip())[:200]))
+        return
+    proc = ctx.git.run("add", "--", *cxx)
+    if proc.returncode != 0:
+        warn("warning: could not stage the formatted files %s: %s"
+             % (", ".join(cxx), proc.stderr.strip()[:200]))
+
+
+def op_abort(ctx):
+    ctx.require_lease_free()
+    op, corrupt = ctx.op_state()
+    if corrupt:
+        return abort_without_record(ctx, corrupt)
+    if not op:
+        raise Refuse("no stack restack is in progress", "stack status")
+    failed = restore(ctx, op)
+    before = op["before"]
+    moved = [s.id for s in ctx.slices() if before["refs"].get(s.id) not in (None, s.sha)]
+    if failed or moved or ctx.tip() != before["tip"]:
+        _save(ctx.gitdir / LAST_FILE, op)
+        raise Refuse("aborted, and not everything is where it was: %s. The old positions are in "
+                     "%s; the record of the restack is kept."
+                     % ("; ".join(failed + ["refs " + ", ".join(moved)] if moved else failed)
+                        or "the branch", ctx.gitdir / LAST_FILE),
+                     ["clear the cause, then: stack fix --abort", "stack status"])
+    close_op(ctx)
+    say("aborted: %s and every slice ref are where they were" % ctx.epic)
+    return 0
+
+
+def abort_without_record(ctx, corrupt):
+    """`stack fix --abort` when stack-op.json cannot be read. Slice refs move only
+    at the end of a rebase, so aborting the rebase leaves them where they were."""
+    path = ctx.gitdir / OP_FILE
+    did = []
+    if ctx.rebasing():
+        ctx.git.run("rebase", "--abort", check=True)
+        did.append("the rebase is aborted; no slice ref had moved")
+    head = ctx.git.sha("HEAD")
+    if head and ctx.subject(head).startswith("fixup! stack fix "):
+        ctx.git.run("reset", "-q", "--soft", "HEAD^", check=True)
+        did.append("the fix commit is undone and the fix is staged again")
+    os.replace(path, str(path) + ".unreadable")
+    (ctx.gitdir / TODO_FILE).unlink(missing_ok=True)
+    warn("warning: %s. It was moved to %s.unreadable." % (corrupt, path))
+    for line in did or ["no rebase was in progress; nothing was changed"]:
+        say(line)
+    say("NOT restored, because the record is lost: a slice ref or a branch that a FINISHED "
+        "restack moved, and an appended fix commit. Check with `stack status`. The positions "
+        "before the last finished restack are in %s." % (ctx.gitdir / LAST_FILE))
+    return 0
+
+
+def cmd_push(ctx, a):
+    ctx.require_writable()
+    ctx.require_no_rebase()
+    slices, tip = ctx.slices(), ctx.tip()
+    ctx.require_chain(slices, tip)
+    named = [slices[ctx.find(slices, t)] for t in a.ids]
+    for s in named:
+        if ctx.merged(s):
+            raise Refuse("slice %s is merged; there is nothing to push" % s.id, "stack status")
+    ctx.require_no_drift(slices)
+
+    plan, skipped = [], []
+    lowest = ctx.push_pending(slices)       # the next PR to merge is never deferred
+    for i, s in enumerate(slices):
+        if ctx.merged(s):
+            continue
+        rec = ctx.pushed_sha(s)
+        explicit = s in named
+        if rec is None and not explicit:
+            continue
+        if rec == s.sha:
+            continue
+        sig = ctx.sig_digest(ctx.signature(slices, i))
+        changed = rec is None or ctx.stored_sig(s) != sig
+        if not (changed or explicit or a.all or s is lowest):
+            skipped.append(s)
+            continue
+        ff = rec is not None and ctx.is_ancestor(rec, s.sha)
+        plan.append((s, s.sha, rec, sig,
+                     "new" if rec is None else ("fast-forward" if ff else "REWRITE")))
+    for s in skipped:
+        say("deferred: %s moved and its own content did not change. Push it with `stack push %s` "
+            "or --all." % (s.id, s.id))
+    if not plan:
+        say("nothing to push")
+        return 0
+    last = max(slices.index(p[0]) for p in plan)
+    for i in range(last + 1):
+        if ctx.merged(slices[i]):
+            continue
+        for c in ctx.slice_commits(slices, i):
+            if UNFINISHED.match(ctx.subject(c)):
+                raise Refuse("an unfinished commit is below %s: %s '%s'"
+                             % (plan[-1][0].short, short(c), ctx.subject(c)),
+                             "fold it in with `stack fix`, or remove it")
+    if any(p[2] is None for p in plan) and slice_namespace(ctx.epic):
+        proc = ctx.git.run("ls-remote", ctx.fork,
+                           *["refs/heads/" + n for n in slice_namespace(ctx.epic)])
+        taken = [l.split()[1][len("refs/heads/"):] for l in proc.stdout.splitlines()
+                 if len(l.split()) == 2 and l.split()[1][len("refs/heads/"):]
+                 in slice_namespace(ctx.epic)]
+        if proc.returncode != 0 or taken:
+            raise Refuse("the fork has a branch %s, and git cannot hold both it and %s. Nothing "
+                         "was pushed." % (", ".join(taken) or "(the fork did not answer)",
+                                          plan[0][0].short),
+                         "git push %s --delete %s   (when that branch is not needed)"
+                         % (ctx.fork, taken[0] if taken else "<branch>"))
+    gone = ["%s (%s)" % (p[0].id, ctx.state(p[0])) for p in plan
+            if ctx.state(p[0]) in GONE_STATES]
+    if gone:
+        raise Refuse("the PR of %s is merged, and a merged PR head is never pushed again, with "
+                     "or without --yes. Nothing was pushed." % ", ".join(gone), "stack sync")
+    # A rewrite is a force push. It needs --yes unless the PR is a draft or does not exist.
+    risk = at_risk(ctx, [p[0] for p in plan if p[4] == "REWRITE"])
+    if risk and not a.yes:
+        raise Refuse("this push rewrites PR heads that are in review or whose state is not known "
+                     "(a force push): %s. Nothing was pushed." % ", ".join(risk),
+                     "stack push %s--yes" % ("".join(t + " " for t in a.ids) or
+                                             ("--all " if a.all else "")))
+    cmd = ["push", "--atomic"]
+    for s, sha, rec, sig, kind in plan:
+        cmd.append("--force-with-lease=%s:%s" % (s.ref, rec or ""))
+    cmd.append(ctx.fork)
+    for s, sha, rec, sig, kind in plan:
+        cmd.append("%s:%s" % (sha, s.ref))          # the planned SHA, not the ref by name
+        say("%s %s: %s -> %s (%s)" % ("would push" if a.dry_run else "push", s.short, short(rec),
+                                      short(sha), kind))
+    for item in risk:
+        say("  warning: force push to a PR that is not a draft: %s" % item)
+    if a.dry_run:
+        say("git " + " ".join(cmd))
+        return 0
+    proc = ctx.git.run(*cmd)
+    if proc.returncode != 0:
+        raise Refuse("the push was rejected and nothing on the fork changed:\n%s"
+                     % (proc.stderr.strip() or proc.stdout.strip()),
+                     "stack status   (when the fork moved after the check: stack adopt <id>)")
+    for s, sha, rec, sig, kind in plan:
+        ctx.git.run("update-ref", ctx.pushed_ref(s), sha, check=True)
+        ctx.git.run("config", ctx.sig_key(s), sig, check=True)
+    say("pushed %d ref(s), all or nothing" % len(plan))
+    return 0
+
+
+def cmd_sync(ctx, a):
+    ctx.require_epic()
+    ctx.require_no_rebase()
+    if a.rebase:
+        ctx.require_lease_free()
+    if not a.no_fetch:
+        proc = ctx.git.run("fetch", ctx.upstream, BASE_BRANCH)
+        if proc.returncode != 0:
+            raise Refuse("`git fetch %s %s` failed: %s" % (ctx.upstream, BASE_BRANCH,
+                                                          proc.stderr.strip()),
+                         "check the network, or `stack sync --no-fetch`")
+    nxt = ctx.next_sha()
+    if not nxt:
+        raise Refuse("%s is missing" % ctx.next_name, "git fetch %s" % ctx.upstream)
+    slices, tip = ctx.slices(), ctx.tip()
+    ctx.require_chain(slices, tip)
+    ctx.require_no_drift(slices)
+    for s in slices:
+        state = ctx.state(s)
+        if state == "merged" and not ctx.merged(s):
+            if a.rebase:
+                raise Refuse("%s is %s. A rebase now would copy a merged slice."
+                             % (s.id, MERGED_NOT_FETCHED), "stack sync")
+            say("%s: %s" % (s.id, MERGED_NOT_FETCHED))
+        elif state == "merged":
+            say("%s is merged: its commit is in %s" % (s.id, ctx.next_name))
+        elif state == "merge-race":
+            pr = ctx.gh_pr(s) or {}
+            theirs = ctx.pushed_sha(s) if ctx.pushed_sha(s) and ctx.is_ancestor(
+                ctx.pushed_sha(s), nxt) else pr.get("headRefOid")
+            raise Refuse("merge race on %s: the PR merged at %s, and the local slice is %s, which "
+                         "is not in %s. This version does not repair it."
+                         % (s.id, short(theirs), short(s.sha), ctx.next_name),
+                         "by hand: put the difference between %s and %s into the slice above, "
+                         "then move %s to %s" % (short(theirs), short(s.sha), s.short,
+                                                 short(theirs)))
+    base = ctx.restack_base(slices, tip)
+    pending = ctx.push_pending(slices)
+    if pending is not None:
+        say("problem: " + PUSH_PENDING % pending.id)
+    if not a.rebase:
+        if ctx.is_ancestor(nxt, tip):
+            say("%s holds all of %s; no rebase is needed" % (ctx.epic, ctx.next_name))
+            return 0
+        proc = ctx.git.run("merge-tree", "--write-tree", "--name-only", nxt, tip)
+        if proc.returncode == 0:
+            say("no conflict with %s; no rebase is needed" % ctx.next_name)
+        elif proc.returncode == 1:
+            files = []
+            for line in proc.stdout.splitlines()[1:]:
+                if not line.strip():
+                    break
+                files.append(line.strip())
+            say("CONFLICT with %s in: %s" % (ctx.next_name, ", ".join(files) or "(unknown)"))
+            say("next: stack sync --rebase")
+        else:
+            say("could not test for a conflict with %s: %s" % (ctx.next_name, proc.stderr.strip()))
+        return 0
+
+    ctx.require_not_checked_out(slices)
+    if ctx.dirty():
+        raise Refuse("the tree is not clean", "stack park")
+    if ctx.is_ancestor(nxt, base):
+        say("%s is already on %s; nothing to rebase" % (ctx.epic, ctx.next_name))
+        return 0
+    ctx.require_no_merges(base, tip)
+    low = ctx.lowest_unmerged(slices)
+    start = len(slices) if low is None else low
+    risk = at_risk(ctx, slices[start:])
+    if risk and not a.yes:
+        raise Refuse("this rebase rewrites slices whose PR is in review or not known, and each "
+                     "then needs a force push: %s" % ", ".join(risk), "stack sync --rebase --yes")
+    op = {"op": "sync", "before": snapshot_refs(ctx, slices, tip), "onto": nxt,
+          "new_base": nxt if low == 0 or (low is None and not slices) else None,
+          "started": _stamp()}
+    todo = todo_for(ctx, slices, start, [])
+    if not todo:
+        say("nothing to rebase")
+        return 0
+    try:
+        run_rebase(ctx, op, nxt, base, todo)
+    except Conflict as stop:
+        return stop_exit(ctx, str(stop))
+    return finish(ctx, op)
+
+
+def cmd_adopt(ctx, a):
+    ctx.require_writable()
+    ctx.require_no_rebase()
+    slices, tip = ctx.slices(), ctx.tip()
+    i = ctx.find(slices, a.id)
+    s = slices[i]
+    ctx.require_chain(slices, tip)
+    ctx.require_not_checked_out(slices)
+    if ctx.merged(s):
+        raise Refuse("slice %s is merged; there is nothing to adopt" % s.id, "stack status")
+    fork = ctx.fork_refs()
+    if fork is None:
+        raise Refuse("cannot read the fork", "check the network")
+    theirs = fork.get(s.short)
+    if not theirs:
+        raise Refuse("the fork has no branch %s" % s.short,
+                     "git update-ref -d %s   (when the branch was deleted on purpose)"
+                     % ctx.pushed_ref(s))
+    if not ctx.git.sha(theirs):
+        proc = ctx.git.run("fetch", ctx.fork, s.ref)
+        if proc.returncode != 0 or not ctx.git.sha(theirs):
+            raise Refuse("cannot fetch %s from the fork: %s" % (s.short, proc.stderr.strip()))
+    keep = "refs/stack/%s/foreign/%s" % (ctx.epic, s.id)
+    if theirs == s.sha:
+        ctx.git.run("update-ref", ctx.pushed_ref(s), theirs, check=True)
+        ctx.git.run("config", ctx.sig_key(s), ctx.sig_digest(ctx.signature(slices, i)), check=True)
+        say("%s: the fork and the local ref are the same commit; recorded" % s.id)
+        return 0
+    if ctx.is_ancestor(theirs, s.sha):
+        if ctx.pushed_sha(s) != theirs:
+            ctx.git.run("update-ref", ctx.pushed_ref(s), theirs, check=True)
+            ctx.git.run("config", "--unset", ctx.sig_key(s))
+        say("%s: the fork (%s) is behind the local slice (%s). There is nothing to adopt. "
+            "Publish with: stack push %s" % (s.id, short(theirs), short(s.sha), s.id))
+        return 0
+    if a.ours:
+        ctx.git.run("update-ref", keep, theirs, check=True)
+        ctx.git.run("update-ref", ctx.pushed_ref(s), theirs, check=True)
+        ctx.git.run("config", "--unset", ctx.sig_key(s))
+        say("%s: the local slice stays. The fork commit %s is kept at %s. The next `stack push %s` "
+            "replaces it on the fork." % (s.id, short(theirs), keep, s.id))
+        return 0
+    linear = ctx.is_ancestor(s.sha, theirs) and not ctx.git.lines(
+        "rev-list", "--merges", "%s..%s" % (s.sha, theirs))
+    if not linear:
+        why = ("holds a merge commit (Update branch)" if ctx.is_ancestor(s.sha, theirs)
+               else "and the local slice have diverged: each has commits the other lacks")
+        raise Refuse("the fork's %s %s: fork %s, local %s" % (s.short, why, theirs, s.sha),
+                     ["keep the local slice and replace the fork's: stack adopt %s --ours   "
+                      "(the fork commit is kept at %s)" % (s.id, keep),
+                      "see what the fork has: git log --oneline %s...%s"
+                      % (short(s.sha), short(theirs)),
+                      "take one of its commits into the slice: git cherry-pick -n <sha>   "
+                      "(-n stages it and makes no commit), then: stack adopt %s --ours, "
+                      "stack fix %s" % (s.id, s.id)])
+    if ctx.dirty():
+        raise Refuse("the tree is not clean", "stack park")
+    op = {"op": "adopt", "target": s.id, "fork_sha": theirs,
+          "before": snapshot_refs(ctx, slices, tip), "started": _stamp()}
+    rest = todo_for(ctx, slices, i + 1, [])
+    if not rest:
+        op["start_tip"] = tip
+        open_op(ctx, op)
+        ctx.git.run("merge", "-q", "--ff-only", theirs, check=True)
+        ctx.git.run("update-ref", s.ref, theirs, s.sha, check=True)
+        return finish(ctx, op)
+    todo = ["update-ref " + s.ref] + rest
+    try:
+        run_rebase(ctx, op, theirs, s.sha, todo)
+    except Conflict as stop:
+        return stop_exit(ctx, str(stop))
+    return finish(ctx, op)
+
+
+# --------------------------------------------------------------------------- entry
+
+
+def usage_error(text):
+    print("stack: usage: " + text, file=sys.stderr)
+    return 2
+
+
+def parser():
+    p = argparse.ArgumentParser(prog="stack", description="Every git write on an epic branch.")
+    p.add_argument("-C", dest="checkout", metavar="<moose checkout>")
+    sub = p.add_subparsers(dest="verb", required=True)
+    s = sub.add_parser("status", help="the slice table")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--no-gh", action="store_true", help="no network: no gh, no ls-remote")
+    s = sub.add_parser("base", help="the diff base of a slice")
+    s.add_argument("id", nargs="?")
+    s.add_argument("--sha", action="store_true", help="print the commit, always an ancestor of HEAD")
+    s = sub.add_parser("seal", help="make the slice ref for the one commit above the top slice")
+    s.add_argument("--expect", metavar="<id>", help="refuse unless this is the id that is made")
+    sub.add_parser("slots", help="free PR places for this epic")
+    sub.add_parser("park", help="save unfinished work as two commits")
+    sub.add_parser("unpark", help="restore parked work")
+    s = sub.add_parser("fix", help="put the staged fix into a slice and move every slice above it")
+    s.add_argument("id", nargs="?")
+    g = s.add_mutually_exclusive_group()
+    g.add_argument("--squash", action="store_true")
+    g.add_argument("--append", action="store_true")
+    g.add_argument("--continue", dest="cont", action="store_true")
+    g.add_argument("--abort", action="store_true")
+    m = s.add_mutually_exclusive_group()
+    m.add_argument("-m", "--message", help="the message of an appended commit")
+    m.add_argument("-F", "--file", help="read that message from a file")
+    s.add_argument("--yes", action="store_true",
+                   help="allow the rewrite of a slice whose PR is in review or not known")
+    s = sub.add_parser("push", help="publish the slices that changed, all or nothing")
+    s.add_argument("ids", nargs="*")
+    s.add_argument("--all", action="store_true")
+    s.add_argument("--yes", action="store_true",
+                   help="allow a force push to a PR that is in review or not known")
+    s.add_argument("--dry-run", action="store_true")
+    s = sub.add_parser("sync", help="record merged slices; rebase onto upstream/next on request")
+    s.add_argument("--rebase", action="store_true")
+    s.add_argument("--yes", action="store_true")
+    s.add_argument("--no-fetch", action="store_true")
+    s = sub.add_parser("adopt", help="take the fork's version of a slice into the chain")
+    s.add_argument("id")
+    s.add_argument("--ours", action="store_true",
+                   help="keep the local slice; the next push replaces the fork's")
+    return p
+
+
+VERBS = {"status": cmd_status, "base": cmd_base, "seal": cmd_seal, "slots": cmd_slots,
+         "park": cmd_park, "unpark": cmd_unpark, "fix": cmd_fix, "push": cmd_push,
+         "sync": cmd_sync, "adopt": cmd_adopt}
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
+    try:
+        ctx = Ctx(discover(args.checkout))
+        return VERBS[args.verb](ctx, args)
+    except Refuse as r:
+        print("stack: refused: %s" % r, file=sys.stderr)
+        for line in r.recovery:
+            print("  run: %s" % line, file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

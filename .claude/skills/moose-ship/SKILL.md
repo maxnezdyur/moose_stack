@@ -1,6 +1,6 @@
 ---
 name: moose-ship
-description: Commits the finished MOOSE feature in its submodule, pushes the branch to origin, opens a draft PR against next, and bumps the meta-repo submodule pointer. The second human gate after /moose-build. Use for "/moose-ship [<submodule>]", "ship this feature", "open the PR", "commit and push the feature". Manual invoke only.
+description: Commits the finished MOOSE feature in its submodule, pushes the branch to origin, opens a draft PR against next, and bumps the meta-repo submodule pointer. In an epic worktree (specs/epic.md) it ships one slice, which is the commit, the slice ref, and the draft PR when a place is free. The second human gate after /moose-build. Use for "/moose-ship [<submodule>]", "ship this feature", "open the PR", "commit and push the feature". Manual invoke only.
 disable-model-invocation: true
 argument-hint: "[<submodule>]"
 effort: medium
@@ -15,7 +15,7 @@ allowed-tools:
 
 # /moose-ship
 
-Turns the tree `/moose-build` left green into one commit in the submodule, a pushed branch, a draft PR on `idaholab/<app>`, and a meta-repo pointer bump, then prints the PR URL. It runs only inside a `/new-feature` worktree: walk up from the cwd to the directory whose `.git` is a file beside `moose/`, `blackbear/`, and `isopod/`; anywhere else, refuse and say why. This skill does not mark the PR ready, does not push to `upstream`, does not push the meta-repo, and runs no formatter. Any failed command stops the run with its output, and the report says which steps completed.
+Turns the tree `/moose-build` left green into one commit in the submodule, a pushed branch, a draft PR on `idaholab/<app>`, and a meta-repo pointer bump, then prints the PR URL. It runs only inside a `/new-feature` worktree: walk up from the cwd to the directory whose `.git` is a file beside `moose/`, `blackbear/`, and `isopod/`; anywhere else, refuse and say why. This skill does not mark the PR ready, does not push to `upstream`, does not push the meta-repo, and runs no formatter. Any failed command stops the run with its output, and the report says which steps completed. In a worktree with `specs/epic.md`, read "In an epic worktree" below before the first step: it changes the order of the run, the commit message, the push, the PR body, the pointer bump, the rerun rules and the fix-ups.
 
 ## Submodule and files
 
@@ -44,7 +44,92 @@ git -C <worktree> commit -m "Bump <sub> to <short sha>"
 
 ## Fix-ups after the PR exists
 
-A change to the PR while it is a draft or under review (a CIVET failure, a review comment, a loosened tolerance) is amended into the existing commit and pushed with `git push --force-with-lease`, never added as a second commit, and carries no code comment explaining the fix; the PR conversation is where that goes. The meta-repo pointer bump is redone the same way. A CIVET failure is triaged with the `civet-ci-failures` skill before any amend: a job that also fails on other authors' PRs is CIVET's environment, not the branch, and gets no code change and no push.
+This section is for an ordinary feature worktree; in an epic worktree, step 10 of "In an epic worktree" replaces it. A change to the PR while it is a draft or under review (a CIVET failure, a review comment, a loosened tolerance) is amended into the existing commit and pushed with `git push --force-with-lease`, never added as a second commit, and carries no code comment explaining the fix; the PR conversation is where that goes. The meta-repo pointer bump is redone the same way. A CIVET failure is triaged with the `civet-ci-failures` skill before any amend: a job that also fails on other authors' PRs is CIVET's environment, not the branch, and gets no code change and no push.
+
+## In an epic worktree
+
+`<worktree>/specs/epic.md` exists, so this run ships one slice of a chain (`/moose-epic`). The
+sections above apply, with the changes below. `<epic>` is the worktree name and the branch of
+`<moose>`, which is `<worktree>/moose`. The submodule is `moose`. The stack script owns the slice
+refs and every push. Resolve it with these lines:
+
+```bash
+cfg="${MOOSE_FACTORY_CONFIG:-$HOME/.config/moose-factory/config.toml}"
+meta_repo="$(sed -n -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*meta_repo[[:space:]]*=[[:space:]]*//p' "$cfg" 2>/dev/null | head -n 1 | tr -d '"')"
+meta_repo="${meta_repo:-$HOME/projects/moose_stack}"; meta_repo="${meta_repo/#\~/$HOME}"
+STACK="$meta_repo/scripts/stack"
+```
+
+Shell variables do not persist between Bash calls, so put these lines at the start of each call
+that uses `$STACK`. Always call it as `"$STACK" -C <moose> <verb>`. Exit 1 is a refusal: print its
+message and stop.
+
+1. **Publish first.** Run `"$STACK" -C <moose> status`, and stop when it prints `chain: BROKEN` or
+   a `problem:` line. `<pub>` is the lowest slice whose state is `sealed`: it has a ref and no
+   pull request. When there is one and `"$STACK" -C <moose> slots` prints more than 0, publish
+   `<pub>` (steps 6 and 7), report, and stop. Commit nothing and seal nothing in that run. When
+   there is none, or `slots` prints 0, go on.
+2. **The slice.** `<id>` is the `slice:` key of `specs/blueprint.md`. A blueprint with no `slice:`
+   key was kept from before the epic; then `<id>` is the first row of `## Slices` with no ref.
+   Before the commit, check that `<id>` is the id of the first row of `## Slices` in
+   `specs/epic.md` that has no ref `epic/<epic>/<id>`
+   (`git -C <moose> rev-parse --verify --quiet refs/heads/epic/<epic>/<id>` prints nothing). When it is
+   not, stop and commit nothing. A blueprint whose slice has a ref is shipped: name
+   `/moose-epic next`. When there is no blueprint and nothing to publish, refuse: nothing to ship.
+   When parked `WIP` commits are at the top of the branch, run `"$STACK" -C <moose> unpark`
+   before you show the files.
+3. **Files.** A slice carries no newsletter entry while it is sealed or draft. When
+   `git -C <moose> status --porcelain -- modules/doc/content/newsletter` prints a path, stop and
+   tell the user to remove that change. `/moose-epic fix <id>` adds the entry before the user
+   marks the pull request ready.
+4. **Commit message.** The body ends with `refs #<N>`, where `<N>` is the `issue` of
+   `specs/epic.md`, confirmed with `gh issue view` as above. `issue: pending` stops the run. Add
+   `closes #<M>` only for an issue of this slice alone that the user named. Never write
+   `closes #<N>` for the epic issue: the user closes it by hand. Each tests spec block of the
+   slice carries the epic issue in `issues`.
+5. **Commit and seal.** Make the one commit as above. Then run
+   `"$STACK" -C <moose> seal --expect <id>`. It creates the ref `epic/<epic>/<id>` and prints the id.
+   It refuses, and makes no ref, when the id that it would give is not `<id>`. Then decide: when
+   `"$STACK" -C <moose> slots` prints 0, stop and say: "Slice <id> is sealed and not published:
+   two pull requests are open. Run `/moose-ship` again when one merges." When it prints more
+   than 0, `<pub>` is `<id>`: go on.
+6. **Publish `<pub>`.** At most two pull requests of one epic are open.
+
+   ```bash
+   "$STACK" -C <moose> push <pub>
+   cd <gallery of <pub>> && gh pr create --repo idaholab/moose --base next --head maxnezdyur:epic/<epic>/<pub> --draft \
+     --title "<subject of the commit at epic/<epic>/<pub>>" --body-file /tmp/moose-ship-<epic>-<pub>-pr.md \
+     [--attach './<file>#<heading>' ...]
+   ```
+
+   Never run `git push` yourself here. The first push of a slice makes a new fork branch and
+   rewrites nothing. Never pass `--yes` to a stack command in this skill: the script asks for it
+   only before a force push to a pull request in review, and that is a decision for the user in
+   `/moose-epic`. If `push` refuses for that reason, print the message and stop. The records of
+   `<pub>` (the review counts, `proof/`, the
+   gallery) are in `<worktree>/specs/slices/<pub>/` when `/moose-epic next` archived them, and in
+   `<worktree>/specs/` otherwise. The title is
+   `git -C <moose> log -1 --format=%s epic/<epic>/<pub>`.
+7. **PR body of `<pub>`.** Add two things after the summary. First, when the slice below `<pub>`
+   is not merged, the line `Depends on #<P>. Review the commits after it.` `<P>` is the pull
+   request of the slice below, from the `pr` column of the status table. Omit the line for the
+   lowest slice and when the slice below is merged. Second, the line `Slice <k> of <N>.` and a
+   numbered list of the titles of all rows of `## Slices`, with a mark on this slice. Put no
+   pull request number of a slice above this one in the body: it goes stale, and nothing updates
+   a PR body. Put no commit hash, no local path and no parked work in it.
+8. **No pointer bump.** Skip the `Bump <sub>` commit. A restack rewrites the slice commits, and a
+   recorded gitlink would point at a commit on no branch.
+9. **Rerun.** The status table is the record of what happened. A slice with a ref has its commit
+   and its seal. The `fork` column says `not pushed` until the push is done. The `pr` column
+   holds the pull request when it exists. Step 1 picks up a slice that an earlier run sealed and
+   did not publish.
+10. **Fix-ups.** A fix to a slice that has a ref goes through `/moose-epic fix <id>`, never
+    through an amend and never through `git push --force-with-lease`. A slice in review takes the
+    fix as a new commit; reviewers asked for no force-push during review. Never run
+    `gh pr ready`.
+11. **Report and handoff.** Add the slice id, the ref, "published as <PR URL>" or "sealed, not
+    published", and the next step: `/moose-epic next` starts the next slice. No meta-repo bump
+    commit is listed. Write the handoff lines as below.
 
 ## Report
 

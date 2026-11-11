@@ -230,6 +230,9 @@ KEYS: Tuple[Tuple[str, str, str], ...] = (
     # they live beside the other caps rather than inside the extension.
     ("gallery_max_mb", "MOOSE_FACTORY_GALLERY_MAX_MB", "int"),
     ("gallery_thumbs", "MOOSE_FACTORY_GALLERY_THUMBS", "int"),
+    # The most megabytes of `specs/epic.md` and `specs/slices/` one epic may
+    # keep under `Artifacts/<epic>/`. Read by tool/ext_epic.py only.
+    ("epic_rescue_max_mb", "MOOSE_FACTORY_EPIC_RESCUE_MAX_MB", "int"),
 )
 
 KEY_NAMES: Tuple[str, ...] = tuple(k for k, _e, _t in KEYS)
@@ -314,6 +317,7 @@ def _defaults() -> Tuple[Dict[str, Any], Dict[str, str]]:
         "timeline_on_home": TIMELINE_ON_HOME,
         "gallery_max_mb": GALLERY_MAX_MB,
         "gallery_thumbs": GALLERY_THUMBS,
+        "epic_rescue_max_mb": EPIC_RESCUE_MAX_MB,
     }
     why = {k: "default" for k in values}
     why["meta_repo"] = meta_why
@@ -513,6 +517,12 @@ ANALYSIS_MARKER = "specs/.factory-analysis"
 
 GALLERY_MAX_MB = 5               # per file, in specs/gallery/; bigger is listed, never linked
 GALLERY_THUMBS = 3               # thumbnails one Board.html card shows
+# The rescue of one epic's plan and archived slices, in total. `Artifacts/` is
+# committed by the tick, so a rescue with no ceiling would grow the vault's
+# history by every figure `/moose-epic next` archives. 20 MB is four files at
+# the gallery cap, or five at the 4 MB cap of one rescued record, and about
+# twelve times the largest `specs/` a feature has produced so far (1.6 MB).
+EPIC_RESCUE_MAX_MB = 20
 
 NEEDS_YOU_TABLE_CAP = 5          # the rest become one "Backlog" line
 HEAD_CHURN_BUDGET = 520          # bytes: Obsidian's diff-match-patch limit
@@ -628,6 +638,7 @@ class Config:
     timeline_on_home: int = TIMELINE_ON_HOME
     gallery_max_mb: int = GALLERY_MAX_MB
     gallery_thumbs: int = GALLERY_THUMBS
+    epic_rescue_max_mb: int = EPIC_RESCUE_MAX_MB
 
     # ---- where each value came from, for `factory config` and `doctor` ---
     config_file: Optional[Path] = None
@@ -747,6 +758,7 @@ def load(offline: bool = False) -> Config:
         timeline_on_home=int(values["timeline_on_home"]),
         gallery_max_mb=int(values["gallery_max_mb"]),
         gallery_thumbs=int(values["gallery_thumbs"]),
+        epic_rescue_max_mb=int(values["epic_rescue_max_mb"]),
         config_file=path,
         sources=dict(sources),
         unknown_keys=tuple(unknown),

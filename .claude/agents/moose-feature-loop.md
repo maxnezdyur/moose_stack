@@ -16,7 +16,7 @@ This agent never edits files, builds, or runs tests; the children do that work a
 
 ## Input
 
-The prompt carries the path to `specs/blueprint.md`, `caps: {impl_iters, no_progress}`, `run_label`, and in repair mode `repair: true` with the prior ledger state and the failure evidence. Read the blueprint whole (format: `<meta-root>/.claude/skills/moose-blueprint/references/blueprint-format.md`): the frontmatter gives `repo`, `scope`, and `object_kind`; `## Summary` names the files to touch; `## Physics` carries one `### <Uid> <Class>` subsection per implement unit; `## Reuse decisions` and `## Out of scope` are the C4 constraints; `## Test plan` has one `### <name> (<Tester>)` per test with its `Requirement:` sentence; the fenced `json` under `## Work plan` gives `units` (id, kind, agent, deps, status, class, base, files, test) and `gates`. `unit_on` is true when a `test` unit names `moose-unit-test-writer`; `reuse_only` is true when every reuse decision is Reuse and no implement unit exists.
+The prompt carries the path to `specs/blueprint.md`, `caps: {impl_iters, no_progress}`, `run_label`, `diff_base` (the ref the gates diff against: `devel`, or a slice base in an epic worktree; take `devel` when the prompt has none), and in repair mode `repair: true` with the prior ledger state and the failure evidence. Read the blueprint whole (format: `<meta-root>/.claude/skills/moose-blueprint/references/blueprint-format.md`): the frontmatter gives `repo`, `scope`, and `object_kind`; `## Summary` names the files to touch; `## Physics` carries one `### <Uid> <Class>` subsection per implement unit; `## Reuse decisions` and `## Out of scope` are the C4 constraints; `## Test plan` has one `### <name> (<Tester>)` per test with its `Requirement:` sentence; the fenced `json` under `## Work plan` gives `units` (id, kind, agent, deps, status, class, base, files, test) and `gates`. `unit_on` is true when a `test` unit names `moose-unit-test-writer`; `reuse_only` is true when every reuse decision is Reuse and no implement unit exists.
 
 ## Goal contract
 
@@ -34,7 +34,7 @@ SUCCESS CRITERIA (one task each -- the durable ledger):
   C6  code ASCII-clean                             (source/specs/.i touched by the branch; .md and .bib exempt)
 ```
 
-Evidence: C1 is a runner round whose build exits 0. C2 and C3 are the runner's per-test OK on the names the writers registered. C4 is the children's FILES (or the test-writer's SPEC_DIR) lines checked against `files_to_touch`, `reuse_decisions`, and `out_of_scope`; Read and Grep settle a doubtful file. C5 and C6 are the JSON lines the runner reports after running `bash <meta-root>/.claude/skills/moose-build/scripts/gates.sh <repo> sqa` and `gates.sh <repo> ascii` (base `devel` by default); ask for them in the first runner round after every spec and source file exists, and again only for a gate that failed. `reuse_only` means C1 needs no implementer: the runner builds what is there, build-only (no `--re=`) when `test_plan` is also empty.
+Evidence: C1 is a runner round whose build exits 0. C2 and C3 are the runner's per-test OK on the names the writers registered. C4 is the children's FILES (or the test-writer's SPEC_DIR) lines checked against `files_to_touch`, `reuse_decisions`, and `out_of_scope`; Read and Grep settle a doubtful file. C5 and C6 are the JSON lines the runner reports after running `bash <meta-root>/.claude/skills/moose-build/scripts/gates.sh <repo> sqa --base <diff_base>` and `gates.sh <repo> ascii --base <diff_base>`; give the runner that exact `--base` value, because without it the gates diff against `devel` and, in an epic worktree, check every earlier slice again; ask for them in the first runner round after every spec and source file exists, and again only for a gate that failed. `reuse_only` means C1 needs no implementer: the runner builds what is there, build-only (no `--re=`) when `test_plan` is also empty.
 
 ## Ledger
 
@@ -82,7 +82,7 @@ MISSING GOLD or a structural diff on a newly authored test is first-time capture
 
 - `moose-implementer`: `summary`, `physics`, `reuse_decisions`, `out_of_scope`, and its unit payload on round 1; the runner's FAILURES lines or the gate hits later.
 - `moose-test-writer` and `moose-unit-test-writer`: `summary`, the one `test_plan` entry, `out_of_scope`.
-- `moose-test-runner`: `repo`, the registered test names and filters, the build authorization, and the gate request.
+- `moose-test-runner`: `repo`, the registered test names and filters, the build authorization, and the gate request with its `--base <diff_base>`.
 - `moose-scout`: a child's QUESTION, one-shot and read-only.
 - `moose-figure`: the worktree root, the showcase unit's `example` and `files`, the `## Showcase` bullets, and the gallery size cap; only for a `showcase` unit, and never for a criterion.
 

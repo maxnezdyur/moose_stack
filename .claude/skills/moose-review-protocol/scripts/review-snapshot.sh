@@ -22,8 +22,11 @@
 #   P-issues.md         linked-issue digest (pr mode only)
 #   P-<bucket>.files    code test doc ad dry newobj
 #
-# Exit 0 = snapshot written. Exit 2 = bad args, empty diff, or a failed git/gh
-# step (the message names it). Nothing here edits source, builds, or tests.
+# Local mode: a --base that is not a mainline branch (a slice ref or a commit
+# from `stack base`) must be an ancestor of HEAD.
+#
+# Exit 0 = snapshot written. Exit 2 = bad args, empty diff, a base that is not
+# an ancestor of HEAD, or a failed git/gh step (the message names it). Nothing here edits source, builds, or tests.
 
 set -u
 
@@ -163,6 +166,18 @@ else
   # the merge base still sees the working tree (staged + unstaged), which the
   # three-dot form `<base>...HEAD` would not.
   git -C "$root" rev-parse --verify -q "$base^{commit}" >/dev/null || die "unknown base ref '$base' in $root"
+  # A mainline branch keeps the merge-base rule above. Any other base is a slice
+  # ref or a commit from `stack base` (an epic worktree, where the review reads
+  # one slice). When such a base is not an ancestor of HEAD, the merge base
+  # falls back to the fork point and the reviewers get every earlier slice as
+  # if it were this one. Refuse instead.
+  case "$base" in
+    devel|next|main|master|*/devel|*/next|*/main|*/master) ;;
+    *)
+      git -C "$root" merge-base --is-ancestor "$base" HEAD \
+        || die "base '$base' is not an ancestor of HEAD in $root; in an epic worktree take the base from 'stack base'"
+      ;;
+  esac
   branch="$(git -C "$root" rev-parse --abbrev-ref HEAD)"
   mb="$(git -C "$root" merge-base "$base" HEAD)" || die "no merge base between '$base' and HEAD in $root"
   git -C "$root" diff "$mb" > "$P.diff"                        # committed + staged + unstaged

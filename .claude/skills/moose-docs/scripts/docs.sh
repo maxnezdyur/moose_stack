@@ -6,6 +6,9 @@
 #   docs.sh <scope> stop             stop the server started by "serve"
 #   docs.sh <scope> smoke [--diff <base>]
 #                                    full build + serve + HTTP probe; PASS/FAIL/BLOCKED
+#                                    A <base> that is not a mainline branch (a slice
+#                                    ref or a commit from `stack base`) must be an
+#                                    ancestor of HEAD; otherwise BLOCKED, exit 2.
 #
 #   <scope> = moose | blackbear | isopod | moose/modules/<m>
 #
@@ -286,6 +289,17 @@ DIFF_LIST=""
 if [[ -n "$DIFF_BASE" ]]; then
   mb="$(git -C "$REPO_DIR" merge-base "$DIFF_BASE" HEAD 2>/dev/null)" \
     || { echo "BLOCKED: $SCOPE --diff base '$DIFF_BASE' does not resolve in $REPO_DIR"; exit 2; }
+  # A mainline branch keeps the merge-base rule. Any other base is a slice ref
+  # or a commit from `stack base` (an epic worktree). When it is not an ancestor
+  # of HEAD, the merge base falls back to the fork point and the filter lets
+  # errors from every earlier slice through. Refuse instead.
+  case "$DIFF_BASE" in
+    devel|next|main|master|*/devel|*/next|*/main|*/master) ;;
+    *)
+      git -C "$REPO_DIR" merge-base --is-ancestor "$DIFF_BASE" HEAD 2>/dev/null \
+        || { echo "BLOCKED: $SCOPE --diff base '$DIFF_BASE' is not an ancestor of HEAD in $REPO_DIR; in an epic worktree take the base from 'stack base'"; exit 2; }
+      ;;
+  esac
   DIFF_LIST="/tmp/moose-docs-$TAG-smoke.diff-files"
   {
     git -C "$REPO_DIR" diff --name-only "$mb"

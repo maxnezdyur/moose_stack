@@ -7,7 +7,10 @@
 #   <scope>  moose | blackbear | isopod | moose/modules/<m>
 #            A module scope diffs the whole moose git repo and runs the
 #            module's own doc config (moose/modules/<m>/doc).
-#   --base   merge-base ref for the diff (default: devel).
+#   --base   merge-base ref for the diff (default: devel). In an epic worktree
+#            (specs/epic.md exists) the caller passes the output of
+#            `stack base`, so the diff is one slice. A base that is not a
+#            mainline branch must be an ancestor of HEAD; otherwise exit 2.
 #   --core   skip the docs gate (reported as SKIPPED).
 #
 # Environment:
@@ -146,6 +149,17 @@ run_in() {
 collect_diff() {
   git -C "$REPO_DIR" rev-parse --verify --quiet "$BASE^{commit}" >/dev/null \
     || { echo "gates.sh: base ref '$BASE' not found in $REPO_DIR" >&2; exit 2; }
+  # A mainline branch keeps the merge-base rule. Any other base is a slice ref
+  # or a commit from `stack base`. When such a base is not an ancestor of HEAD
+  # (a rebase left the slice ref behind), the merge base falls back to the fork
+  # point and the diff silently grows to every earlier slice. Refuse instead.
+  case "$BASE" in
+    devel|next|main|master|*/devel|*/next|*/main|*/master) ;;
+    *)
+      git -C "$REPO_DIR" merge-base --is-ancestor "$BASE" HEAD \
+        || { echo "gates.sh: base '$BASE' is not an ancestor of HEAD in $REPO_DIR; the diff would be wrong. In an epic worktree, run 'stack status' and take the base from 'stack base'." >&2; exit 2; }
+      ;;
+  esac
   local mb
   mb="$(git -C "$REPO_DIR" merge-base "$BASE" HEAD)" || exit 2
   # core.quotePath=false keeps non-ASCII path bytes literal instead of octal

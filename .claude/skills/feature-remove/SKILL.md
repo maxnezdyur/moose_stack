@@ -1,6 +1,6 @@
 ---
 name: feature-remove
-description: Safely removes a moose_stack feature workspace under ~/projects/moose-worktrees/<feature>. Probes the meta-repo and the moose, blackbear, isopod worktrees for uncommitted changes, untracked files, commits on no remote, and a live session or held lease, refuses with a report on any hit, and otherwise hands off to `factory teardown`. Use for "/feature-remove [<feature>]", "remove this worktree", "delete the feature workspace". Manual invoke only.
+description: Safely removes a moose_stack feature workspace under ~/projects/moose-worktrees/<feature>. Probes the meta-repo and the moose, blackbear, isopod worktrees for uncommitted changes, untracked files, commits on no remote, and a live session or held lease, refuses with a report on any hit, and otherwise hands off to `factory teardown`. In an epic worktree it judges each slice ref in place of the never-pushed epic branch. Use for "/feature-remove [<feature>]", "remove this worktree", "delete the feature workspace". Manual invoke only.
 disable-model-invocation: true
 argument-hint: "[<feature>]"
 effort: low
@@ -15,7 +15,7 @@ allowed-tools:
 
 # /feature-remove
 
-Proves that no work is lost, then hands off to `factory teardown`. This skill deletes nothing itself. It runs no `git worktree remove`, no `git branch -D`, no `rm`, and never passes `--force` to teardown. Teardown already enforces the teardown gate, open PRs, a live session, a held lease, dirty trees and never-pushed branches (`factory/tool/ext_teardown.py`); this skill adds the checks teardown does not make (untracked files by name, commits on no remote even when the branch tracks one) and stops before teardown ever sees `--force`.
+Proves that no work is lost, then hands off to `factory teardown`. This skill deletes nothing itself, with one exception for a finished epic ("An epic worktree"). It runs no `git worktree remove`, no `git branch -D`, no `rm`, and never passes `--force` to teardown. Teardown already enforces the teardown gate, open PRs, a live session, a held lease, dirty trees and never-pushed branches (`factory/tool/ext_teardown.py`); this skill adds the checks teardown does not make (untracked files by name, commits on no remote even when the branch tracks one) and stops before teardown ever sees `--force`.
 
 ## Feature and paths
 
@@ -34,6 +34,62 @@ Run every probe on all four checkouts before you report anything.
    test -d $W/.factory-lease && cat $W/.factory-lease/lease.json
    ```
    A `session:` value other than `none` blocks. A lease directory blocks; report its `bg_id`, `pid`, `host`, `acquired`.
+
+## An epic worktree
+
+When `$W/specs/epic.md` exists, `$W/moose` holds a chain of slices (`/moose-epic`). `<epic>` is
+the feature name. These rules change the probes and the hand-off for `$W/moose`. The other three
+checkouts follow the sections above.
+
+**The branch `<epic>` is never pushed, by design.** Do not report it as unpushed, and never give
+`git push -u origin <feature>` as the command for `$W/moose`. Judge each slice in place of the
+branch. List the slice refs:
+
+```bash
+git -C $W/moose for-each-ref --format='%(refname:short) %(objectname)' 'refs/heads/epic/<epic>/s*'
+```
+
+After the fetch of probe 3, a slice is safe when one of these is true:
+
+- It is merged: `git -C $W/moose merge-base --is-ancestor epic/<epic>/s<n> upstream/next` exits 0.
+- It equals its fork branch: `git -C $W/moose rev-parse origin/epic/<epic>/s<n>` prints the same
+  commit as the local ref.
+
+A slice that is neither blocks. The command that clears it is the stack script's push; give it
+and do not run it: `<meta_repo>/scripts/stack -C $W/moose push`, where `<meta_repo>` is the
+`meta_repo` key of `~/.config/moose-factory/config.toml` and `~/projects/moose_stack` when the
+key is absent. Probe 3 still runs on `$W/moose`: a commit that it prints is work above the top
+slice or a commit that no fork branch holds, and it blocks.
+
+**The plan and the slice records.** `specs/` is not tracked. The board copies `specs/epic.md` and
+`specs/slices/` into `~/projects/moose-factory/Artifacts/<epic>/` on each run, and teardown
+refuses when a file has no copy. Tell the user to run
+`~/projects/moose_stack/factory/factory board` before the teardown.
+
+**The slice refs and the stack records.** Teardown removes the branch `<epic>`. It leaves the
+slice refs and the records of the stack script in the shared `moose` repository. List them in the
+report:
+
+```bash
+git -C ~/projects/moose_stack/moose for-each-ref --format='%(refname)' 'refs/heads/epic/<epic>/' 'refs/stack/<epic>/'
+```
+
+Delete them only when every slice is merged, and only after the user confirms with
+`AskUserQuestion`. After the teardown `$W` is gone, so test each slice from the shared repository:
+`git -C ~/projects/moose_stack/moose merge-base --is-ancestor <ref> upstream/next`. A feature
+whose `$W` is gone is an epic when the list above prints a ref. When a slice is not merged, leave each ref in place and say that the refs
+stay until the epic is finished: an open pull request still needs its slice ref for a fix. This
+is the one deletion that this skill makes. Run it after the user has run the teardown, because a
+slice ref that a worktree still needs must not go first:
+
+```bash
+git -C ~/projects/moose_stack/moose for-each-ref --format='delete %(refname)' 'refs/heads/epic/<epic>/' 'refs/stack/<epic>/' \
+  | git -C ~/projects/moose_stack/moose update-ref --stdin
+git -C ~/projects/moose_stack/moose config --remove-section stack.<epic>
+```
+
+The fork branches `epic/<epic>/s<n>` of merged pull requests stay on the fork. Say that the user
+can delete them in the GitHub user interface.
 
 ## Decide
 

@@ -34,6 +34,41 @@ and stop, because two builds in one worktree fight over `specs/blueprint.md`, on
 index (a lease whose owner process is gone is reported as stale, never stolen; the user clears it with
 `~/projects/moose_stack/factory/factory release <feature>`).
 
+## Diff base
+
+`<diff_base>` is the ref that every gate, the docs check, the before proofs and the review diff
+against. "The diff" in this skill is the working tree against the merge base of `<diff_base>` and
+HEAD, plus the untracked files.
+
+- In an ordinary worktree, `<diff_base>` is `devel`.
+- In an epic worktree (`<meta-root>/specs/epic.md` exists), a build is one slice of a chain, and
+  the branch holds every earlier slice. A diff against `devel` would gate and review those slices
+  again. Take the base from the stack script, one time, before anything else runs:
+
+  ```bash
+  cfg="${MOOSE_FACTORY_CONFIG:-$HOME/.config/moose-factory/config.toml}"
+  meta_repo="$(sed -n -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*meta_repo[[:space:]]*=[[:space:]]*//p' "$cfg" 2>/dev/null | head -n 1 | tr -d '"')"
+  meta_repo="${meta_repo:-$HOME/projects/moose_stack}"; meta_repo="${meta_repo/#\~/$HOME}"
+  STACK="$meta_repo/scripts/stack"
+  "$STACK" -C <meta-root>/<scope> base
+  ```
+
+  Shell variables do not persist between Bash calls, so keep the resolver lines and the call in
+  one Bash call.
+
+  The line that it prints is `<diff_base>` for the whole run. Exit 1 is a refusal: print the
+  message and stop, because a wrong base gives a wrong diff with no error. Each script below also
+  refuses, with exit 2, a base that is not a mainline branch and is not an ancestor of HEAD.
+
+In an epic worktree, refuse also when the blueprint has a `slice:` key and that id is not the
+first row of `## Slices` in `specs/epic.md` with no ref
+(`git -C <meta-root>/<scope> rev-parse --verify --quiet refs/heads/epic/<epic>/<id>` prints nothing):
+that blueprint is for a slice that is shipped, so run `/moose-epic next`. Never commit, rebase or
+stash to prepare the tree; `/moose-epic` and the stack script own those steps. Write no newsletter
+entry in an epic worktree, and give that rule to the loop and to the docs-writer: a slice carries
+none while it is sealed or draft, and `/moose-epic fix` adds it before the user marks the pull
+request ready.
+
 ## Read the blueprint
 
 Read `blueprint.md` whole (format: `<meta-root>/.claude/skills/moose-blueprint/references/blueprint-format.md`).
@@ -59,7 +94,8 @@ it at the start of every run, since the list grows.
 ## Execution
 
 Caps: `impl_iters` 5 with `--core`, else 10; `no_progress` 2. `run_label` is the worktree directory name.
-Spawn one `moose-feature-loop` (Agent, background) with the blueprint path, `caps`, and `run_label`; set the
+Spawn one `moose-feature-loop` (Agent, background) with the blueprint path, `caps`, `run_label`, and
+`diff_base: <diff_base>`; set the
 frontmatter `status:` to `building`; tell the user the goal and the criteria in a few lines, then let it run.
 The loop posts a one-line SendMessage at each round boundary: on each one edit the matching unit's `"status"`
 in the fenced JSON (`idle`, `running`, `done`, `failed`), and edit the `gates` entries from your own gate runs.
@@ -67,7 +103,7 @@ Edit nothing else in the file; the human's view is `blueprint.html`, packed from
 the end and set the frontmatter `status:` to `built` on success.
 
 On `GOAL_MET`, run Gate B: `bash <meta-root>/.claude/skills/moose-build/scripts/gates.sh <repo> all --base
-devel [--core]`, in the background with Monitor (the SQA check takes minutes). Pass `--core` when the run is
+<diff_base> [--core]`, in the background with Monitor (the SQA check takes minutes). Pass `--core` when the run is
 `--core` or when the docs-writer will run (its SMOKE line is then B6's evidence). Read the JSON lines, one per
 gate, `{"gate":"sqa|ascii|docs","status":"PASS|FAIL|BLOCKED|SKIPPED","hits":[...],"hint":"..."}`, and the
 final `{"gate":"all","status":...}`. B3, the reuse and out-of-scope audit, is your own Read and Grep pass over
@@ -75,7 +111,7 @@ the diff against `reuse_decisions` and `out_of_scope`. A BLOCKED gate is surface
 
 ## Repair
 
-Never route fixes yourself. Wake the loop with SendMessage in repair mode: the blueprint path, `caps`, `repair: true`,
+Never route fixes yourself. Wake the loop with SendMessage in repair mode: the blueprint path, `caps`, `diff_base`, `repair: true`,
 the ledger state (criteria met, with their evidence), and the failure evidence (the gate hits or the B3
 finding, with the owning unit). One repair pass per failure; on `GOAL_MET` re-run only the failed check.
 
@@ -111,8 +147,8 @@ criterion, cap and refusal stays as written. A blueprint approved by auto mode i
 
 ## Docs (DG; skipped by `--core`)
 
-Docs on (`Needed: yes` in the doc plan): spawn `moose-docs-writer` with the scope (`<repo>`), base branch
-`devel`, the public surface (the objects and syntax the implementer's FILES register), and the doc paths
+Docs on (`Needed: yes` in the doc plan): spawn `moose-docs-writer` with the scope (`<repo>`), base
+`<diff_base>`, the public surface (the objects and syntax the implementer's FILES register), and the doc paths
 (the doc plan's pages and the work plan's `doc` unit); it authors the pages and runs the `docs.sh` smoke itself. `DOCS_GREEN`:
 report. `NEEDS_CPP_CHANGE`: one hop only, a one-shot `moose-implementer` for the named change, a one-shot
 `moose-test-runner` on the registered tests, then wake the writer. `DONE_WITH_CONCERNS`: `AskUserQuestion` (under `--auto`: stop, see "Auto mode"):
@@ -121,10 +157,10 @@ with its QUESTION, kind `doc`, the `<repo>` directories as scope and at most 8 f
 writer with the MATCHES. `BLOCKED`: surface. ASCII-gate hits in `.md` files
 (from the loop's payload or Gate B) go to the writer too; with docs off they are surfaced.
 
-Docs off with no pages authored: Gate B's `docs` line (`docs.sh <repo> smoke --diff devel`) is the check,
+Docs off with no pages authored: Gate B's `docs` line (`docs.sh <repo> smoke --diff <diff_base>`) is the check,
 because a C++ rename can still break `!syntax` in untouched pages. A cpp-side FAIL (missing or renamed
 registered syntax) gets one implementer hop and a `moose-test-runner` re-run of
-`bash <meta-root>/.claude/skills/moose-docs/scripts/docs.sh <repo> smoke --diff devel`; a doc-side FAIL is
+`bash <meta-root>/.claude/skills/moose-docs/scripts/docs.sh <repo> smoke --diff <diff_base>`; a doc-side FAIL is
 surfaced. The smoke gates the build, not doc quality.
 
 ## Showcase
@@ -151,7 +187,7 @@ is absent.
 
 **Before, at the start of the run.** Capture every `-before` text proof right after "Read the blueprint" and
 before the loop starts, while the checkout is still at the base ref. Confirm that `<scope>` has no diff from
-its merge base with `devel`; when it has one, record `PROOF: before skipped (the diff exists)` for each
+its merge base with `<diff_base>`; when it has one, record `PROOF: before skipped (the diff exists)` for each
 `-before` file. Write the probe script the bullet names to `specs/proof/`, run it through
 `bash <meta-root>/scripts/conda-run.sh -C <scope> -- bash <probe>`, and save its output as
 `<name>-before.txt` or `.md`. The probe needs a built binary: when it is missing or older than the sources,
@@ -202,7 +238,7 @@ run no proof capture and no B7; Gate B in full is the check, as "Clean-context r
 ## Clean-context review
 
 When every gate is green and the claim round has met C7 (or was skipped), spawn one fresh `moose-pr-reviewer` (foreground) with `mode: local`,
-`repo_root: <worktree-root>/<scope>`, `base_branch: devel`, `label: <run_label>`. It has seen none of this
+`repo_root: <worktree-root>/<scope>`, `base_branch: <diff_base>`, `label: <run_label>`. It has seen none of this
 build, which is the point. Its summary block and `/tmp/moose-review-<run_label>.md` go into the final report
 verbatim, and zero findings is a valid result. Copy that findings file to `<meta-root>/specs/review-<run_label>.md`
 the moment it exists, since `/tmp` is purged at boot and the worktree copy is what the board rescues and links.

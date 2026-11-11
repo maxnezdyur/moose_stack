@@ -53,7 +53,8 @@ Run these steps for one task at a time. A failed step skips that task, never the
 
 1. `Skill(new-feature)` with `<name>`. Its preflight refuses a branch that exists on any of the
    four repositories; that is a failed step, and the reason goes in the report. A worktree that
-   exists already is skipped with "exists": Max runs `/moose-build --auto` in it by hand.
+   exists already is skipped with "exists": Max runs `/moose-build --auto` in it by hand. A
+   worktree that holds `specs/epic.md` is skipped with "epic": see "Rules".
 2. `$FACTORY board`, so the card exists. `new-feature` runs it too; a second run is harmless.
 3. Write the idea to `~/projects/moose-worktrees/<name>/specs/auto-idea.md`. The session reads it
    there, so the idea needs no shell quoting.
@@ -92,3 +93,7 @@ fresh `/moose-build`.
 - Never pass `--force` to `factory start` or anything else.
 - Never run `/moose-ship`. Shipping an auto build is Max's decision, made after he reads the
   blueprint the `auto` flag points at.
+- Never start a session in an epic worktree, and never run `/moose-epic`. A worktree is an epic
+  worktree when `~/projects/moose-worktrees/<name>/specs/epic.md` exists. An epic needs a
+  decision at each slice boundary (the seal, the push, the next row), and this skill has no human
+  to make it. Refuse the task with the reason "epic: run /moose-epic by hand".
