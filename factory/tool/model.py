@@ -231,6 +231,18 @@ class NextAction:
         return dataclasses.asdict(self)
 
 
+def activity_key(card: Any) -> Tuple[int, float, str]:
+    """Rank inside every board group: the newest activity first, then the id.
+
+    A card with no stamp goes last in its group, in id order. The key reads
+    probe stamps only, never the clock.
+    """
+    at = getattr(card, "activity_at", None)
+    if isinstance(at, (int, float)) and not isinstance(at, bool) and at > 0:
+        return (0, -float(at), card.id)
+    return (1, 0.0, card.id)
+
+
 @dataclass
 class FeatureCard:
     """One row on the board. Derived every run, stored nowhere."""
@@ -257,6 +269,9 @@ class FeatureCard:
     #: Per-card scratch space for the extensions. Core reads nothing from it.
     #: ``tool/ext_handoff.py`` publishes ``handoff_next`` and its four siblings here.
     extra: Dict[str, Any] = field(default_factory=dict)
+    #: The newest probe stamp of this card, epoch seconds, set by ``derive``.
+    #: None when nothing is datable. The sort key inside every board group.
+    activity_at: Optional[float] = None
 
     # ---- conveniences used by render, derive and the extensions ----------
 
@@ -316,6 +331,9 @@ class FeatureCard:
             best = slot if best is None else min(best, slot)
         return (floor if best is None else best, self.id)
 
+    def activity_key(self) -> Tuple[int, float, str]:
+        return activity_key(self)
+
     def to_dict(self) -> Dict[str, Any]:
         d = dataclasses.asdict(self)
         d["next_action"] = self.next_action.to_dict()
@@ -344,6 +362,8 @@ class BoardCard:
     short: str = ""
     #: The owning extension's own record. Renderers that know ``kind`` read it.
     data: Any = None
+    #: The newest probe stamp, epoch seconds, set by the owning extension.
+    activity_at: Optional[float] = None
 
     #: Needs-you rank for an extension card: beside a pending gate, because a
     #: tick or a budget is exactly that, a grant only Max can give.
@@ -362,6 +382,9 @@ class BoardCard:
         except ValueError:
             slot = 2 * len(NEEDS_YOU_PRIORITY)
         return (slot, self.id)
+
+    def activity_key(self) -> Tuple[int, float, str]:
+        return activity_key(self)
 
     def to_dict(self) -> Dict[str, Any]:
         return {

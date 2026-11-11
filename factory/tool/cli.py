@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import config, derive, gates as gates_mod, probe, render, snapshot, timeline as tl
-from .model import GATES, POSTURE, Ctx
+from .model import GATES, POSTURE, Ctx, activity_key
 
 OK, LOOK, REFUSED, MISSING = 0, 1, 2, 3
 
@@ -237,7 +237,7 @@ def run_board(args: Any, cfg: config.Config) -> int:
         )
     ny = sorted(
         list(ctx.by_posture("needs-you")) + [x for x in extra if x.posture == "needs-you"],
-        key=lambda c: c.priority_key(),
+        key=activity_key,
     )
     for card in ny[: cfg.needs_you_cap]:
         print("  %-22s %-12s %s" % (card.id, card.next_action.verb, card.next_action.why))

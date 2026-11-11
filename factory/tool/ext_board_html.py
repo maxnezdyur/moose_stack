@@ -50,9 +50,8 @@ Five rules, the first three inherited from the rest of the package:
 The path comes from ``config.Config.board_html``, with a fallback to
 ``<vault>/Board.html`` for the test doubles that pass a bare namespace.
 
-The card order is exactly ``Home.md``'s: the needs-you column is sorted by
-``FeatureCard.priority_key`` (the flag precedence), and every other column by
-id. The cap that turns Home's sixth needs-you row into one "Backlog" line does
+The card order is exactly ``Home.md``'s: every column is sorted by
+``model.activity_key``, the newest probe stamp first and the id on a tie. The cap that turns Home's sixth needs-you row into one "Backlog" line does
 not apply here: a column scrolls, a table does not.
 """
 
@@ -66,7 +65,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from . import config, ext_gallery, probe, render, snapshot
-from .model import DONE, NEEDS_YOU, PARKED, POSTURE, READY, RUNNING, WAITING
+from .model import DONE, NEEDS_YOU, PARKED, POSTURE, READY, RUNNING, WAITING, activity_key
 
 BOARD_NAME = "Board.html"
 
@@ -794,27 +793,14 @@ def column_cards(posture: str, ctx: Any) -> List[Tuple[str, Any]]:
     """``[("feature", card), ("campaign", item)]`` in Home.md's order.
 
     The kind travels with the row, so nothing downstream has to guess which
-    dataclass it holds. The needs-you column merges both kinds by
-    ``priority_key``, exactly like Home.md's table; every other column is
-    features by id, then the extension cards by id.
+    dataclass it holds. Every column merges both kinds by ``activity_key``,
+    exactly like Home.md: the newest activity first, the id on a tie, and a
+    card with no stamp last.
     """
     rows: List[Tuple[str, Any]] = [("feature", c) for c in ctx.cards if c.posture == posture]
     extra = [x for x in ext_cards(ctx) if x.posture == posture]
-    if posture == NEEDS_YOU:
-        rows += [(str(getattr(x, "kind", "") or "card"), x) for x in extra]
-        try:
-            rows.sort(key=lambda r: r[1].priority_key())
-        except Exception as exc:
-            # The flag precedence is the only sort on this page that reads a
-            # card's contents, so it is the only one an odd flag can break. Id
-            # order is wrong but readable; not writing the page at all is not.
-            ctx.log("Board.html: the needs-you order fell back to id order: %s" % (exc,))
-            rows.sort(key=lambda r: r[1].id)
-    else:
-        rows.sort(key=lambda r: r[1].id)
-        rows += [
-            (str(getattr(x, "kind", "") or "card"), x) for x in sorted(extra, key=lambda x: x.id)
-        ]
+    rows += [(str(getattr(x, "kind", "") or "card"), x) for x in extra]
+    rows.sort(key=lambda r: activity_key(r[1]))
     return rows
 
 

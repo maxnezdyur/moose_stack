@@ -480,6 +480,8 @@ def raw_sessions(cfg: config.Config) -> Tuple[List[Dict[str, Any]], bool]:
             "status": data.get("status"),
             "jobId": data.get("jobId"),
             "startedAt": data.get("startedAt"),
+            "updatedAt": data.get("updatedAt"),
+            "statusUpdatedAt": data.get("statusUpdatedAt"),
         }
         job = Path(cfg.claude_home) / "jobs" / str(
             row.get("jobId") or str(row.get("sessionId") or "").split("-")[0]

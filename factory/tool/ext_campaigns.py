@@ -952,8 +952,40 @@ def decide(c: Campaign, cfg: Any, now: str) -> Campaign:
         note_folder=NOTE_FOLDER,
         short=short,
         data=c,
+        activity_at=activity_at(c),
     )
     return c
+
+
+def activity_at(c: Campaign) -> Optional[float]:
+    """The newest probe stamp of a campaign, epoch seconds. Never the clock.
+
+    The mtimes of ``campaign.md``, ``LEDGER.md``, ``FINDINGS.md`` and each run
+    manifest, and each live session's ``updatedAt`` and ``statusUpdatedAt``.
+    None when nothing is datable.
+    """
+    stamps: List[float] = []
+    if c.dir:
+        base = Path(c.dir)
+        paths = [base / CAMPAIGN_MD, base / LEDGER_MD, base / FINDINGS_MD]
+        runs_dir = base / RUNS_REL
+        try:
+            if runs_dir.is_dir():
+                paths += [Path(e.path) / MANIFEST for e in os.scandir(str(runs_dir))]
+        except Exception:
+            pass
+        for p in paths:
+            try:
+                stamps.append(p.stat().st_mtime)
+            except Exception:
+                continue
+    for row in c.sessions:
+        for key in ("updatedAt", "statusUpdatedAt"):
+            v = (row or {}).get(key)
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
+                stamps.append(float(v) / 1000.0)
+    got = [s for s in stamps if s > 0]
+    return max(got) if got else None
 
 
 # --------------------------------------------------------------------------

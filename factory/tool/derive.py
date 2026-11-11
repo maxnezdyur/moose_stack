@@ -1042,6 +1042,7 @@ def derive_card(
         card.blueprint = obs.get("blueprint")
         card.build = obs.get("build")
         card.session = obs.get("session")
+        card.activity_at = activity_at(obs)
         card.epic = obs.get("epic") or None
         card.gates = dict(gate_records)
 
@@ -1104,6 +1105,38 @@ def backlog_reason(card: FeatureCard, cfg: config.Config) -> str:
     if not reasons:
         reasons = [f for f in card.flags[:2]] or [card.lane]
     return ", ".join(reasons)
+
+
+def _epoch_s(value: Any) -> Optional[float]:
+    """A session stamp in epoch ms, as epoch seconds. None when it is not a number."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        return None
+    return float(value) / 1000.0
+
+
+def activity_at(obs: Dict[str, Any]) -> Optional[float]:
+    """The newest probe stamp of a card, epoch seconds. None when nothing is datable.
+
+    The inputs: each live session's ``updatedAt`` and ``statusUpdatedAt``, the
+    blueprint and build record mtimes, the pulse mtime, each PR's
+    ``updatedAt``, and the HEAD commit time of each worktree repo. FETCH_HEAD
+    is left out: a fetch is not work on the card. The clock is never read.
+    """
+    stamps: List[Optional[float]] = [obs.get("pulse")]
+    for key in ("blueprint", "build"):
+        rec = obs.get(key) or {}
+        stamps.append(rec.get("mtime"))
+    sessions = list(obs.get("sessions") or [])
+    if obs.get("session") and obs["session"] not in sessions:
+        sessions.append(obs["session"])
+    for row in sessions:
+        stamps.append(_epoch_s((row or {}).get("updatedAt")))
+        stamps.append(_epoch_s((row or {}).get("statusUpdatedAt")))
+    for pr in obs.get("prs") or []:
+        stamps.append(ts_of(pr.get("updatedAt") or ""))
+    for st in (obs.get("repos") or {}).values():
+        stamps.append((st or {}).get("head_at"))
+    return _newest(stamps)
 
 
 def silent_days(obs: Dict[str, Any], now_ts: float) -> Optional[int]:

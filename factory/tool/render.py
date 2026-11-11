@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import config, derive, probe
 from .model import (
+    activity_key,
     DONE,
     GATES,
     GATE_BLURB,
@@ -832,7 +833,7 @@ def compose_home(ctx: Any) -> str:
     out.append("")
 
     # --- needs you, capped and ordered ------------------------------------
-    ny = sorted(groups[NEEDS_YOU], key=lambda c: c.priority_key())
+    ny = sorted(groups[NEEDS_YOU], key=activity_key)
     shown, rest = ny[: cfg.needs_you_cap], ny[cfg.needs_you_cap:]
     out.append(
         "## Needs you (%s)"
@@ -857,7 +858,7 @@ def compose_home(ctx: Any) -> str:
     out.append("## Running (%d)" % (len(groups[RUNNING]),))
     out.append("")
     if groups[RUNNING]:
-        out.extend(_running_rows(sorted(groups[RUNNING], key=lambda c: c.id), ctx.now))
+        out.extend(_running_rows(sorted(groups[RUNNING], key=activity_key), ctx.now))
     else:
         out.append("_No live session in any worktree._")
     out.append("")
@@ -865,7 +866,7 @@ def compose_home(ctx: Any) -> str:
     out.append("## Ready (%d)" % (len(groups[READY]),))
     out.append("")
     if groups[READY]:
-        for c in sorted(groups[READY], key=lambda c: c.id):
+        for c in sorted(groups[READY], key=activity_key):
             out.append(
                 "- [[%s]] - %s - `%s`" % (c.id, cell(c.next_action.why), c.next_action.command)
             )
@@ -877,7 +878,7 @@ def compose_home(ctx: Any) -> str:
         out.append("## %s (%d)" % (posture.capitalize(), len(groups[posture])))
         out.append("")
         if groups[posture]:
-            for c in sorted(groups[posture], key=lambda c: c.id):
+            for c in sorted(groups[posture], key=activity_key):
                 out.append("- [[%s]] - %s" % (c.id, cell(c.next_action.why)))
         else:
             out.append(empty)
@@ -886,7 +887,7 @@ def compose_home(ctx: Any) -> str:
     if groups[DONE]:
         out.append("## Done (%d)" % (len(groups[DONE]),))
         out.append("")
-        for c in sorted(groups[DONE], key=lambda c: c.id):
+        for c in sorted(groups[DONE], key=activity_key):
             out.append("- [[%s]] - %s" % (c.id, cell(c.next_action.why)))
         out.append("")
 

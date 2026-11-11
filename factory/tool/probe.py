@@ -289,6 +289,12 @@ def repo_state(path: Path, branch: Optional[str], upstream: str) -> Dict[str, An
     else:
         st["stale"].append("head")
 
+    # The HEAD commit time, epoch seconds: one input of the card's activity
+    # stamp, the sort key inside every board group.
+    out, ok = run(["git", "-C", str(path), "log", "-1", "--format=%ct"])
+    if ok and out.strip().isdigit():
+        st["head_at"] = int(out.strip())
+
     out, ok = run(["git", "-C", str(path), "rev-list", "--count", upstream + "..HEAD"])
     if ok and _AHEAD_RE.match(out.strip()):
         st["ahead"] = int(out.strip())
@@ -1074,6 +1080,8 @@ def sessions(cfg: config.Config) -> Probe:
             "waitingFor": data.get("waitingFor"),
             "jobId": data.get("jobId"),
             "startedAt": data.get("startedAt"),
+            "updatedAt": data.get("updatedAt"),
+            "statusUpdatedAt": data.get("statusUpdatedAt"),
             "procStart": data.get("procStart"),
         }
         short = (row.get("sessionId") or "").split("-")[0]

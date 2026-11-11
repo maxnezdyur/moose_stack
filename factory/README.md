@@ -340,14 +340,17 @@ A gate is **due** only when the work it gates exists, and only in its own lane w
 for finished work never masks the gate for the work in flight. A generated
 `specs/blueprint.html` is a view, not a plan: there is nothing in it to approve.
 
-Needs-you is capped at five rows. The rest become one `Backlog, triage once` line. The order is
-`conflicting`, `ci-red`, `changes-requested`, `pr-closed-unmerged`, `review-findings`,
-`blocked`, `branch-mismatch`, `foreign-worktree`, `partial-ship`, `stalled`, a due gate,
-`invalid-blueprint`, `marker-missing`.
+Every group sorts by the newest activity stamp, newest first, with the card id on a tie. A card
+with no stamp goes last in its group, in id order. The stamp is the newest of these probe values:
+each live session's `updatedAt` and `statusUpdatedAt` (epoch ms, read as seconds), the blueprint and
+build record mtimes, the pulse mtime, each PR's `updatedAt`, and the HEAD commit time of each
+worktree repo. The FETCH_HEAD mtime is left out, because a fetch is not work on the card. A
+campaign's stamp is the newest mtime of its `campaign.md`, `LEDGER.md`, `FINDINGS.md` and run
+manifests, and of its sessions. The key is `model.activity_key`. `Home.md`, `Board.html` and
+`factory board` all use it. The key reads probe stamps only, never the clock.
 
-One qualification: `conflicting` and `ci-red` on a card with no checkout rank last. The facts
-are true, and you cannot fix a CIVET context in a worktree you do not have, so a red
-pull-request-only card never displaces a branch mismatch or a review from the table.
+Needs-you is capped at five rows after the sort. The rest become one `Backlog, triage once` line.
+The flags still show on each row, but they no longer set the order.
 
 ### Gates: four monotonic attributed records
 
@@ -775,9 +778,10 @@ clock, never an age, never a pid. It escapes every string through one function, 
 pull-request title is arbitrary text. It allows three URL schemes only: `obsidian://`, `file://` and
 `https://github.com/`; any other scheme renders as plain text.
 
-The six columns are `model.POSTURE` in order, so the page and `Home.md` can never disagree. The
-needs-you column is sorted by `FeatureCard.priority_key` and is not capped: a column scrolls, a table
-does not. Every other column sorts by id. A campaign is a full card in the column its posture maps
+The six columns are `model.POSTURE` in order, so the page and `Home.md` can never disagree. Every
+column sorts by `model.activity_key`, the same key as `Home.md`: the newest activity stamp first, the
+id on a tie, and a card with no stamp last. The needs-you column is not capped: a column scrolls, a
+table does not. A campaign is a full card in the column its posture maps
 to: the question, the budget line, the verdict counts, the last finding, the proposals as text, the
 next move and the gallery thumbnails. The done column is compact.
 
@@ -798,8 +802,7 @@ Three more rules, each one a defect that was live.
   that has the first uses it and a machine offline loses nothing. Every other generated file in the
   vault is self-contained; the page Max opens on a plane is not the exception.
 - **Per card, not per page.** Every row is rendered inside its own `try`, and a row that raises
-  becomes a placeholder card that names itself plus one log line. The needs-you sort falls back to id
-  order the same way. A note degrades per card in `render.sync`, and before this the page was the one
+  becomes a placeholder card that names itself plus one log line. A note degrades per card in `render.sync`, and before this the page was the one
   all-or-nothing output: one odd-typed probe field on one card meant the whole kanban was not
   rewritten and the stale page stayed on disk unannounced. The hostile fields are coerced with `str`
   rather than trusted: a `sessionId`, a CI rollup and a flag all come from schemas this package does
