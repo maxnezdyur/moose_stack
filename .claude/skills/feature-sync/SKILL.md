@@ -90,7 +90,7 @@ The meta-repo, `blackbear` and `isopod` checkouts follow the steps above without
 Say this whenever a submodule was rebased, or the meta-repo is behind `origin/main`:
 
 - A submodule rebase rewrites its SHAs. Every `Bump <sub> to <sha>` commit on the meta-repo branch now points at a pre-rebase commit. Re-bump after the rebase: `git -C $W add <sub> && git -C $W commit -m "Bump <sub> to <short sha>"`.
-- A submodule branch already on `origin` needs `git -C <c> push --force-with-lease origin <feature>`. An open PR on `idaholab/<sub>` then shows the rewritten history. The user runs that push.
+- A submodule branch already on `origin` needs `git -C <c> push --force-with-lease origin <feature>`. An open PR on `idaholab/<sub>` then shows the rewritten history. The user runs that push. When that PR is in review (marked ready, or a reviewer has commented), say so before the rebase: the reviewers asked for no force-push during review, so rebase only for a conflict with `next`, and tell the reviewer that the push is a rebase only.
 - A meta-repo rebase onto `origin/main` can conflict on a gitlink when `main` bumped the same submodule. The feature's pointer is the one to keep (`git -C $W checkout --theirs <sub>`, then `git -C $W add <sub>`), checked against the submodule `HEAD`.
 - A `moose` rebase onto a newer `devel` invalidates the hydrated combined build. Run `/moose-build` again before you trust a test result.
 - `/new-feature` requires every gitlink on `main` to equal each submodule's `devel`; a stale `devel` in `~/projects/moose_stack/<sub>` is a separate fix and not this skill's job.

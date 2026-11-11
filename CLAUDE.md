@@ -18,7 +18,9 @@ Meta-repo that pins four forks as submodules: `moose/`, `blackbear/`, `isopod/`,
 - `gh pr create --repo idaholab/<app> --base next --head maxnezdyur:<feature> --draft`
 - PR bodies and review replies are short and use plain ASCII punctuation, no em dashes. Draft a PR comment for me and post it only when I say so.
 - An issue number is confirmed with `gh issue view <N> --repo idaholab/<app> --json title,state` before it goes into a spec, a commit, or a PR; a remembered number is often wrong. A new issue is short, follows the repo template, and does not describe the solution or the tests.
-- A fix to a PR that is still open (a CIVET failure, a review comment, a loosened tolerance) is amended into its commit and pushed with `--force-with-lease`; no fix-up commits, and no code comment explaining the fix.
+- A fix to an open PR (a CIVET failure, a review comment, a loosened tolerance) takes one of two forms, and neither carries a code comment explaining the fix. While the PR is a draft and no reviewer has commented, amend the fix into its commit and push with `--force-with-lease`. Once the PR is in review (it is marked ready, or a reviewer has commented), add the fix as a new commit and push without force: the reviewers asked for no force-push during review, so that they can see what changed. Squash only when a maintainer asks.
+- For each review conversation a fix answers, draft a one- or two-sentence reply that says what changed and in which commit. I post it.
+- Never rebase or force-push a PR in review without asking me first. A conflict with `next` is the one reason to do it; say in the PR that the push is a rebase only.
 - In an epic worktree (`specs/epic.md` exists; a chain of dependent PRs, see `/moose-epic`), a PR fix goes through `scripts/stack fix`, which `/moose-epic fix <id>` runs, never through an amend. There, never run `git rebase`, `git commit --amend`, `git stash`, a forced `git push`, or `gh pr ready` by hand. A slice in review takes the fix as a new commit.
 - `/moose-auto` does not run an epic.
 

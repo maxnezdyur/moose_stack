@@ -44,7 +44,14 @@ git -C <worktree> commit -m "Bump <sub> to <short sha>"
 
 ## Fix-ups after the PR exists
 
-This section is for an ordinary feature worktree; in an epic worktree, step 10 of "In an epic worktree" replaces it. A change to the PR while it is a draft or under review (a CIVET failure, a review comment, a loosened tolerance) is amended into the existing commit and pushed with `git push --force-with-lease`, never added as a second commit, and carries no code comment explaining the fix; the PR conversation is where that goes. The meta-repo pointer bump is redone the same way. A CIVET failure is triaged with the `civet-ci-failures` skill before any amend: a job that also fails on other authors' PRs is CIVET's environment, not the branch, and gets no code change and no push.
+This section is for an ordinary feature worktree; in an epic worktree, step 10 of "In an epic worktree" replaces it. A change to the PR (a CIVET failure, a review comment, a loosened tolerance) carries no code comment explaining the fix; the PR conversation is where that goes. The state of the PR decides the form:
+
+- **Draft, and no reviewer has commented.** Amend the fix into the existing commit and push with `git push --force-with-lease`. Check both facts first: `gh pr view <N> --repo idaholab/<app> --json isDraft,reviews,comments`.
+- **In review** (marked ready, or a reviewer has commented). Add the fix as a new commit and push with a plain `git push`, never with a force flag. The reviewers asked for no force-push during review, so that they can see what changed. The commit has a conventional subject under 72 characters, a body that ends with `refs #<issue>`, and the Claude trailer. Squash only when a maintainer asks, and then ask the user before the force-push.
+- **Reply drafts.** For each review conversation that a fix answers, draft a reply of one or two sentences: what changed, and the short SHA of the commit. Print the drafts for the user. Post nothing; the user posts them.
+- **Rebase.** Never rebase or force-push a PR in review without asking the user first. A conflict with `next` is the one reason to do it. When the user agrees, draft a PR comment that says the push is a rebase only.
+
+Redo the meta-repo pointer bump after either form. A CIVET failure is triaged with the `civet-ci-failures` skill before any fix: a job that also fails on other authors' PRs is CIVET's environment, not the branch, and gets no code change and no push.
 
 ## In an epic worktree
 

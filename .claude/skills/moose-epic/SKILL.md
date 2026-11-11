@@ -254,9 +254,12 @@ A change to the slice that is built now needs no fix mode: edit the working tree
    for you, and it refuses when a path is neither staged nor parked. So
    `git -C <moose> status --porcelain` must show staged paths only.
 5. Run the fix. The state of the slice decides the form:
-   - Sealed or draft: `"$STACK" -C <moose> fix <id>`. The script squashes the fix into the
-     slice commit.
-   - In review (the user marked the PR ready): write the commit message to
+   - Sealed, or draft with no reviewer comment: `"$STACK" -C <moose> fix <id>`. The script
+     squashes the fix into the slice commit.
+   - A draft that a reviewer has commented on counts as in review. Check with
+     `gh pr view <N> --repo idaholab/moose --json reviews,comments`, and use the next form. The
+     script reads only the draft flag, so the skill makes this choice.
+   - In review (the user marked the PR ready, or a reviewer has commented): write the commit message to
      `/tmp/moose-epic-<epic>-<id>-fix.txt`, then run
      `"$STACK" -C <moose> fix <id> --append -F /tmp/moose-epic-<epic>-<id>-fix.txt`. The script
      adds a commit at the end of the slice, and the push is a fast-forward. The message is a
@@ -274,10 +277,13 @@ A change to the slice that is built now needs no fix mode: edit the working tree
 7. Show the proof that the script prints: for each slice above the fix, whether its content
    changed. A slice whose content changed with no conflict that you resolved is a defect: stop
    and report it.
-8. Record the amendment. Append one line to `## Amendments` of `specs/slices/<id>/blueprint.md`,
+8. Draft the replies. For each review conversation that the fix answers, write one or two
+   sentences: what changed, and the short SHA of the commit. Print the drafts in the report.
+   Post nothing; the user posts them.
+9. Record the amendment. Append one line to `## Amendments` of `specs/slices/<id>/blueprint.md`,
    or of `specs/blueprint.md` when slice `<id>` is not archived yet:
    `- <date>: review fix (<squashed|appended>): <what changed>; asked in #<PR> by <reviewer or CI job>`.
-9. Verify at the top of the stack. Spawn one `moose-test-runner` with the scope of the slice
+10. Verify at the top of the stack. Spawn one `moose-test-runner` with the scope of the slice
    (the `repo` of its blueprint), the build authorization, `--re=` with the test names of slice
    `<id>` (from the test plan of its blueprint) and of each test that the fix changed, and these
    gates:
@@ -292,14 +298,14 @@ A change to the slice that is built now needs no fix mode: edit the working tree
    when the fix changed a `.md` file. The local run tests slice `<id>` together with every slice
    above it and the parked work; CIVET tests the slice alone. When a failure comes only from
    parked work, say so, do not repair it here, and ask the user whether to push.
-10. Ask before the push. Show `"$STACK" -C <moose> push --dry-run`, then ask with
+11. Ask before the push. Show `"$STACK" -C <moose> push --dry-run`, then ask with
     `AskUserQuestion`. On yes, run `"$STACK" -C <moose> push`. The script pushes only the slices
     whose own content changed. A draft above the fix that only moved waits for its own next
     push. Each push starts a full CIVET run on that pull request. The dry run prints
     `(REWRITE)` for a force push, and `(new)` or `(fast-forward)` otherwise. When the push refuses because a rewrite goes to a pull request in review,
     follow "The `--yes` flag" above.
-11. Run `"$STACK" -C <moose> unpark`.
-12. Append one `## Sessions` line to the handoff and run
+12. Run `"$STACK" -C <moose> unpark`.
+13. Append one `## Sessions` line to the handoff and run
     `~/projects/moose_stack/factory/factory board`.
 
 Report: the slice, squashed or appended, the files, the proof lines, the test counts and the gate
@@ -338,7 +344,7 @@ this step.
   commit and `adopt <id>` refuses it. The way out replaces the fork's branch with the local
   slice and rebases the chain, so ask the user first. On yes, run
   `"$STACK" -C <moose> adopt <id> --ours`, then `"$STACK" -C <moose> sync --rebase`, then the
-  push of mode `fix` step 10. The yes to this plan is not a yes to `--yes`: when a step refuses
+  push of mode `fix` step 11. The yes to this plan is not a yes to `--yes`: when a step refuses
   for a pull request in review, follow "The `--yes` flag".
 
 ## The other skills in an epic worktree

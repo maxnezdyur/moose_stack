@@ -81,7 +81,10 @@ Rules:
 
 1. A slice is one commit while it is sealed or draft. A fix is squashed into that commit.
 2. A slice in review takes a fix as a new commit at the end of its range. The push is a
-   fast-forward. Squash only when a maintainer asks.
+   fast-forward. Squash only when a maintainer asks. A draft that a reviewer has commented on
+   counts as in review; the script reads only the draft flag, so `/moose-epic fix` passes
+   `--append` for it. The same rule now applies to an ordinary feature PR (`CLAUDE.md`,
+   `/moose-ship`).
 3. Only you mark a PR ready, in the GitHub user interface. No skill and no script runs
    `gh pr ready`.
 4. Keep at most two PRs open per epic: the lowest unmerged slice and one draft above it. Slices
