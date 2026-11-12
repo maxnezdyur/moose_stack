@@ -171,6 +171,8 @@ Test-only objects live under `<app>/test/src/` and register to `<App>TestApp`, n
 - Per-leaf `requirement` when a parent plus N `detail` children would do; `detail` on a top-level leaf with no parent requirement.
 - Duplicate `requirement` text across specs; re-stating `design`/`issues` on children the `[Tests]` block already covers.
 - Vague, passive `requirement` wording.
+- A C++ class name or an input-file block name in a `requirement`. Write the general term, for example "kernel" in place of `ADScalarKernel`. Keep each behavior that the test checks.
+- A grammar error in a `requirement` that you write or reword. Check each article, each preposition and each word form.
 - `design` pointing at a deleted or renamed `.md`; grep the specs whenever renaming doc pages.
 - Fabricated `input` paths.
 - A `RunException` test cementing a restriction a small code change would remove; fix the code instead of testing the limitation as intended behavior.

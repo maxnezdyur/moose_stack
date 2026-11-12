@@ -264,7 +264,7 @@ blueprint"; one `PROOF:` line per proof file, `PROOF: <file> ok`, `weak (<why>)`
 `PROOF: none (<Why:>)`; the claim round: the claim, each tester's verdict, and the path of `specs/verify/build-<k>.md`; the review summary and findings file, the applied count, and every held finding verbatim with why it is held, so the user decides those before `/moose-ship` and nothing else waits; any CONCERNS carried; a diff attribution audit that
 groups the diff into change classes and traces each to the blueprint's purpose (`moose/AGENTS.md` section 3,
 Surgical Changes), flagging unattributable hunks to drop, split out, or justify in the PR body; a suggested
-commit message; then "run `/moose-ship` when satisfied". Write the same report to
+commit message that carries no test count, no gate result and no review count; then "run `/moose-ship` when satisfied". Write the same report to
 `<meta-root>/.claude/cache/moose-build-<run_label>.json` as
 `{"runId": "<run_label>", "status": "<terminal status>", "report": "<text>"}`; the session-context hook
 shows the newest record after a compaction. The run is interruptible at any point: the loop's SendMessages

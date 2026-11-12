@@ -43,6 +43,23 @@ The canonical standard is `moose/framework/doc/content/sqa/framework_scs.md` (re
 - The message describes the condition the adjacent guard actually tests. Derive it from your own check, not from the sibling class you mirrored.
 - Error messages and class descriptions use the terminology sibling objects use for the same framework concept. `addClassDescription` is one concise sentence naming what the object computes and what distinguishes it from its siblings, with no "Creates a UserObject for..." plumbing. See `moose/framework/doc/content/framework/documenting.md`, section "MooseObject C++ Documentation".
 
+## Comments and doc strings
+
+`moose/AGENTS.md` sections 4 and 9 are the base rules. These rules add what review of our pull requests showed. They apply to code comments, Doxygen comments and parameter doc strings.
+
+- Use the term and the notation that MOOSE source and documentation already use. Replace a word or phrase that reads as machine-drafted with the plain MOOSE wording. Keep a word that names an existing identifier. For example, write "recompute", not "refresh".
+- Describe the code as it is now. Do not narrate edit history. Do not record dated measurements, debugging steps or guesses in a comment. Put them in a tracked file or a plot. Keep a measured value that is the source of a constant or a tolerance.
+- When a sentence gives a reason, state the cause, the consequence and the link between them. Do the same when a stated result does not follow obviously from its condition. This rule does not require a reason on every sentence.
+- Read each sentence literally. Rewrite a sentence whose literal meaning is not the intended meaning. Check the converse that a condition or a restriction implies. Remove a conjunction that states a contrast that does not exist.
+- Check each general claim against every case that can occur in the scope the text sets. A general claim says or implies all, every, always, never or only. When the claim fails in one case, name the condition or the set where it holds. Do not use a frequency word that is stronger than the facts support.
+- Use the term that names the exact object or relation. For example, write that a rank "owns" a node when you mean parallel ownership.
+- Spell out, define or link an abbreviation or a term that a MOOSE developer would need to look up. Keep abbreviations in common MOOSE, libMesh and PETSc use, such as "qp" and "dof". Keep a proper name.
+- After each commit, read again every comment that describes what the commit changed. Correct each statement that the commit made false. Correct a comment that contradicts the setting on its own line.
+- Do not comment on a case that does what the reader expects.
+- Reflow a comment or a doc string after you edit it. Leave no short fragment on its own line when it fits on the line before.
+- Check the grammar of each sentence that you write or reword: each article, each preposition and each word form.
+- Check each list and equation in a comment for a case whose absence makes it wrong. Add the missing case, or state that the list is partial.
+
 ## Syntax migrations
 
 - A claim that the modern Action or Physics syntax cannot reproduce an old setup rests on reading the action's `validParams` and running the converted input (`--check-input` at minimum). Raise genuine gaps in the PR instead of leaving silent exceptions. Model migration guide: `moose/modules/navier_stokes/doc/content/syntax/Modules/NavierStokesFV/index.md`, section "How to transition to the Physics syntax".
