@@ -91,6 +91,18 @@ def file_uri(path: Any) -> str:
     return "file://" + urllib.parse.quote(str(path))
 
 
+def diff_url(cfg: Any, path: Any) -> str:
+    """The side-by-side diff of a worktree in the local sidediff service, or ``""``.
+
+    The service renders the page from git when the link is opened, so the
+    board writes an address and never a diff.
+    """
+    base = str(getattr(cfg, "sidediff_url", "") or "").rstrip("/")
+    if not base or not path:
+        return ""
+    return "%s/w?path=%s" % (base, urllib.parse.quote(str(path), safe="/"))
+
+
 def tilde(path: Any) -> str:
     """A path with ``$HOME`` collapsed back to ``~``. One implementation, in config."""
     return config.display_path(path)
@@ -412,6 +424,9 @@ def body_block(card: FeatureCard, ctx: Any) -> str:
                 label = "this feature" if name.startswith(card.id) else "whole stack"
                 ws.append("- %s: [%s](%s)" % (label, name, file_uri(p)))
         out.extend(ws or ["- no `.code-workspace` in the worktree"])
+        diff = diff_url(cfg, wt)
+        if diff:
+            out.append("- the change, side by side: [diff](%s)" % (diff,))
         bp = card.blueprint or {}
         if bp.get("path"):
             kind = "generated view only" if bp.get("kind") == "view-only" else "the plan"

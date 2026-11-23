@@ -230,6 +230,9 @@ KEYS: Tuple[Tuple[str, str, str], ...] = (
     # they live beside the other caps rather than inside the extension.
     ("gallery_max_mb", "MOOSE_FACTORY_GALLERY_MAX_MB", "int"),
     ("gallery_thumbs", "MOOSE_FACTORY_GALLERY_THUMBS", "int"),
+    # The local sidediff service (~/projects/sidediff). A card with a worktree
+    # links to its side-by-side diff there. "" leaves the link out.
+    ("sidediff_url", "MOOSE_FACTORY_SIDEDIFF_URL", "str"),
     # The most megabytes of `specs/epic.md` and `specs/slices/` one epic may
     # keep under `Artifacts/<epic>/`. Read by tool/ext_epic.py only.
     ("epic_rescue_max_mb", "MOOSE_FACTORY_EPIC_RESCUE_MAX_MB", "int"),
@@ -317,6 +320,7 @@ def _defaults() -> Tuple[Dict[str, Any], Dict[str, str]]:
         "timeline_on_home": TIMELINE_ON_HOME,
         "gallery_max_mb": GALLERY_MAX_MB,
         "gallery_thumbs": GALLERY_THUMBS,
+        "sidediff_url": SIDEDIFF_URL,
         "epic_rescue_max_mb": EPIC_RESCUE_MAX_MB,
     }
     why = {k: "default" for k in values}
@@ -517,6 +521,7 @@ ANALYSIS_MARKER = "specs/.factory-analysis"
 
 GALLERY_MAX_MB = 5               # per file, in specs/gallery/; bigger is listed, never linked
 GALLERY_THUMBS = 3               # thumbnails one Board.html card shows
+SIDEDIFF_URL = "http://127.0.0.1:8002"   # the local diff service; "" drops the diff link
 # The rescue of one epic's plan and archived slices, in total. `Artifacts/` is
 # committed by the tick, so a rescue with no ceiling would grow the vault's
 # history by every figure `/moose-epic next` archives. 20 MB is four files at
@@ -638,6 +643,7 @@ class Config:
     timeline_on_home: int = TIMELINE_ON_HOME
     gallery_max_mb: int = GALLERY_MAX_MB
     gallery_thumbs: int = GALLERY_THUMBS
+    sidediff_url: str = SIDEDIFF_URL
     epic_rescue_max_mb: int = EPIC_RESCUE_MAX_MB
 
     # ---- where each value came from, for `factory config` and `doctor` ---
@@ -758,6 +764,7 @@ def load(offline: bool = False) -> Config:
         timeline_on_home=int(values["timeline_on_home"]),
         gallery_max_mb=int(values["gallery_max_mb"]),
         gallery_thumbs=int(values["gallery_thumbs"]),
+        sidediff_url=str(values["sidediff_url"]),
         epic_rescue_max_mb=int(values["epic_rescue_max_mb"]),
         config_file=path,
         sources=dict(sources),

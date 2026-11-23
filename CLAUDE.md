@@ -31,7 +31,7 @@ Meta-repo that pins four forks as submodules: `moose/`, `blackbear/`, `isopod/`,
 
 ## Git context
 
-A git-oriented skill (`branch-diff`, `commit`) targets the submodule I am working in, not the meta-repo root. Detect it from `cwd`. Ask which submodule only when it is ambiguous.
+A git-oriented skill (`sidediff`, `commit`) targets the submodule I am working in, not the meta-repo root. Detect it from `cwd`. Ask which submodule only when it is ambiguous.
 
 ## Worktrees
 

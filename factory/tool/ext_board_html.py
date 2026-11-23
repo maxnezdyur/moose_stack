@@ -140,6 +140,11 @@ PR_DERIVED_FLAGS = frozenset({"ci-red", "conflicting", "changes-requested"})
 #: text, because a vault page that can reach an arbitrary scheme is a hole.
 SAFE_SCHEMES = ("obsidian://", "vscode://file/", "https://github.com/")
 
+#: The one exception: the workspace page of the local sidediff service. It is
+#: held to the loopback address and to that one path, so it cannot be turned
+#: into a link to anything else.
+SIDEDIFF_HREF = re.compile(r"^http://127\.0\.0\.1:\d{2,5}/w\?path=[A-Za-z0-9%._~/-]+$")
+
 #: The one relative URL on the page, and it is an ``img src`` rather than an
 #: href, so :func:`safe_href` does not apply to it. It is kept to exactly one
 #: shape -- ``Gallery/<feature>/<file>``, no scheme, no host, no ``..`` -- by
@@ -272,8 +277,10 @@ def vscode_uri(path: Any) -> str:
 
 
 def safe_href(url: Any) -> str:
-    """The url when its scheme is one of the three, else ``""``."""
+    """The url when its scheme is one of the three or it is the sidediff workspace page, else ``""``."""
     text = str(url or "")
+    if SIDEDIFF_HREF.match(text):
+        return text
     return text if text.startswith(SAFE_SCHEMES) else ""
 
 
@@ -497,8 +504,8 @@ def pr_line(card: Any) -> str:
 
 
 def links_row(card: Any, ctx: Any) -> str:
-    """workspace, stack, note, gallery, one link per video, PR. Only the ones
-    that exist, in that order."""
+    """workspace, stack, diff, note, gallery, one link per video, PR. Only the
+    ones that exist, in that order."""
     cfg = ctx.config
     out: List[str] = []
     wt = card.worktree
@@ -510,6 +517,9 @@ def links_row(card: Any, ctx: Any) -> str:
             path = Path(wt) / name
             if path.is_file():
                 out.append(link(vscode_uri(path), label))
+        diff = render.diff_url(cfg, wt)
+        if diff and safe_href(diff):
+            out.append(link(diff, "diff"))
     out.append(link(obsidian_url(cfg, "Features/" + card.id), "note"))
     gallery = gallery_url(card, ctx)
     if gallery:

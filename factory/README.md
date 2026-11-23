@@ -141,6 +141,7 @@ factory doctor              # the same block, above the checks
 | `path_extra` | `""` | extra PATH prefixes the launchd tick prepends, colon separated |
 | `gallery_max_mb` | `5` | the per-file cap in `specs/gallery/`; a bigger file is named on the note and never linked |
 | `gallery_thumbs` | `3` | how many thumbnails one `Board.html` card shows |
+| `sidediff_url` | `http://127.0.0.1:8002` | the local sidediff service (`~/projects/sidediff`); a card with a worktree links to its side-by-side diff there; `""` leaves the link out |
 | `epic_rescue_max_mb` | `20` | the most megabytes of `specs/epic.md` and `specs/slices/` that one epic keeps under `Artifacts/`; a file that does not fit is named on the note |
 | the caps and thresholds | the values in `tool/config.py` | `max_concurrent_sessions`, `max_builds_per_day`, `min_free_gb`, `stall_seconds`, `nag_days`, `park_idle_days`, `triage_dirty`, `gh_cache_ttl`, `gh_limit`, `gh_parallel`, `subprocess_timeout`, `stale_ref_days`, `needs_you_cap`, `head_churn_budget`, `timeline_on_home` |
 
